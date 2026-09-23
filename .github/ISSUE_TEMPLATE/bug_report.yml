@@ -1,0 +1,37 @@
+name: Bug report
+description: Something in MARSE does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Issues are public.** Before pasting logs or configuration, remove usernames,
+        home-folder paths, email addresses, tokens and any private or unpublished data.
+        Security or privacy problems belong in a
+        [private report](https://github.com/Y3K5/MARSE/security/advisories/new).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How can it be reproduced?
+      description: A minimal configuration or sequence of commands. Synthetic inputs are best.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: MARSE version
+      description: Output of `marse --version`.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Python version and operating system
+      placeholder: Python 3.13 on Ubuntu 24.04

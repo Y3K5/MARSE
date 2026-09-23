@@ -1,0 +1,2 @@
+# Identical line endings on every platform, so commits never differ only by CRLF/LF.
+* text=auto eol=lf

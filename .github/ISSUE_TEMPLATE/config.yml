@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security or privacy problem privately
+    url: https://github.com/Y3K5/MARSE/security/advisories/new
+    about: Vulnerabilities, or personal data or credentials found in this repository. Please do not open a public issue.

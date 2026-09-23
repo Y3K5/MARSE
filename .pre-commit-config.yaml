@@ -1,0 +1,63 @@
+# Checks that run on your machine before anything leaves it (see PRIVACY.md).
+#
+#   Set up once:   python -m pip install -e ".[dev]" && pre-commit install
+#   Run manually:  pre-commit run --all-files
+#   Update hooks:  pre-commit autoupdate --freeze
+#
+# Third-party hooks are pinned to commit SHAs so that a moved tag cannot change
+# what runs on your machine.
+minimum_pre_commit_version: "4.0.0"
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 2eeb5678de71a00c0902cbda7105d328432f72cb  # frozen: v0.16.8
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  # Secrets (API keys, tokens, private keys) in the staged changes.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # frozen: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # Personal data: tools/privacy_guard.py
+  - repo: local
+    hooks:
+      - id: privacy-files
+        name: privacy guard (files)
+        entry: python tools/privacy_guard.py files
+        language: python
+      - id: privacy-identity
+        name: privacy guard (git identity)
+        entry: python tools/privacy_guard.py identity
+        language: python
+        pass_filenames: false
+        always_run: true
+      - id: privacy-commit-message
+        name: privacy guard (commit message)
+        entry: python tools/privacy_guard.py message
+        language: python
+        stages: [commit-msg]
+      - id: privacy-outgoing-commits
+        name: privacy guard (commits being pushed)
+        entry: python tools/privacy_guard.py commits --outgoing
+        language: python
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
