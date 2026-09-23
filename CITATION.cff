@@ -1,0 +1,20 @@
+# Authors are listed by GitHub handle only. Add names, ORCID iDs and
+# affiliations when you decide to publish them (PRIVACY.md, "Publishing").
+cff-version: 1.2.0
+message: "If you use MARSE in your research, please cite it using these metadata."
+title: "MARSE: Microbial Adaptability Resource Engine"
+abstract: >-
+  MARSE is an open, modular framework for reproducible spatial simulation of
+  microbial populations and biofilms, with explicit adaptation states,
+  controlled perturbations, run provenance and a validation suite.
+type: software
+authors:
+  - alias: Y3K5
+repository-code: "https://github.com/Y3K5/MARSE"
+license: Apache-2.0
+keywords:
+  - biofilm
+  - microbial ecology
+  - agent-based modeling
+  - reproducibility
+  - simulation

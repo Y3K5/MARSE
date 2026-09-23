@@ -1,0 +1,41 @@
+name: Feature, model or benchmark proposal
+description: Propose a software feature, a scientific model, or a validation benchmark.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        MARSE v1.0 has a deliberately narrow scope ([specification](https://github.com/Y3K5/MARSE/blob/main/docs/specification.md)).
+        Proposals outside it are welcome and are tracked for after v1.0.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What are you proposing?
+      options:
+        - Software feature
+        - Scientific model or rule
+        - Validation benchmark
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: The research question or problem this addresses.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: >-
+        For models, give the equations or rules, the biological scale, the
+        assumptions, and every parameter with its units.
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Sources and validation
+      description: Published sources for the model and its parameters, and how the behaviour could be validated.

@@ -1,0 +1,58 @@
+name: Privacy
+
+# Backstop for the local pre-commit hooks. It runs on every push to every
+# branch, because once the repository is public a pushed branch is public too,
+# and on pull requests from forks. It needs no secrets; PRIVATE_DENYLIST is
+# optional (see PRIVACY.md) and is never printed.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  personal-data:
+    name: Personal data and commit identities
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      MARSE_PRIVATE_DENYLIST: ${{ secrets.PRIVATE_DENYLIST }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # every commit in the history is checked
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Every commit uses a noreply identity
+        run: python3 tools/privacy_guard.py commits
+      - name: No tracked file contains personal data
+        run: python3 tools/privacy_guard.py files --all
+
+  secrets:
+    name: Secrets in the full history (gitleaks)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Keep in step with the gitleaks hook in .pre-commit-config.yaml.
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install gitleaks (checksum verified)
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf gitleaks.tar.gz gitleaks
+      - name: Scan every commit
+        run: |
+          "$RUNNER_TEMP/gitleaks" git --redact --verbose --no-banner .

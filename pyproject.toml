@@ -1,0 +1,96 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "marse"
+dynamic = ["version"]
+description = "Microbial Adaptability Resource Engine: reproducible spatial simulation of microbial populations and biofilms."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+# Authorship is credited by project name until the maintainers choose to publish
+# their names (for example in CITATION.cff at the first release). Never add
+# personal email addresses here; see PRIVACY.md.
+authors = [{ name = "The MARSE developers" }]
+keywords = [
+  "agent-based modeling",
+  "biofilm",
+  "computational biology",
+  "microbial ecology",
+  "reproducibility",
+  "simulation",
+]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=9"]
+dev = ["marse[test]", "pre-commit>=4.6"]
+
+[project.scripts]
+marse = "marse.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Y3K5/MARSE"
+Documentation = "https://github.com/Y3K5/MARSE/tree/main/docs"
+Issues = "https://github.com/Y3K5/MARSE/issues"
+Changelog = "https://github.com/Y3K5/MARSE/blob/main/CHANGELOG.md"
+
+[tool.hatch.version]
+path = "src/marse/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+# An explicit list, so stray untracked files in a working copy never ship in a release.
+include = [
+  "/src",
+  "/tests",
+  "/tools",
+  "/docs",
+  "/CHANGELOG.md",
+  "/CITATION.cff",
+]
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+testpaths = ["tests"]
+xfail_strict = true
+filterwarnings = ["error"]
+markers = [
+  "numerical: compares a numerical method with an analytical or high-precision reference",
+  "invariance: checks that results are unchanged under problem-preserving transformations",
+  "regression: compares a run with a stored golden trajectory",
+  "benchmark: reproduces a documented biological benchmark case (slow)",
+]
+
+[tool.ruff]
+line-length = 100
+# The privacy guard runs under whatever Python pre-commit uses (3.10 or newer).
+per-file-target-version = { "tools/**" = "py310" }
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # pyflakes
+  "I",   # import sorting
+  "B",   # bugbear
+  "UP",  # pyupgrade
+  "SIM", # simplifications
+  "PT",  # pytest style
+  "NPY", # NumPy-specific rules
+  "RUF", # ruff-specific rules
+]

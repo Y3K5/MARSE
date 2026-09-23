@@ -1,0 +1,9 @@
+# Deliberate, reviewed exceptions to the generic checks in tools/privacy_guard.py
+# (blocked file types, size limit, email and home-path detection, notebook
+# outputs, image metadata). One glob per line, relative to the repository root.
+#
+# The private denylist and the gitleaks secret scan still apply to every file,
+# including the ones listed here.
+#
+# Example:
+#   docs/figures/poster.pdf

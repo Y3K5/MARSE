@@ -1,0 +1,72 @@
+# --- Privacy: never committed (see PRIVACY.md) ------------------------------
+# tools/privacy_guard.py blocks these again if one is force-added.
+
+# Your personal notes, plans and drafts. Git never tracks this folder.
+/private/
+
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+.envrc
+*.pem
+*.key
+*.p12
+*.pfx
+*.kdbx
+id_rsa*
+id_ed25519*
+.netrc
+.pypirc
+.git-credentials
+credentials.json
+
+# Research data and simulation outputs live outside git.
+/data/
+/runs/
+/outputs/
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.bam
+*.sam
+*.cram
+*.vcf
+*.vcf.gz
+
+# Documents and logs carry hidden metadata such as author names and paths.
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+*.log
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.ipynb_checkpoints/
+
+# --- Operating systems and editors (these record usernames and local paths) -
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*~
