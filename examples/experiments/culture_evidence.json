@@ -1,0 +1,50 @@
+{
+  "dataset_version": "2026.1",
+  "sources": [
+    {
+      "id": "fda-bam-3",
+      "title": "BAM Chapter 3: Aerobic Plate Count",
+      "organization_or_authors": "U.S. Food and Drug Administration",
+      "year": 2024,
+      "source_type": "method_standard",
+      "evidence_grade": "B",
+      "url": "https://www.fda.gov/food/laboratory-methods-food/bam-chapter-3-aerobic-plate-count"
+    },
+    {
+      "id": "eucast-disk",
+      "title": "EUCAST disk diffusion method",
+      "organization_or_authors": "European Committee on Antimicrobial Susceptibility Testing",
+      "year": 2025,
+      "source_type": "method_standard",
+      "evidence_grade": "B",
+      "url": "https://www.eucast.org/ast_of_bacteria/disk_diffusion_methodology"
+    }
+  ],
+  "media": [
+    {
+      "id": "general-purpose-agar",
+      "name": "General-purpose agar (composition must be supplied by the user)",
+      "components": {
+        "agar": "15 g/L"
+      },
+      "source_ids": [
+        "fda-bam-3"
+      ]
+    }
+  ],
+  "measurements": [
+    {
+      "id": "surface-count",
+      "endpoint": "cfu_ml",
+      "unit": "CFU/mL",
+      "instrument_or_method": "serial dilution and plate count"
+    },
+    {
+      "id": "inhibition-zone",
+      "endpoint": "colony_area",
+      "unit": "mm",
+      "instrument_or_method": "disk diffusion inhibition-zone measurement"
+    }
+  ],
+  "cultures": []
+}
