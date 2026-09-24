@@ -7,6 +7,8 @@
   "timestep_h": 0.01,
   "seed": 20260924,
   "mutation_interval_h": 1.0,
+  "carrying_capacity": 0.8,
+  "competition_coefficients": [[0.4, 1.0], [1.0, 0.4]],
   "nutrients": [
     {
       "name": "oxygen",
@@ -26,6 +28,7 @@
       "yield_per_nutrient": [1.0, 1.0],
       "mutation_probability": 0.01,
       "mutation_growth_multiplier": 1.15,
+      "spreading_per_h": 2.0,
       "seed_regions": [
         {"x": 0.25, "y": 0.7, "radius": 0.12, "biomass": 0.4}
       ]
@@ -36,6 +39,7 @@
       "half_saturation": [0.3, 0.2],
       "yield_per_nutrient": [1.0, 1.0],
       "initial_biomass": 0.0,
+      "spreading_per_h": 2.0,
       "seed_regions": [
         {"x": 0.75, "y": 0.7, "radius": 0.12, "biomass": 0.4}
       ]
