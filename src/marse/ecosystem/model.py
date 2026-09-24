@@ -301,6 +301,7 @@ class EcosystemResult:
             "cell_size_um": self.config.cell_size_um,
             "species": [s.name for s in self.config.species],
             "nutrients": [n.name for n in self.config.nutrients],
+            "conditions": [c.name for c in self.config.conditions],
             "frames": [
                 frame.to_dict(
                     tuple(s.name for s in self.config.species),
