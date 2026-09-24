@@ -219,7 +219,7 @@ def test_json_experiment_loader_and_viewer(tmp_path: Path):
     viewer = write_viewer(result, tmp_path / "viewer.html")
     assert viewer.is_file()
     assert (tmp_path / "frames.json").is_file()
-    assert "canvas" in viewer.read_text()
+    assert "canvas" in viewer.read_text(encoding="utf-8")
 
 
 def test_species_can_produce_a_metabolite_for_another_species():
