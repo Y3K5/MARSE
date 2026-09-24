@@ -11,6 +11,8 @@ from marse.ecosystem import (
     ConditionConfig,
     EcosystemConfig,
     EcosystemError,
+    EcosystemProviders,
+    ExplicitTransportProvider,
     NutrientConfig,
     SeedRegion,
     SpeciesConfig,
@@ -58,6 +60,22 @@ def test_same_seed_reproduces_all_frames():
         np.testing.assert_array_equal(a.biomass, b.biomass)
         np.testing.assert_array_equal(a.nutrients, b.nutrients)
         np.testing.assert_array_equal(a.mutations, b.mutations)
+
+
+def test_default_provider_pipeline_is_declared_and_exported():
+    result = run(config())
+    assert result.provider_versions == EcosystemProviders().versions
+    assert result.provider_versions["transport"] == "explicit_transport_2d_v1"
+    assert result.provider_versions["reactions"] == "local_reactions_2d_v1"
+
+
+def test_custom_transport_provider_preserves_provider_metadata():
+    result = run(
+        config(),
+        EcosystemProviders(transport=ExplicitTransportProvider(version="test_transport_v1")),
+    )
+    assert result.provider_versions["transport"] == "test_transport_v1"
+    assert result.final_state.time_h == pytest.approx(1.0)
 
 
 def test_mutations_are_seeded_and_recorded():

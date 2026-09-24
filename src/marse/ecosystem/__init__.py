@@ -14,6 +14,7 @@ from marse.ecosystem.model import (
     load_experiment,
     run,
 )
+from marse.ecosystem.providers import EcosystemProviders, ExplicitTransportProvider, NoBoundary
 from marse.ecosystem.viewer import write_viewer
 
 __all__ = [
@@ -22,8 +23,11 @@ __all__ = [
     "EcosystemConfig",
     "EcosystemError",
     "EcosystemFrame",
+    "EcosystemProviders",
     "EcosystemResult",
     "EcosystemState",
+    "ExplicitTransportProvider",
+    "NoBoundary",
     "NutrientConfig",
     "SeedRegion",
     "SpeciesConfig",
