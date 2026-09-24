@@ -27,11 +27,11 @@ button,input{{margin:4px}} label{{margin-right:12px}} .mut{{color:#f4c95d}}
 </style>
 <h1>MARSE ecosystem: {result.config.experiment_id}</h1>
 <div><button id="play">Play</button><input id="time" type="range" min="0" max="{len(result.frames) - 1}" value="0" style="width:50%">
-<span id="label"></span></div><div id="layers"></div><canvas id="view" width="{result.config.width}" height="{result.config.height}"></canvas>
+<span id="label"></span></div><div id="layers"></div><div id="stats"></div><canvas id="view" width="{result.config.width}" height="{result.config.height}"></canvas>
 <p class="mut">Color intensity shows the selected layer; mutations are outlined in yellow.</p>
 <script>
 const data = {data.read_text(encoding="utf-8")};
-const canvas=document.getElementById('view'), ctx=canvas.getContext('2d');
+const canvas=document.getElementById('view'), ctx=canvas.getContext('2d'), stats=document.getElementById('stats');
 const slider=document.getElementById('time'), label=document.getElementById('label'), layers=document.getElementById('layers');
 let playing=false, timer;
 const colors=['#46b3ff','#ff6b6b','#7ee081','#c084fc','#fb923c','#f472b6'];
@@ -45,6 +45,7 @@ function draw(){{
  const image=ctx.createImageData(data.width,data.height); let max=Math.max(...field.flat(),1e-12);
  for(let y=0;y<data.height;y++)for(let x=0;x<data.width;x++){{const p=(y*data.width+x)*4,v=Math.min(1,field[y][x]/max), c=kind==='species'?hex(colors[index%colors.length]):[80,220,150]; if(typeof c==='string') c=c.slice(1).match(/.{{2}}/g).map(x=>parseInt(x,16)); image.data.set([...c.map(x=>x*v),255],p);}}
  ctx.putImageData(image,0,0); label.textContent=`t=${{frame.time_h.toFixed(2)}} h`;
+ stats.textContent=Object.entries(frame.statistics.species_total_biomass).map(([name,value])=>`${{name}} biomass=${{value.toFixed(3)}} occupied=${{frame.statistics.species_occupied_cells[name]}}`).join(' | ')+` | mutations=${{frame.statistics.mutation_count}}`;
  for(let s=0;s<frame.mutations.length;s++)for(let y=0;y<data.height;y++)for(let x=0;x<data.width;x++)if(frame.mutations[s][y][x]){{ctx.strokeStyle='#f4c95d';ctx.strokeRect(x+.15,y+.15,.7,.7);}}
 }}
 function hex(s){{return s.match(/.{{2}}/g).map(x=>parseInt(x,16));}}

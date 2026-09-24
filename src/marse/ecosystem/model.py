@@ -102,6 +102,7 @@ class SpeciesConfig:
     mutation_probability: float = 0.0
     mutation_growth_multiplier: float = 1.0
     seed_regions: tuple[SeedRegion, ...] = ()
+    spreading_per_h: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -118,6 +119,8 @@ class SpeciesConfig:
             raise EcosystemError(f"species '{self.name}': mutation probability must be in [0, 1]")
         if self.mutation_growth_multiplier <= 0:
             raise EcosystemError(f"species '{self.name}': mutation multiplier must be positive")
+        if self.spreading_per_h < 0:
+            raise EcosystemError(f"species '{self.name}': spreading rate must be non-negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,6 +137,8 @@ class EcosystemConfig:
     nutrients: tuple[NutrientConfig, ...]
     species: tuple[SpeciesConfig, ...]
     mutation_interval_h: float | None = None
+    carrying_capacity: float = 1.0
+    competition_coefficients: tuple[tuple[float, ...], ...] | None = None
 
     def __post_init__(self) -> None:
         if not self.experiment_id.strip():
@@ -157,6 +162,16 @@ class EcosystemConfig:
             raise EcosystemError("each species must define every nutrient parameter")
         if self.mutation_interval_h is not None and self.mutation_interval_h <= 0:
             raise EcosystemError("mutation_interval_h must be positive")
+        if self.carrying_capacity <= 0:
+            raise EcosystemError("carrying_capacity must be positive")
+        if self.competition_coefficients is not None:
+            count = len(self.species)
+            if len(self.competition_coefficients) != count or any(
+                len(row) != count for row in self.competition_coefficients
+            ):
+                raise EcosystemError("competition_coefficients must be a species-by-species matrix")
+            if any(value < 0 for row in self.competition_coefficients for value in row):
+                raise EcosystemError("competition coefficients must be non-negative")
 
     @property
     def steps(self) -> int:
@@ -184,7 +199,10 @@ class EcosystemFrame:
     mutations: NDArray[np.int64]
 
     def to_dict(
-        self, species_names: tuple[str, ...], nutrient_names: tuple[str, ...]
+        self,
+        species_names: tuple[str, ...],
+        nutrient_names: tuple[str, ...],
+        carrying_capacity: float,
     ) -> dict[str, Any]:
         return {
             "time_h": self.time_h,
@@ -193,6 +211,19 @@ class EcosystemFrame:
                 name: self.nutrients[i].tolist() for i, name in enumerate(nutrient_names)
             },
             "mutations": self.mutations.tolist(),
+            "statistics": {
+                "species_total_biomass": {
+                    name: float(self.biomass[i].sum()) for i, name in enumerate(species_names)
+                },
+                "species_occupied_cells": {
+                    name: int(np.count_nonzero(self.biomass[i] > 0.01 * carrying_capacity))
+                    for i, name in enumerate(species_names)
+                },
+                "nutrient_mean": {
+                    name: float(self.nutrients[i].mean()) for i, name in enumerate(nutrient_names)
+                },
+                "mutation_count": int(np.count_nonzero(self.mutations)),
+            },
         }
 
 
@@ -215,6 +246,7 @@ class EcosystemResult:
                 frame.to_dict(
                     tuple(s.name for s in self.config.species),
                     tuple(n.name for n in self.config.nutrients),
+                    self.config.carrying_capacity,
                 )
                 for frame in self.frames
             ],
@@ -317,6 +349,9 @@ def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
                     )
                     for j, region in enumerate(item.get("seed_regions", ()))
                 ),
+                spreading_per_h=_number(
+                    item.get("spreading_per_h", 0.0), f"species[{i}].spreading_per_h"
+                ),
             )
         )
         if len(parsed_species[-1].half_saturation) != nutrient_count:
@@ -337,6 +372,18 @@ def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
         mutation_interval_h=(
             _number(raw["mutation_interval_h"], "mutation_interval_h")
             if raw.get("mutation_interval_h") is not None
+            else None
+        ),
+        carrying_capacity=_number(raw.get("carrying_capacity", 1.0), "carrying_capacity"),
+        competition_coefficients=(
+            tuple(
+                tuple(
+                    _number(value, f"competition_coefficients[{i}][{j}]")
+                    for j, value in enumerate(row)
+                )
+                for i, row in enumerate(raw["competition_coefficients"])
+            )
+            if raw.get("competition_coefficients") is not None
             else None
         ),
     )
@@ -405,13 +452,21 @@ def run(config: EcosystemConfig) -> EcosystemResult:
     """Run a deterministic ecosystem experiment and retain every frame."""
     max_diffusivity = max(n.diffusivity for n in config.nutrients)
     stability = config.timestep_h * max_diffusivity / config.cell_size_um**2
-    if stability > 0.25:
+    max_spreading = max(s.spreading_per_h for s in config.species)
+    spreading_stability = config.timestep_h * max_spreading / config.cell_size_um**2
+    if max(stability, spreading_stability) > 0.25:
         raise EcosystemError(
-            f"timestep is unstable for explicit diffusion (CFL={stability:.3g}; maximum is 0.25)"
+            "timestep is unstable for explicit transport "
+            f"(CFL={max(stability, spreading_stability):.3g}; maximum is 0.25)"
         )
 
     state = _initial_state(config)
     mutations = state.mutations.copy()
+    competition = (
+        np.asarray(config.competition_coefficients, dtype=float)
+        if config.competition_coefficients is not None
+        else np.zeros((len(config.species), len(config.species)))
+    )
     seed_registry = SeedRegistry(config.seed)
     mutation_rng = seed_registry.stream("ecosystem.mutations")
     frames = [
@@ -434,6 +489,14 @@ def run(config: EcosystemConfig) -> EcosystemResult:
             _apply_boundary(nutrients[nutrient_index], nutrient)
 
         for species_index, species in enumerate(config.species):
+            if species.spreading_per_h:
+                biomass[species_index] += (
+                    dt
+                    * species.spreading_per_h
+                    / config.cell_size_um**2
+                    * _laplacian(biomass[species_index])
+                )
+                biomass[species_index] = np.maximum(biomass[species_index], 0.0)
             growth_factor = np.where(
                 mutations[species_index] > 0, species.mutation_growth_multiplier, 1.0
             )
@@ -458,8 +521,20 @@ def run(config: EcosystemConfig) -> EcosystemResult:
                     * biomass[species_index]
                     / yield_value
                 )
+            competition_pressure = np.zeros_like(limitation)
+            for competitor_index in range(len(config.species)):
+                competition_pressure += (
+                    competition[species_index, competitor_index]
+                    * biomass[competitor_index]
+                    / config.carrying_capacity
+                )
+            limitation /= 1.0 + competition_pressure
             biomass[species_index] *= np.exp(
-                dt * species.maximum_growth_per_h * limitation * growth_factor
+                dt
+                * species.maximum_growth_per_h
+                * limitation
+                * growth_factor
+                * np.maximum(1.0 - biomass[species_index] / config.carrying_capacity, 0.0)
             )
 
         nutrients = np.maximum(nutrients, 0.0)

@@ -44,6 +44,8 @@ def test_species_grow_and_nutrients_are_consumed():
     assert result.final_state.biomass.shape == (2, 6, 8)
     assert np.all(result.final_state.biomass > 0.1)
     assert np.all(result.final_state.nutrients < np.array([1.0, 2.0])[:, None, None])
+    stats = result.frames[-1].to_dict(("aerobe", "competitor"), ("oxygen", "carbon"), 1.0)
+    assert stats["statistics"]["species_total_biomass"]["aerobe"] > 0
 
 
 def test_same_seed_reproduces_all_frames():
@@ -140,6 +142,42 @@ def test_json_spatial_fields_are_loaded(tmp_path: Path):
     loaded = load_experiment(source)
     assert loaded.nutrients[0].boundary_edges == ("top",)
     assert loaded.species[0].seed_regions[0].biomass == 1
+
+
+def test_competition_limits_growth_and_spreading_reaches_neighbors():
+    base_species = (
+        SpeciesConfig(
+            "one",
+            0.0,
+            1.0,
+            (0.2,),
+            (1.0,),
+            spreading_per_h=5.0,
+            seed_regions=(SeedRegion(0.5, 0.5, 0.2, 0.4),),
+        ),
+        SpeciesConfig(
+            "two",
+            0.0,
+            1.0,
+            (0.2,),
+            (1.0,),
+            seed_regions=(SeedRegion(0.5, 0.5, 0.2, 0.4),),
+        ),
+    )
+    common = dict(
+        duration_h=0.2,
+        timestep_h=0.001,
+        cell_size_um=10.0,
+        nutrients=(NutrientConfig("food", 5.0, 0.0),),
+        species=base_species,
+        carrying_capacity=0.5,
+    )
+    without = run(config(**common, competition_coefficients=((0.0, 0.0), (0.0, 0.0))))
+    with_competition = run(config(**common, competition_coefficients=((0.0, 4.0), (4.0, 0.0))))
+    assert with_competition.final_state.biomass.sum() < without.final_state.biomass.sum()
+    assert np.count_nonzero(with_competition.final_state.biomass[0] > 0) > np.count_nonzero(
+        with_competition.frames[0].biomass[0] > 0
+    )
 
 
 def test_json_experiment_loader_and_viewer(tmp_path: Path):
