@@ -14,6 +14,13 @@ over time, which is where the biomass-spreading choice of
 [modeling-landscape.md](modeling-landscape.md#2-the-biomass-spreading-decision)
 has to be made.
 
+Alongside that core, a two-dimensional multispecies engine (`marse.ecosystem`)
+now runs, with a browser viewer and a periodontal example study. It is not yet
+verified, and a review found defects in its mass balance, transport and
+reproducibility ([validation.md](validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified)).
+Fixing them comes before anything new; see
+[the order of work](#order-of-work-correctness-first).
+
 | Phase | Deliverable | Exit criterion |
 |---|---|---|
 | 0. Specification | Schemas, model assumptions, benchmark plan | Core objects and scientific scope settled enough to implement |
@@ -51,6 +58,30 @@ has to be made.
    reference.
 10. Experimental external policy adapters, compared against the deterministic
     policies on bounded decisions.
+
+## Order of work: correctness first
+
+The ecosystem engine grew faster than its verification. Until the defects in
+[validation.md](validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified)
+are fixed, **no new mechanism is added**: work is limited to fixes,
+verification and documentation. After that, a mechanism lands only with its
+equations in `theory.md`, units in its configuration field names, a
+conservation or invariance test, a verification or validation case that runs
+the simulator, graded parameters in `parameters.md`, and a `CHANGELOG` entry.
+
+| Stage | Work | Done when |
+|---|---|---|
+| 0. Stabilise | Honest docs and tests; each known defect written as an expected-failure test; long sweeps moved to a nightly run | Pull-request CI is fast and every defect has a test |
+| 1. One engine | Ecosystem runs go through the core manifest and replay; one configuration system with units in field names; streamed checkpoints instead of every frame in memory | `marse replay` reproduces an ecosystem run exactly |
+| 2. Correct physics | Fast solutes solved to quasi-steady state (Newton with ADI line solves, reusing the validated tridiagonal solver) so physical diffusivities are affordable; one growth rate drives both biomass and uptake; production paid for by substrate; an oxygen role per species; positive, conservative updates; heritable variants; one shared carrying capacity | Every known-defect test passes |
+| 3. Conservation ledger | Carbon and nitrogen pools, then sulphur, phosphorus and electrons; dead biomass, lysis and matrix pools; recorded boundary fluxes; a residual in every manifest | A closed box conserves matter to 1e-12 |
+| 4. Verification | 2-D transport against `point_source_diffusion_2d`; the 2-D solver reducing to V3; manufactured solutions; permutation invariance; the R\* rule through the simulator | Convergence at design order; cross-platform replay in CI |
+| 5. External validation | IWA BM1 (V9) and BM3 (V10); oxygen microprofiles | Published reference solutions reproduced |
+| 6. Flagship study | The periodontal biofilm rebuilt with graded parameters, named metabolite exchanges and a published in-vitro calibration target | A falsifiable, evidence-linked prediction |
+| 7. Scale | Year-long runs and large ensembles, streamed and resumable | Annual runs on a laptop |
+| 8. Publication | JOSS paper on the verified software; a validation paper on Stages 5–6 | Submitted |
+
+The long-term plan below is sequenced after these stages, not beside them.
 
 ## Long-term scientific platform plan
 
