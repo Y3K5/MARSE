@@ -85,6 +85,10 @@ The post-Phase-3 plan is to make every result evidence-linked and falsifiable:
    abundance and traits only where data constrain the mapping.
 8. **Scientific observability** — expose conservation residuals, validity
    limits, evidence compatibility, convergence, and provenance for every run.
+9. **Immune and molecular extensions** — add explicit effector pressure and
+   molecular neutralization primitives. *(Field-level deterministic pressure
+   and neutralization are implemented; agent trajectories, receptor kinetics,
+   host tissue, and clinical models remain out of scope.)*
 
 ## First publishable milestone
 
