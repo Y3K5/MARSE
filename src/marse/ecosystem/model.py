@@ -168,6 +168,8 @@ class SpeciesConfig:
     chemotaxis_field: str | None = None
     chemotaxis_sensitivity: float = 0.0
     phenotypes: tuple[PhenotypeConfig, ...] = ()
+    quorum_signal: str | None = None
+    quorum_secretion_per_h: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -195,6 +197,10 @@ class SpeciesConfig:
             raise EcosystemError(f"species '{self.name}': chemotaxis sensitivity must be finite")
         if self.chemotaxis_field is not None and not self.chemotaxis_field.strip():
             raise EcosystemError(f"species '{self.name}': chemotaxis field must not be empty")
+        if self.quorum_signal is not None and not self.quorum_signal.strip():
+            raise EcosystemError(f"species '{self.name}': quorum signal must not be empty")
+        if self.quorum_secretion_per_h < 0:
+            raise EcosystemError(f"species '{self.name}': quorum secretion must be non-negative")
         if len({phenotype.name for phenotype in self.phenotypes}) != len(self.phenotypes):
             raise EcosystemError(f"species '{self.name}': phenotype names must be unique")
         if len({effect.additive for effect in self.additive_effects}) != len(self.additive_effects):
@@ -276,6 +282,11 @@ class EcosystemConfig:
                 raise EcosystemError(
                     f"species '{species.name}' chemotaxis references unknown field "
                     f"'{species.chemotaxis_field}'"
+                )
+            if species.quorum_signal is not None and species.quorum_signal not in additive_names:
+                raise EcosystemError(
+                    f"species '{species.name}' quorum signal references unknown additive "
+                    f"'{species.quorum_signal}'"
                 )
             for capability in species.capabilities:
                 required = {capability.substrate}
@@ -611,6 +622,13 @@ def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
                     item.get("chemotaxis_sensitivity", 0.0),
                     f"species[{i}].chemotaxis_sensitivity",
                 ),
+                quorum_signal=(
+                    str(item["quorum_signal"]) if item.get("quorum_signal") is not None else None
+                ),
+                quorum_secretion_per_h=_number(
+                    item.get("quorum_secretion_per_h", 0.0),
+                    f"species[{i}].quorum_secretion_per_h",
+                ),
                 phenotypes=tuple(
                     PhenotypeConfig(
                         name=str(phenotype.get("name", "")),
@@ -848,15 +866,19 @@ def _update_phenotypes(
     *,
     dt: float,
     carrying_capacity: float,
+    quorum_signal: NDArray[np.float64] | None = None,
 ) -> None:
     """Apply quorum hysteresis in-place for one species."""
     if not species.phenotypes:
         return
     previous = indices.copy()
     dwell += dt
+    signal = (
+        biomass / carrying_capacity if quorum_signal is None else np.maximum(quorum_signal, 0.0)
+    )
     for phenotype_index, phenotype in enumerate(species.phenotypes, start=1):
-        activate = biomass >= phenotype.activation_threshold * carrying_capacity
-        deactivate = biomass <= phenotype.deactivation_threshold * carrying_capacity
+        activate = signal >= phenotype.activation_threshold
+        deactivate = signal <= phenotype.deactivation_threshold
         eligible = dwell >= phenotype.minimum_dwell_h
         if phenotype_index == 1:
             indices[(previous == 0) & activate & eligible] = phenotype_index
@@ -993,6 +1015,12 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
                 cell_size_um=config.cell_size_um,
                 boundary=nutrient,
             )
+        additive_indices = {name: index for index, name in enumerate(additive_names)}
+        for species_index, species in enumerate(config.species):
+            if species.quorum_signal is not None and species.quorum_secretion_per_h:
+                additives[additive_indices[species.quorum_signal]] += (
+                    dt * species.quorum_secretion_per_h * biomass[species_index]
+                )
         field_map = {
             **{name: nutrients[index] for index, name in enumerate(nutrient_names)},
             **{name: conditions[index] for index, name in enumerate(condition_names)},
@@ -1007,6 +1035,9 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
                 species,
                 dt=dt,
                 carrying_capacity=config.carrying_capacity,
+                quorum_signal=(
+                    field_map[species.quorum_signal] if species.quorum_signal is not None else None
+                ),
             )
             phenotype_index = phenotype_indices[species_index]
             active_phenotypes = [phenotype for phenotype in species.phenotypes]

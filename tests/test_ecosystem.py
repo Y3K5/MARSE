@@ -354,6 +354,49 @@ def test_phenotype_thresholds_are_validated():
         PhenotypeConfig("invalid", 0.2, 0.4)
 
 
+def test_explicit_quorum_signal_is_secreted_and_drives_switching():
+    result = run(
+        config(
+            duration_h=0.1,
+            timestep_h=0.01,
+            nutrients=(NutrientConfig("food", 1.0, 0.0),),
+            additives=(AdditiveConfig("autoinducer", 0.0, 0.0),),
+            species=(
+                SpeciesConfig(
+                    "producer",
+                    0.0,
+                    0.0,
+                    (0.2,),
+                    (1.0,),
+                    seed_regions=(SeedRegion(0.5, 0.5, 0.2, 0.8),),
+                    quorum_signal="autoinducer",
+                    quorum_secretion_per_h=1.0,
+                    phenotypes=(PhenotypeConfig("dense", 0.005, 0.002, growth_multiplier=0.5),),
+                ),
+            ),
+        )
+    )
+    assert np.any(result.final_state.additives[0] > 0.0)
+    assert np.any(result.final_state.phenotype_indices[0] == 1)
+
+
+def test_quorum_signal_must_reference_an_additive():
+    with pytest.raises(EcosystemError, match="unknown additive"):
+        config(
+            species=(
+                SpeciesConfig(
+                    "invalid",
+                    0.1,
+                    0.1,
+                    (0.2, 0.2),
+                    (1.0, 1.0),
+                    quorum_signal="missing",
+                ),
+                config().species[1],
+            )
+        )
+
+
 def test_spatial_capability_rate_and_limiting_factor_are_exported():
     result = run(
         config(
