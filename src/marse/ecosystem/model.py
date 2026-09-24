@@ -26,6 +26,7 @@ __all__ = [
     "EcosystemResult",
     "EcosystemState",
     "NutrientConfig",
+    "SeedRegion",
     "SpeciesConfig",
     "load_experiment",
     "run",
@@ -46,12 +47,32 @@ def _number(value: Any, where: str) -> float:
 
 
 @dataclass(frozen=True, slots=True)
+class SeedRegion:
+    """A circular initial colony expressed in normalized domain coordinates."""
+
+    x: float
+    y: float
+    radius: float
+    biomass: float
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.x <= 1.0 or not 0.0 <= self.y <= 1.0:
+            raise EcosystemError("seed region center coordinates must be in [0, 1]")
+        if self.radius <= 0.0 or self.radius > 1.0:
+            raise EcosystemError("seed region radius must be in (0, 1]")
+        if self.biomass < 0.0:
+            raise EcosystemError("seed region biomass must be non-negative")
+
+
+@dataclass(frozen=True, slots=True)
 class NutrientConfig:
     """One diffusing nutrient or metabolite field."""
 
     name: str
     initial: float
     diffusivity: float
+    boundary_value: float | None = None
+    boundary_edges: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -60,6 +81,13 @@ class NutrientConfig:
             raise EcosystemError("nutrient.initial: must be non-negative")
         if self.diffusivity < 0:
             raise EcosystemError("nutrient.diffusivity: must be non-negative")
+        if self.boundary_value is not None and self.boundary_value < 0:
+            raise EcosystemError("nutrient.boundary_value must be non-negative")
+        valid_edges = {"top", "bottom", "left", "right"}
+        if any(edge not in valid_edges for edge in self.boundary_edges):
+            raise EcosystemError("nutrient.boundary_edges contains an unknown edge")
+        if self.boundary_value is None and self.boundary_edges:
+            raise EcosystemError("nutrient.boundary_edges requires boundary_value")
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +101,7 @@ class SpeciesConfig:
     yield_per_nutrient: tuple[float, ...]
     mutation_probability: float = 0.0
     mutation_growth_multiplier: float = 1.0
+    seed_regions: tuple[SeedRegion, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -230,6 +259,12 @@ def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
             name=str(item.get("name", "")),
             initial=_number(item.get("initial"), f"nutrients[{i}].initial"),
             diffusivity=_number(item.get("diffusivity"), f"nutrients[{i}].diffusivity"),
+            boundary_value=(
+                _number(item["boundary_value"], f"nutrients[{i}].boundary_value")
+                if item.get("boundary_value") is not None
+                else None
+            ),
+            boundary_edges=tuple(str(edge) for edge in item.get("boundary_edges", ())),
         )
         if isinstance(item, dict)
         else (_ for _ in ()).throw(EcosystemError(f"nutrients[{i}]: expected an object"))
@@ -262,6 +297,25 @@ def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
                 mutation_growth_multiplier=_number(
                     item.get("mutation_growth_multiplier", 1.0),
                     f"species[{i}].mutation_growth_multiplier",
+                ),
+                seed_regions=tuple(
+                    SeedRegion(
+                        x=_number(region.get("x"), f"species[{i}].seed_regions[{j}].x"),
+                        y=_number(region.get("y"), f"species[{i}].seed_regions[{j}].y"),
+                        radius=_number(
+                            region.get("radius"),
+                            f"species[{i}].seed_regions[{j}].radius",
+                        ),
+                        biomass=_number(
+                            region.get("biomass"),
+                            f"species[{i}].seed_regions[{j}].biomass",
+                        ),
+                    )
+                    if isinstance(region, dict)
+                    else (_ for _ in ()).throw(
+                        EcosystemError(f"species[{i}].seed_regions[{j}]: expected an object")
+                    )
+                    for j, region in enumerate(item.get("seed_regions", ()))
                 ),
             )
         )
@@ -304,12 +358,25 @@ def _laplacian(field: NDArray[np.float64]) -> NDArray[np.float64]:
 
 def _initial_state(config: EcosystemConfig) -> EcosystemState:
     shape = (config.height, config.width)
-    biomass = np.stack(
-        [np.full(shape, species.initial_biomass, dtype=float) for species in config.species]
+    yy, xx = np.meshgrid(
+        np.linspace(0.0, 1.0, config.height),
+        np.linspace(0.0, 1.0, config.width),
+        indexing="ij",
     )
-    nutrients = np.stack(
-        [np.full(shape, nutrient.initial, dtype=float) for nutrient in config.nutrients]
-    )
+    biomass = []
+    for species in config.species:
+        field = np.full(shape, species.initial_biomass, dtype=float)
+        for region in species.seed_regions:
+            mask = (xx - region.x) ** 2 + (yy - region.y) ** 2 <= region.radius**2
+            field[mask] = region.biomass
+        biomass.append(field)
+    nutrients = []
+    for nutrient in config.nutrients:
+        field = np.full(shape, nutrient.initial, dtype=float)
+        _apply_boundary(field, nutrient)
+        nutrients.append(field)
+    biomass = np.stack(biomass)
+    nutrients = np.stack(nutrients)
     return EcosystemState(
         time_h=0.0,
         step=0,
@@ -317,6 +384,21 @@ def _initial_state(config: EcosystemConfig) -> EcosystemState:
         nutrients=nutrients,
         mutations=np.zeros((len(config.species), *shape), dtype=np.int64),
     )
+
+
+def _apply_boundary(field: NDArray[np.float64], nutrient: NutrientConfig) -> None:
+    """Apply fixed-concentration boundary edges in-place."""
+    if nutrient.boundary_value is None:
+        return
+    value = nutrient.boundary_value
+    if "top" in nutrient.boundary_edges:
+        field[0, :] = value
+    if "bottom" in nutrient.boundary_edges:
+        field[-1, :] = value
+    if "left" in nutrient.boundary_edges:
+        field[:, 0] = value
+    if "right" in nutrient.boundary_edges:
+        field[:, -1] = value
 
 
 def run(config: EcosystemConfig) -> EcosystemResult:
@@ -349,6 +431,7 @@ def run(config: EcosystemConfig) -> EcosystemResult:
                 / config.cell_size_um**2
                 * _laplacian(nutrients[nutrient_index])
             )
+            _apply_boundary(nutrients[nutrient_index], nutrient)
 
         for species_index, species in enumerate(config.species):
             growth_factor = np.where(
