@@ -18,6 +18,7 @@ SUBPACKAGES = [
     "adaptation",
     "interventions",
     "validation",
+    "ecosystem",
 ]
 
 

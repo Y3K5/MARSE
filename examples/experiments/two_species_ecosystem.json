@@ -1,0 +1,32 @@
+{
+  "experiment_id": "two-species-ecosystem",
+  "width": 80,
+  "height": 50,
+  "cell_size_um": 10.0,
+  "duration_h": 4.0,
+  "timestep_h": 0.01,
+  "seed": 20260924,
+  "mutation_interval_h": 1.0,
+  "nutrients": [
+    {"name": "oxygen", "initial": 1.0, "diffusivity": 10.0},
+    {"name": "carbon", "initial": 2.0, "diffusivity": 5.0}
+  ],
+  "species": [
+    {
+      "name": "aerobe",
+      "initial_biomass": 0.1,
+      "maximum_growth_per_h": 0.8,
+      "half_saturation": [0.2, 0.4],
+      "yield_per_nutrient": [1.0, 1.0],
+      "mutation_probability": 0.01,
+      "mutation_growth_multiplier": 1.15
+    },
+    {
+      "name": "competitor",
+      "initial_biomass": 0.1,
+      "maximum_growth_per_h": 0.5,
+      "half_saturation": [0.3, 0.2],
+      "yield_per_nutrient": [1.0, 1.0]
+    }
+  ]
+}
