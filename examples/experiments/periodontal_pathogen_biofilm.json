@@ -25,6 +25,10 @@
     {"name": "peptides", "initial": 1.5, "diffusivity": 5.0},
     {"name": "carbon", "initial": 1.0, "diffusivity": 4.0}
   ],
+  "conditions": [
+    {"name": "temperature_c", "initial": 37.0, "diffusivity": 0.0},
+    {"name": "moisture", "initial": 1.0, "diffusivity": 0.0}
+  ],
   "species": [
     {
       "name": "T. denticola",
@@ -39,6 +43,16 @@
       "adhesion_per_h": 0.08,
       "detachment_per_h": 0.015,
       "adhesion_edges": ["bottom"],
+      "capabilities": [
+        {
+          "id": "temperature-scaled-growth",
+          "maximum_rate_per_h": 0.42,
+          "substrate": "carbon",
+          "half_saturation": 0.35,
+          "temperature_c": [25.0, 37.0, 45.0],
+          "oxygen_half_saturation": 0.08
+        }
+      ],
       "seed_regions": [
         {"x": 0.25, "y": 0.78, "radius": 0.1, "biomass": 0.35}
       ]
@@ -56,6 +70,16 @@
       "adhesion_per_h": 0.1,
       "detachment_per_h": 0.015,
       "adhesion_edges": ["bottom"],
+      "capabilities": [
+        {
+          "id": "temperature-scaled-growth",
+          "maximum_rate_per_h": 0.38,
+          "substrate": "carbon",
+          "half_saturation": 0.4,
+          "temperature_c": [25.0, 37.0, 45.0],
+          "oxygen_half_saturation": 0.06
+        }
+      ],
       "seed_regions": [
         {"x": 0.5, "y": 0.8, "radius": 0.1, "biomass": 0.35}
       ]
@@ -72,6 +96,16 @@
       "adhesion_per_h": 0.12,
       "detachment_per_h": 0.01,
       "adhesion_edges": ["bottom"],
+      "capabilities": [
+        {
+          "id": "temperature-scaled-growth",
+          "maximum_rate_per_h": 0.45,
+          "substrate": "carbon",
+          "half_saturation": 0.3,
+          "temperature_c": [25.0, 37.0, 42.0],
+          "oxygen_half_saturation": 0.12
+        }
+      ],
       "seed_regions": [
         {"x": 0.75, "y": 0.78, "radius": 0.1, "biomass": 0.35}
       ]
