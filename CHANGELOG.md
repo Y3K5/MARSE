@@ -9,6 +9,23 @@ results for the same manifest is always called out.
 
 ### Added
 
+- **Simulation kernel (Phase 1).** A well-mixed batch culture of one or more
+  organisms competing for a single limiting substrate can now be defined, run,
+  saved and reproduced:
+  - `marse run <experiment.json>` writes a trajectory and a run manifest;
+    `marse replay <manifest.json>` rebuilds the configuration, verifies its
+    checksum, re-runs and reports whether the results match.
+  - Validated configuration with units in every field name; unknown fields and
+    out-of-range values are refused with the offending field named.
+  - Deterministic RK4 clock, checkpoints, and a substrate balance checked every
+    step. A diverging run or a timestep too large for the configured rates is
+    reported rather than silently clamped.
+  - Name-keyed random streams, so adding a provider cannot perturb the stream
+    any other provider sees.
+  - Run manifests recording the configuration, its SHA-256 checksum, the seed,
+    versioned model names and software versions — and no username, hostname or
+    absolute path.
+
 - `docs/modeling-landscape.md`: survey of established microbial and biofilm
   simulators, how growth in natural environments differs from laboratory
   growth, and the consequences for MARSE's design.
