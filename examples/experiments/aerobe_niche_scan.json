@@ -1,0 +1,27 @@
+{
+  "experiment_id": "aerobe-niche-scan",
+  "axes": {
+    "temperature_c": [20.0, 30.0, 37.0, 45.0],
+    "ph": [5.0, 6.0, 7.0, 8.0, 9.0],
+    "oxygen": [0.0, 0.1, 1.0],
+    "carbon": [0.1, 1.0, 10.0]
+  },
+  "species": [
+    {
+      "name": "aerobe",
+      "capabilities": [
+        {
+          "id": "aerobic-respiration",
+          "maximum_rate_per_h": 0.8,
+          "substrate": "carbon",
+          "half_saturation": 0.2,
+          "oxygen_half_saturation": 0.1,
+          "temperature_c": [5.0, 37.0, 47.0],
+          "ph": [5.0, 7.0, 9.0],
+          "evidence_source": "illustrative benchmark",
+          "evidence_confidence": "C"
+        }
+      ]
+    }
+  ]
+}
