@@ -65,7 +65,9 @@ The post-Phase-3 plan is to make every result evidence-linked and falsifiable:
    versioned contracts with fixed update order.
 3. **Calibration and inverse modelling** — fit growth, CFU, colony-area,
    inhibition, nutrient, and oxygen observations with replicate-aware
-   uncertainty and identifiability checks.
+   uncertainty and identifiability checks. *(Growth-curve screening fits
+   implemented; confidence intervals, censoring, and full inverse modelling
+   remain.)*
 4. **Uncertainty and sensitivity** — propagate measurement, parameter,
    numerical, and model-form uncertainty through reproducible ensembles.
 5. **Benchmark organisms and experiments** — maintain a small source-linked
