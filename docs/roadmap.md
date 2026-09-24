@@ -70,6 +70,8 @@ The post-Phase-3 plan is to make every result evidence-linked and falsifiable:
    remain.)*
 4. **Uncertainty and sensitivity** — propagate measurement, parameter,
    numerical, and model-form uncertainty through reproducible ensembles.
+   *(Bounded sampling, summary quantiles, and rank-based screening implemented;
+   posterior inference and model-form comparison remain.)*
 5. **Benchmark organisms and experiments** — maintain a small source-linked
    validation panel before expanding mechanism count.
 6. **Adaptive spatial behaviour** — add chemotaxis, quorum signals, adhesion,
