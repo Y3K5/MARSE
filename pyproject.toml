@@ -65,7 +65,9 @@ include = [
 
 [tool.pytest.ini_options]
 minversion = "9.0"
-addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+# Long sweeps are deselected here and run nightly (.github/workflows/nightly.yml).
+# Run them with `pytest -m slow`, or everything with `pytest -m ""`.
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib", "-m", "not slow"]
 testpaths = ["tests"]
 xfail_strict = true
 filterwarnings = ["error"]
@@ -74,6 +76,7 @@ markers = [
   "invariance: checks that results are unchanged under problem-preserving transformations",
   "regression: compares a run with a stored golden trajectory",
   "benchmark: reproduces a documented biological benchmark case (slow)",
+  "slow: long parameter sweeps; excluded from pull-request CI and run nightly",
 ]
 
 [tool.ruff]

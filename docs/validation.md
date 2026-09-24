@@ -130,7 +130,10 @@ checks run as part of the ordinary test suite.
 
 ## Running the suite
 
-As cases land, `python -m pytest -m "numerical or invariance or regression"`
-runs the fast checks and `python -m pytest -m benchmark` runs the biological
+`python -m pytest` runs the pull-request suite, which leaves out tests marked
+`slow` (long parameter sweeps). `python -m pytest -m slow` runs those, as the
+nightly workflow does, and `python -m pytest -m ""` runs everything. As cases
+land, `python -m pytest -m "numerical or invariance or regression"` runs the
+fast checks and `python -m pytest -m benchmark` runs the biological
 benchmarks. A `marse validate` command will run the same suite from an
 installed package.
