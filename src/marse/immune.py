@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
+from marse.actions import ActionRule, ResourceBudget, try_action
 from marse.additives import hill_response
 
 __all__ = [
@@ -72,6 +73,8 @@ class ImmuneAgentStepResult:
     agents: tuple[ImmuneAgent, ...]
     biomass: NDArray[np.float64]
     effectors: dict[str, NDArray[np.float64]]
+    budgets: tuple[ResourceBudget, ...] | None = None
+    blocked_actions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,6 +168,8 @@ def step_immune_agents(
     *,
     dt: float,
     effectors: dict[str, ArrayLike] | None = None,
+    budgets: tuple[ResourceBudget, ...] | None = None,
+    capabilities: tuple[frozenset[str], ...] | None = None,
 ) -> ImmuneAgentStepResult:
     """Execute one deterministic action step for grid-local immune agents.
 
@@ -181,16 +186,35 @@ def step_immune_agents(
         name: np.maximum(np.asarray(field, dtype=float), 0.0).copy()
         for name, field in (effectors or {}).items()
     }
+    if budgets is not None and len(budgets) != len(agents):
+        raise ImmuneError("one resource budget is required per immune agent")
+    if capabilities is not None and len(capabilities) != len(agents):
+        raise ImmuneError("one capability set is required per immune agent")
+    next_budgets = list(budgets) if budgets is not None else None
+    blocked: list[str] = []
     if any(field.shape != updated_biomass.shape for field in fields.values()):
         raise ImmuneError("effector and biomass fields must have matching shapes")
     moved: list[ImmuneAgent] = []
     height, width = updated_biomass.shape
-    for agent in agents:
+    for index, agent in enumerate(agents):
         if agent.y >= height or agent.x >= width:
             raise ImmuneError("immune agent coordinates exceed biomass field")
         cell_type = agent.cell_type
         y, x = agent.y, agent.x
+        budget = next_budgets[index] if next_budgets is not None else None
+        available = capabilities[index] if capabilities is not None else frozenset()
         if cell_type.action == "move_toward":
+            if budget is not None:
+                result = try_action(
+                    ActionRule("move", "energy", dt * cell_type.movement_per_h),
+                    budget,
+                    available_capabilities=available,
+                )
+                if not result.executed:
+                    blocked.append("move")
+                    moved.append(agent)
+                    continue
+                next_budgets[index] = result.budget
             candidates = [
                 (y, x),
                 *((y + dy, x + dx) for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1))),
@@ -198,9 +222,37 @@ def step_immune_agents(
             valid = [(cy, cx) for cy, cx in candidates if 0 <= cy < height and 0 <= cx < width]
             y, x = max(valid, key=lambda position: updated_biomass[position])
         elif cell_type.action == "attack":
+            if budget is not None:
+                result = try_action(
+                    ActionRule("attack", "energy", dt * cell_type.attack_per_h),
+                    budget,
+                    available_capabilities=available,
+                )
+                if not result.executed:
+                    blocked.append("attack")
+                    moved.append(agent)
+                    continue
+                next_budgets[index] = result.budget
             updated_biomass[y, x] *= np.exp(-dt * cell_type.attack_per_h * agent.energy)
         elif cell_type.action == "secrete":
+            if budget is not None:
+                result = try_action(
+                    ActionRule("secrete", "energy", dt * cell_type.secretion_per_h),
+                    budget,
+                    available_capabilities=available,
+                )
+                if not result.executed:
+                    blocked.append("secrete")
+                    moved.append(agent)
+                    continue
+                next_budgets[index] = result.budget
             field = fields.setdefault(cell_type.effector, np.zeros_like(updated_biomass))
             field[y, x] += dt * cell_type.secretion_per_h * agent.energy
         moved.append(ImmuneAgent(cell_type, y, x, agent.energy))
-    return ImmuneAgentStepResult(tuple(moved), updated_biomass, fields)
+    return ImmuneAgentStepResult(
+        tuple(moved),
+        updated_biomass,
+        fields,
+        tuple(next_budgets) if next_budgets is not None else None,
+        tuple(blocked),
+    )

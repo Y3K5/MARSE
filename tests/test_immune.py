@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from marse.actions import ResourceBudget
 from marse.immune import (
     ImmuneAgent,
     ImmuneCellType,
@@ -65,3 +66,16 @@ def test_immune_actions_move_attack_and_secrete_explicitly():
     secretor = ImmuneCellType("tcell", "secrete", "ifng", secretion_per_h=3.0)
     secreted = step_immune_agents((ImmuneAgent(secretor, 0, 0),), [[0.0]], dt=0.5)
     assert secreted.effectors["ifng"][0, 0] == pytest.approx(1.5)
+
+
+def test_immune_actions_consume_budgets_and_report_blocked_actions():
+    attacker = ImmuneCellType("neutrophil", "attack", "ros", attack_per_h=2.0)
+    result = step_immune_agents(
+        (ImmuneAgent(attacker, 0, 0),),
+        [[1.0]],
+        dt=1.0,
+        budgets=(ResourceBudget((("energy", 1.0),)),),
+    )
+    assert result.blocked_actions == ("attack",)
+    assert result.biomass[0, 0] == pytest.approx(1.0)
+    assert result.budgets is not None
