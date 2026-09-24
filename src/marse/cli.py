@@ -13,6 +13,7 @@ whether the results match.
 from __future__ import annotations
 
 import argparse
+import json
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -25,6 +26,7 @@ from marse.core.simulation import BiofilmProfileResult, SimulationResult, run
 from marse.ecosystem import load_experiment as load_ecosystem_experiment
 from marse.ecosystem import run as run_ecosystem
 from marse.ecosystem import write_viewer
+from marse.ensemble import ScenarioBatch, run_batch
 from marse.niche import NicheError, load_niche_scan, run_niche_scan
 
 Result = SimulationResult | BiofilmProfileResult
@@ -174,6 +176,20 @@ def _command_niche_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_ecosystem_batch(args: argparse.Namespace) -> int:
+    raw = json.loads(Path(args.experiment).read_text(encoding="utf-8"))
+    batch = ScenarioBatch.grid(raw["base"], raw.get("parameters", {}))
+    catalog = run_batch(batch, workers=args.workers)
+    output = Path(args.output)
+    output.mkdir(parents=True, exist_ok=True)
+    catalog_path = catalog.write_json(output / "catalog.json")
+    print(f"scenarios   {len(batch.scenarios)}")
+    print(f"completed   {len(catalog.query(status='completed'))}")
+    print(f"failed      {len(catalog.query(status='failed'))}")
+    print(f"wrote       {catalog_path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="marse",
@@ -207,6 +223,14 @@ def build_parser() -> argparse.ArgumentParser:
     niche_command.add_argument("experiment", help="path to a niche scan JSON configuration")
     niche_command.add_argument("-o", "--output", help="directory for scan outputs")
     niche_command.set_defaults(handler=_command_niche_scan)
+
+    batch_command = commands.add_parser(
+        "ecosystem-batch", help="run a reproducible ecosystem parameter ensemble"
+    )
+    batch_command.add_argument("experiment", help="JSON file with base and parameters")
+    batch_command.add_argument("-o", "--output", required=True, help="directory for catalog output")
+    batch_command.add_argument("--workers", type=int, default=1, help="parallel worker processes")
+    batch_command.set_defaults(handler=_command_ecosystem_batch)
     return parser
 
 
