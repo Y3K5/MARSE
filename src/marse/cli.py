@@ -139,7 +139,11 @@ def _command_replay(args: argparse.Namespace) -> int:
 def _command_ecosystem(args: argparse.Namespace) -> int:
     config = load_ecosystem_experiment(args.experiment)
     result = run_ecosystem(config)
-    output_dir = Path(args.output) if args.output else Path(args.experiment).parent / "runs" / config.experiment_id
+    output_dir = (
+        Path(args.output)
+        if args.output
+        else Path(args.experiment).parent / "runs" / config.experiment_id
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     frames = result.write_frames(output_dir / "frames.json")
     viewer = write_viewer(result, output_dir / "viewer.html")

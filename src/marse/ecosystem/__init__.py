@@ -8,8 +8,8 @@ from marse.ecosystem.model import (
     EcosystemState,
     NutrientConfig,
     SpeciesConfig,
-    run,
     load_experiment,
+    run,
 )
 from marse.ecosystem.viewer import write_viewer
 
@@ -21,7 +21,7 @@ __all__ = [
     "EcosystemState",
     "NutrientConfig",
     "SpeciesConfig",
-    "run",
     "load_experiment",
+    "run",
     "write_viewer",
 ]

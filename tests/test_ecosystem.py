@@ -10,8 +10,8 @@ from marse.ecosystem import (
     EcosystemError,
     NutrientConfig,
     SpeciesConfig,
-    run,
     load_experiment,
+    run,
     write_viewer,
 )
 
@@ -59,9 +59,7 @@ def test_mutations_are_seeded_and_recorded():
             duration_h=0.2,
             timestep_h=0.01,
             mutation_interval_h=0.1,
-            species=(
-                SpeciesConfig("mutant", 0.1, 0.2, (0.2,), (1.0,), 1.0, 2.0),
-            ),
+            species=(SpeciesConfig("mutant", 0.1, 0.2, (0.2,), (1.0,), 1.0, 2.0),),
             nutrients=(NutrientConfig("food", 1.0, 0.0),),
         )
     )

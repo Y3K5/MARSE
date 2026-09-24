@@ -27,8 +27,8 @@ __all__ = [
     "EcosystemState",
     "NutrientConfig",
     "SpeciesConfig",
-    "run",
     "load_experiment",
+    "run",
 ]
 
 
@@ -154,12 +154,12 @@ class EcosystemFrame:
     nutrients: NDArray[np.float64]
     mutations: NDArray[np.int64]
 
-    def to_dict(self, species_names: tuple[str, ...], nutrient_names: tuple[str, ...]) -> dict[str, Any]:
+    def to_dict(
+        self, species_names: tuple[str, ...], nutrient_names: tuple[str, ...]
+    ) -> dict[str, Any]:
         return {
             "time_h": self.time_h,
-            "species": {
-                name: self.biomass[i].tolist() for i, name in enumerate(species_names)
-            },
+            "species": {name: self.biomass[i].tolist() for i, name in enumerate(species_names)},
             "nutrients": {
                 name: self.nutrients[i].tolist() for i, name in enumerate(nutrient_names)
             },
@@ -208,8 +208,17 @@ def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
     unknown = set(raw) - known
     if unknown:
         raise EcosystemError(f"experiment: unknown field(s) {sorted(unknown)}")
-    for name in ("experiment_id", "width", "height", "cell_size_um", "duration_h",
-                 "timestep_h", "seed", "nutrients", "species"):
+    for name in (
+        "experiment_id",
+        "width",
+        "height",
+        "cell_size_um",
+        "duration_h",
+        "timestep_h",
+        "seed",
+        "nutrients",
+        "species",
+    ):
         if name not in raw:
             raise EcosystemError(f"experiment: missing required field '{name}'")
     nutrients = raw["nutrients"]
@@ -234,7 +243,10 @@ def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
         parsed_species.append(
             SpeciesConfig(
                 name=str(item.get("name", "")),
-                initial_biomass=_number(item.get("initial_biomass"), f"species[{i}].initial_biomass"),
+                initial_biomass=_number(
+                    item.get("initial_biomass"),
+                    f"species[{i}].initial_biomass",
+                ),
                 maximum_growth_per_h=_number(
                     item.get("maximum_growth_per_h"), f"species[{i}].maximum_growth_per_h"
                 ),
@@ -287,13 +299,7 @@ def load_experiment(path: str | Path) -> EcosystemConfig:
 
 def _laplacian(field: NDArray[np.float64]) -> NDArray[np.float64]:
     padded = np.pad(field, 1, mode="edge")
-    return (
-        padded[1:-1, :-2]
-        + padded[1:-1, 2:]
-        + padded[:-2, 1:-1]
-        + padded[2:, 1:-1]
-        - 4.0 * field
-    )
+    return padded[1:-1, :-2] + padded[1:-1, 2:] + padded[:-2, 1:-1] + padded[2:, 1:-1] - 4.0 * field
 
 
 def _initial_state(config: EcosystemConfig) -> EcosystemState:
@@ -326,7 +332,9 @@ def run(config: EcosystemConfig) -> EcosystemResult:
     mutations = state.mutations.copy()
     seed_registry = SeedRegistry(config.seed)
     mutation_rng = seed_registry.stream("ecosystem.mutations")
-    frames = [EcosystemFrame(0.0, state.biomass.copy(), state.nutrients.copy(), state.mutations.copy())]
+    frames = [
+        EcosystemFrame(0.0, state.biomass.copy(), state.nutrients.copy(), state.mutations.copy())
+    ]
     mutation_interval = config.mutation_interval_h
     next_mutation = mutation_interval if mutation_interval is not None else np.inf
 
@@ -336,7 +344,9 @@ def run(config: EcosystemConfig) -> EcosystemResult:
         nutrients = state.nutrients.copy()
         for nutrient_index, nutrient in enumerate(config.nutrients):
             nutrients[nutrient_index] += (
-                dt * nutrient.diffusivity / config.cell_size_um**2
+                dt
+                * nutrient.diffusivity
+                / config.cell_size_um**2
                 * _laplacian(nutrients[nutrient_index])
             )
 
@@ -348,7 +358,9 @@ def run(config: EcosystemConfig) -> EcosystemResult:
                 events = mutation_rng.random(growth_factor.shape) < species.mutation_probability
                 new_events = events & (mutations[species_index] == 0)
                 mutations[species_index] += new_events
-                growth_factor = np.where(new_events, species.mutation_growth_multiplier, growth_factor)
+                growth_factor = np.where(
+                    new_events, species.mutation_growth_multiplier, growth_factor
+                )
 
             limitation = np.ones_like(biomass[species_index])
             for nutrient_index, (half_saturation, yield_value) in enumerate(
@@ -357,7 +369,10 @@ def run(config: EcosystemConfig) -> EcosystemResult:
                 concentration = np.maximum(nutrients[nutrient_index], 0.0)
                 limitation *= concentration / (half_saturation + concentration)
                 nutrients[nutrient_index] -= (
-                    dt * species.maximum_growth_per_h * limitation * biomass[species_index]
+                    dt
+                    * species.maximum_growth_per_h
+                    * limitation
+                    * biomass[species_index]
                     / yield_value
                 )
             biomass[species_index] *= np.exp(
