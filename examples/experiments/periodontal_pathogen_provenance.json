@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "status": "exploratory-placeholder",
+  "study": "periodontal-pathogen-biofilm",
+  "sources": [
+    {
+      "id": "placeholder-model-assumption",
+      "type": "model-assumption",
+      "citation": "No organism-specific measurement supplied yet",
+      "evidence_grade": "C",
+      "notes": "Values are structural placeholders for executable sensitivity analysis."
+    }
+  ],
+  "parameter_groups": [
+    {
+      "id": "domain-and-time",
+      "paths": [
+        "width",
+        "height",
+        "cell_size_um",
+        "duration_h",
+        "timestep_h",
+        "carrying_capacity"
+      ],
+      "units": {
+        "width": "cells",
+        "height": "cells",
+        "cell_size_um": "um",
+        "duration_h": "h",
+        "timestep_h": "h",
+        "carrying_capacity": "biomass-field units"
+      },
+      "source_id": "placeholder-model-assumption",
+      "calibration_status": "not-calibrated"
+    },
+    {
+      "id": "environment-fields",
+      "paths": [
+        "nutrients.oxygen",
+        "nutrients.heme",
+        "nutrients.peptides",
+        "nutrients.carbon",
+        "conditions.temperature_c",
+        "conditions.moisture"
+      ],
+      "units": {
+        "oxygen": "model concentration units",
+        "heme": "model concentration units",
+        "peptides": "model concentration units",
+        "carbon": "model concentration units",
+        "temperature_c": "degC",
+        "moisture": "dimensionless 0..1 proxy"
+      },
+      "source_id": "placeholder-model-assumption",
+      "calibration_status": "not-calibrated",
+      "required_measurements": [
+        "medium composition and concentration units",
+        "temperature response observations",
+        "water activity or liquid-fraction measurement",
+        "oxygen transfer and boundary measurements"
+      ]
+    },
+    {
+      "id": "species-growth-and-spatial-rules",
+      "paths": [
+        "species.*.maximum_growth_per_h",
+        "species.*.half_saturation",
+        "species.*.yield_per_nutrient",
+        "species.*.production_per_nutrient",
+        "species.*.spreading_per_h",
+        "species.*.adhesion_per_h",
+        "species.*.detachment_per_h",
+        "species.*.capabilities"
+      ],
+      "units": {
+        "maximum_growth_per_h": "1/h",
+        "half_saturation": "model concentration units",
+        "yield_per_nutrient": "biomass per nutrient unit",
+        "production_per_nutrient": "nutrient units per biomass-growth unit",
+        "spreading_per_h": "1/h",
+        "adhesion_per_h": "1/h",
+        "detachment_per_h": "1/h"
+      },
+      "source_id": "placeholder-model-assumption",
+      "calibration_status": "not-calibrated",
+      "required_measurements": [
+        "species-specific growth curves",
+        "resource uptake or yield measurements",
+        "colony expansion or biofilm-area trajectories",
+        "attachment and detachment measurements"
+      ]
+    },
+    {
+      "id": "community-interactions",
+      "paths": [
+        "competition_coefficients",
+        "species.*.production_per_nutrient"
+      ],
+      "units": {
+        "competition_coefficients": "dimensionless relative effect",
+        "production_per_nutrient": "nutrient units per biomass-growth unit"
+      },
+      "source_id": "placeholder-model-assumption",
+      "calibration_status": "not-calibrated",
+      "required_measurements": [
+        "single-species controls",
+        "pairwise competition experiments",
+        "three-species community abundance trajectories",
+        "metabolite production and consumption measurements"
+      ]
+    }
+  ]
+}
