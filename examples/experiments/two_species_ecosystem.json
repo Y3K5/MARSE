@@ -8,7 +8,13 @@
   "seed": 20260924,
   "mutation_interval_h": 1.0,
   "nutrients": [
-    {"name": "oxygen", "initial": 1.0, "diffusivity": 10.0},
+    {
+      "name": "oxygen",
+      "initial": 0.05,
+      "diffusivity": 10.0,
+      "boundary_value": 1.0,
+      "boundary_edges": ["top"]
+    },
     {"name": "carbon", "initial": 2.0, "diffusivity": 5.0}
   ],
   "species": [
@@ -19,14 +25,20 @@
       "half_saturation": [0.2, 0.4],
       "yield_per_nutrient": [1.0, 1.0],
       "mutation_probability": 0.01,
-      "mutation_growth_multiplier": 1.15
+      "mutation_growth_multiplier": 1.15,
+      "seed_regions": [
+        {"x": 0.25, "y": 0.7, "radius": 0.12, "biomass": 0.4}
+      ]
     },
     {
       "name": "competitor",
-      "initial_biomass": 0.1,
       "maximum_growth_per_h": 0.5,
       "half_saturation": [0.3, 0.2],
-      "yield_per_nutrient": [1.0, 1.0]
+      "yield_per_nutrient": [1.0, 1.0],
+      "initial_biomass": 0.0,
+      "seed_regions": [
+        {"x": 0.75, "y": 0.7, "radius": 0.12, "biomass": 0.4}
+      ]
     }
   ]
 }

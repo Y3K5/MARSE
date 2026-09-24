@@ -9,6 +9,7 @@ from marse.ecosystem import (
     EcosystemConfig,
     EcosystemError,
     NutrientConfig,
+    SeedRegion,
     SpeciesConfig,
     load_experiment,
     run,
@@ -78,6 +79,67 @@ def test_frames_can_be_exported_for_a_visualizer(tmp_path: Path):
     assert '"species"' in text
     assert '"oxygen"' in text
     assert '"time_h":0.0' in text
+
+
+def test_seed_regions_create_localized_initial_colonies():
+    result = run(
+        config(
+            duration_h=0.1,
+            species=(
+                SpeciesConfig(
+                    "localized",
+                    0.0,
+                    0.1,
+                    (0.2, 0.2),
+                    (1.0, 1.0),
+                    seed_regions=(SeedRegion(0.25, 0.5, 0.2, 0.8),),
+                ),
+                config().species[1],
+            ),
+        )
+    )
+    field = result.frames[0].biomass[0]
+    assert field.max() == pytest.approx(0.8)
+    assert np.count_nonzero(field) < field.size
+
+
+def test_fixed_nutrient_boundary_creates_a_gradient():
+    result = run(
+        config(
+            duration_h=0.5,
+            timestep_h=0.01,
+            nutrients=(
+                NutrientConfig(
+                    "oxygen",
+                    0.0,
+                    10.0,
+                    boundary_value=1.0,
+                    boundary_edges=("top",),
+                ),
+                NutrientConfig("carbon", 2.0, 0.0),
+            ),
+            species=(SpeciesConfig("consumer", 0.0, 0.2, (0.2, 0.2), (1.0, 1.0)),),
+        )
+    )
+    oxygen = result.final_state.nutrients[0]
+    assert np.all(oxygen[0] == pytest.approx(1.0))
+    assert oxygen[-1].mean() < oxygen[0].mean()
+
+
+def test_json_spatial_fields_are_loaded(tmp_path: Path):
+    source = tmp_path / "spatial.json"
+    source.write_text(
+        '{"experiment_id":"spatial","width":4,"height":4,"cell_size_um":10,'
+        '"duration_h":0.1,"timestep_h":0.01,"seed":1,'
+        '"nutrients":[{"name":"food","initial":0,"diffusivity":1,'
+        '"boundary_value":1,"boundary_edges":["top"]}],'
+        '"species":[{"name":"one","initial_biomass":0,"maximum_growth_per_h":0.2,'
+        '"half_saturation":[0.2],"yield_per_nutrient":[1],'
+        '"seed_regions":[{"x":0.5,"y":0.5,"radius":0.2,"biomass":1}]}]}'
+    )
+    loaded = load_experiment(source)
+    assert loaded.nutrients[0].boundary_edges == ("top",)
+    assert loaded.species[0].seed_regions[0].biomass == 1
 
 
 def test_json_experiment_loader_and_viewer(tmp_path: Path):
