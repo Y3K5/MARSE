@@ -8,7 +8,9 @@ from marse.microbes.growth import (
     baranyi_roberts,
     doubling_time,
     haldane,
+    minimum_substrate_concentration,
     monod,
+    net_growth_rate,
     product_formation_rate,
     specific_growth_rate,
     substrate_uptake_rate,
@@ -18,6 +20,7 @@ from marse.spatial.solutes import (
     oxygen_diffusivity_m2_per_s,
     oxygen_saturation_mg_per_l,
 )
+from marse.validation.analytical import chemostat_break_even
 
 # --- primary growth models -------------------------------------------------------
 
@@ -50,6 +53,31 @@ def test_haldane_peaks_at_geometric_mean_and_tends_to_monod():
     rates = haldane(s, 1.0, k_s=0.5, k_i=8.0)
     assert s[np.argmax(rates)] == pytest.approx(np.sqrt(0.5 * 8.0), rel=1e-3)
     assert haldane(2.0, 1.0, 0.5, 1e12) == pytest.approx(monod(2.0, 1.0, 0.5))
+
+
+def test_net_growth_is_negative_below_the_threshold_and_zero_at_it():
+    mu_max, k_s, decay = 1.0, 0.5, 0.05
+    s_min = minimum_substrate_concentration(mu_max, k_s, decay)
+    assert s_min == pytest.approx(0.5 * 0.05 / 0.95)
+    assert net_growth_rate(s_min, mu_max, k_s, decay) == pytest.approx(0.0, abs=1e-12)
+    assert net_growth_rate(s_min * 0.5, mu_max, k_s, decay) < 0
+    assert net_growth_rate(s_min * 2.0, mu_max, k_s, decay) > 0
+    # Unlike bare Monod, which stays positive however little substrate is left.
+    assert monod(s_min * 0.5, mu_max, k_s) > 0
+
+
+def test_no_threshold_exists_when_maintenance_outpaces_growth():
+    assert minimum_substrate_concentration(0.5, 1.0, decay=0.5) == np.inf
+    assert minimum_substrate_concentration(0.5, 1.0, decay=0.8) == np.inf
+    assert np.all(net_growth_rate([0.0, 1.0, 1e9], 0.5, 1.0, 0.8) < 0)
+
+
+def test_threshold_matches_the_chemostat_break_even_algebra():
+    # Maintenance plays the role of the dilution rate; the algebra is identical.
+    for mu_max, k_s, rate in ((1.0, 0.5, 0.3), (0.8, 2.0, 0.1), (1.5, 0.05, 0.75)):
+        assert minimum_substrate_concentration(mu_max, k_s, rate) == pytest.approx(
+            chemostat_break_even(rate, mu_max, k_s)
+        )
 
 
 def test_pirt_uptake_and_luedeking_piret_production():

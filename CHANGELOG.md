@@ -9,6 +9,13 @@ results for the same manifest is always called out.
 
 ### Added
 
+- `docs/modeling-landscape.md`: survey of established microbial and biofilm
+  simulators, how growth in natural environments differs from laboratory
+  growth, and the consequences for MARSE's design.
+- A growth threshold: `net_growth_rate` and `minimum_substrate_concentration`
+  implement `S_min`, below which maintenance consumes all uptake and there is
+  no net growth. Bare Monod kinetics predicts growth at any positive substrate
+  concentration, which is wrong at environmental concentrations.
 - Growth kinetics: Monod, Haldane–Andrews substrate inhibition, Pirt uptake
   with maintenance, Luedeking–Piret product formation, and the Baranyi–Roberts
   growth curve with lag, evaluated in a numerically stable form.

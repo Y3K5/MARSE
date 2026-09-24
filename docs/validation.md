@@ -40,6 +40,23 @@ Every `ValidationCase` records:
 | V6 | Cross-feeding | Explicit beneficial exchange shifts the equilibrium as designed | 3 | Planned |
 | V7 | Environmental perturbation | Recovery or adaptation after a resource, pH or oxygen shift | 4 | Planned |
 | V8 | Reproducibility | Re-running a saved manifest reproduces outputs within stated tolerances | 5 | Planned |
+| V9 | IWA benchmark BM1 | Substrate flux and concentration for a monospecies biofilm at fixed biomass, against published reference solutions | 3 | Proposed |
+| V10 | IWA benchmark BM3 | Multispecies, multisubstrate biofilm (heterotrophs, nitrifiers, inert biomass) | 4 | Proposed |
+
+V9 and V10 adopt the published benchmark problems of the IWA Task Group on
+Biofilm Modeling, which exist precisely to compare modelling approaches and
+have published reference solutions from multiple independent models. Using
+them is stronger evidence than any benchmark MARSE could define for itself.
+See [modeling-landscape.md §5.1](modeling-landscape.md#51-the-iwa-benchmark-problems).
+
+## Structural output metrics
+
+Simulated biofilm structure is reported using the vocabulary established for
+confocal microscopy analysis, so that simulations and images are directly
+comparable: **biovolume, mean and maximum thickness, substratum coverage,
+roughness coefficient** and **volume-to-surface ratio**
+([modeling-landscape.md §5.2](modeling-landscape.md#52-structural-metrics)).
+These give validation case V4 a quantitative target it currently lacks.
 
 ## Analytical reference solutions
 

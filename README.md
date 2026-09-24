@@ -106,6 +106,9 @@ Before your first commit, complete the one-time setup in
 - [docs/architecture.md](docs/architecture.md): core abstractions and
   extension contracts.
 - [docs/validation.md](docs/validation.md): benchmark definitions.
+- [docs/modeling-landscape.md](docs/modeling-landscape.md): how the field
+  models microbial growth, how natural conditions differ from laboratory ones,
+  and what both imply for MARSE's design.
 - [docs/roadmap.md](docs/roadmap.md): development phases.
 
 ## Contributing, privacy and security

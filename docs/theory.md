@@ -125,7 +125,7 @@ Two properties matter for simulation:
 - **It is not zero at zero.** $\mu(0) = 0$ exactly, but the approach is linear,
   so tiny residual substrate still supports tiny growth. Real populations have
   a threshold substrate concentration below which they do not grow at all;
-  Monod does not represent it.
+  Monod does not represent it. See §1.3.1.
 
 Monod is an empirical fit to whole-cell behaviour that happens to share the
 algebraic form of Michaelis–Menten enzyme kinetics. The resemblance is not a
@@ -135,6 +135,33 @@ expression, and it varies with growth history.
 Implemented as `marse.microbes.growth.monod`. Negative concentrations, which
 appear as numerical undershoot in explicit solvers, are clamped to zero rather
 than producing negative growth.
+
+### 1.3.1 The growth threshold $S_{\min}$
+
+Subtracting maintenance and decay at rate $b$ gives a net rate that is
+*negative* at low substrate and crosses zero at a finite concentration:
+
+$$
+\mu_{\text{net}}(S) = \mu_{\max}\frac{S}{K_S + S} - b,
+\qquad
+S_{\min} = \frac{K_S\,b}{\mu_{\max} - b},
+$$
+
+with $S_{\min} = \infty$ when $b \ge \mu_{\max}$ — the population cannot
+sustain itself at any concentration. Below $S_{\min}$, substrate flux only
+meets maintenance demand and there is no net growth.
+
+This matters most in exactly the conditions MARSE is eventually aimed at.
+Substrate concentrations in natural environments are orders of magnitude below
+those in batch culture, and there the difference between "grows very slowly"
+and "does not grow" decides which organism persists
+([`modeling-landscape.md` §3.4](modeling-landscape.md#34-there-is-a-floor-the-minimum-substrate-concentration)).
+Bare Monod kinetics, integrated over a long simulation, accumulates biomass
+that should not exist.
+
+Note that this is the same algebra as the chemostat break-even concentration of
+§7.1, with maintenance in place of the dilution rate. Implemented as
+`net_growth_rate` and `minimum_substrate_concentration`.
 
 ### 1.4 Several limiting substrates
 
@@ -880,8 +907,16 @@ cannot do:
 5. **Fixed phenotype set.** No novel states emerge (§8).
 6. **Parameters from other conditions.** A $K_S$ measured in a chemostat on
    one strain in one medium is being applied elsewhere. This is the dominant
-   uncertainty in practice, ahead of any numerical concern.
-7. **No host.** No immune cells, no tissue, no clinical inference (see
+   uncertainty in practice, ahead of any numerical concern — $K_S$ has been
+   reported to shift ~170-fold in one strain on one substrate through
+   physiological adaptation alone
+   ([`modeling-landscape.md` §3.2](modeling-landscape.md#32-the-half-saturation-constant-is-not-a-property-of-a-species)).
+7. **Laboratory conditions, not natural ones.** Single limiting substrate,
+   abundant nutrients, fast growth. Natural communities grow on many substrates
+   at once, orders of magnitude more slowly, with large dormant fractions. v1.0
+   does not represent mixed-substrate kinetics or dormancy, so it is not a model
+   of a soil or marine community ([`modeling-landscape.md` §3](modeling-landscape.md#3-natural-states-versus-laboratory-states)).
+8. **No host.** No immune cells, no tissue, no clinical inference (see
    [`docs/specification.md`](specification.md)).
 
 **Simulation output is not experimental evidence.** MARSE produces

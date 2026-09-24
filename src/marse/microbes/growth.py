@@ -17,7 +17,9 @@ __all__ = [
     "baranyi_roberts",
     "doubling_time",
     "haldane",
+    "minimum_substrate_concentration",
     "monod",
+    "net_growth_rate",
     "product_formation_rate",
     "specific_growth_rate",
     "substrate_uptake_rate",
@@ -64,6 +66,44 @@ def haldane(
     require(np.all(mu_max >= 0), "mu_max must be non-negative")
     require(np.all(k_s > 0) and np.all(k_i > 0), "k_s and k_i must be positive")
     return unwrap(mu_max * s / (k_s + s + s**2 / k_i))
+
+
+def net_growth_rate(
+    substrate: ArrayLike, mu_max: ArrayLike, k_s: ArrayLike, decay: ArrayLike
+) -> FloatOrArray:
+    """Monod growth less maintenance and decay, mu_net = mu_max S / (K_s + S) - b.
+
+    Unlike bare Monod kinetics this is *negative* at low substrate and crosses
+    zero at a finite concentration, so a population stops growing where a real
+    one does instead of creeping upward forever. That crossing point is
+    :func:`minimum_substrate_concentration`. See docs/theory.md, section 1.3, and
+    docs/modeling-landscape.md, section 3.4, for why the threshold matters
+    whenever conditions approach those found in natural environments.
+    """
+    b = as_array(decay)
+    require(np.all(b >= 0), "decay must be non-negative")
+    return unwrap(as_array(monod(substrate, mu_max, k_s)) - b)
+
+
+def minimum_substrate_concentration(
+    mu_max: ArrayLike, k_s: ArrayLike, decay: ArrayLike
+) -> FloatOrArray:
+    """Substrate concentration below which there is no net growth (``S_min``).
+
+    Solving ``net_growth_rate = 0`` gives S_min = K_s b / (mu_max - b); it is
+    infinite when maintenance and decay match or exceed the maximum growth rate,
+    meaning the population cannot sustain itself at any concentration. This is
+    the same algebra as
+    :func:`marse.validation.analytical.chemostat_break_even`, with maintenance
+    in place of the dilution rate.
+    """
+    mu_max, k_s, b = as_array(mu_max), as_array(k_s), as_array(decay)
+    require(np.all(mu_max >= 0), "mu_max must be non-negative")
+    require(np.all(k_s > 0), "k_s must be positive")
+    require(np.all(b >= 0), "decay must be non-negative")
+    with np.errstate(divide="ignore", invalid="ignore"):
+        threshold = k_s * b / (mu_max - b)
+    return unwrap(np.where(b >= mu_max, np.inf, threshold))
 
 
 def substrate_uptake_rate(
