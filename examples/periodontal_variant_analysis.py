@@ -42,6 +42,8 @@ def _variant(
     temperature: float,
     moisture: str,
     seed: int,
+    competition_mode: str = "reference",
+    resource_perturbation: str = "reference",
 ) -> dict[str, Any]:
     config = deepcopy(base)
     label = species_names[0] if len(species_names) == 1 else "mixed"
@@ -51,7 +53,11 @@ def _variant(
     config["species"] = [item for item in config["species"] if item["name"] in species_names]
     count = len(config["species"])
     config["competition_coefficients"] = [
-        [0.45 if row == column else 0.8 for column in range(count)] for row in range(count)
+        [
+            0.45 if row == column else (0.8 if competition_mode == "reference" else 0.0)
+            for column in range(count)
+        ]
+        for row in range(count)
     ]
     config["conditions"][0]["initial"] = temperature
     moisture_factor = 0.65 if moisture == "reduced" else 1.0
@@ -61,6 +67,10 @@ def _variant(
             nutrient["initial"] *= moisture_factor
             if nutrient.get("boundary_value") is not None:
                 nutrient["boundary_value"] *= moisture_factor
+        if nutrient["name"] == resource_perturbation:
+            nutrient["initial"] *= 0.5
+            if nutrient.get("boundary_value") is not None:
+                nutrient["boundary_value"] *= 0.5
     return config
 
 
