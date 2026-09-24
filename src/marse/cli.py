@@ -22,6 +22,9 @@ from marse import __version__
 from marse.core.config import ConfigError, load_experiment
 from marse.core.provenance import Manifest
 from marse.core.simulation import BiofilmProfileResult, SimulationResult, run
+from marse.ecosystem import load_experiment as load_ecosystem_experiment
+from marse.ecosystem import run as run_ecosystem
+from marse.ecosystem import write_viewer
 
 Result = SimulationResult | BiofilmProfileResult
 
@@ -133,6 +136,25 @@ def _command_replay(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_ecosystem(args: argparse.Namespace) -> int:
+    config = load_ecosystem_experiment(args.experiment)
+    result = run_ecosystem(config)
+    output_dir = (
+        Path(args.output)
+        if args.output
+        else Path(args.experiment).parent / "runs" / config.experiment_id
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    frames = result.write_frames(output_dir / "frames.json")
+    viewer = write_viewer(result, output_dir / "viewer.html")
+    print(f"experiment  {config.experiment_id}")
+    print(f"steps       {result.final_state.step} over {result.final_state.time_h:g} h")
+    print(f"frames      {len(result.frames)}")
+    print(f"wrote       {frames}")
+    print(f"wrote       {viewer}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="marse",
@@ -152,6 +174,13 @@ def build_parser() -> argparse.ArgumentParser:
     replay_command.add_argument("manifest", help="path to a manifest.json written by 'marse run'")
     replay_command.add_argument("-o", "--output", help="directory for the replayed outputs")
     replay_command.set_defaults(handler=_command_replay)
+
+    ecosystem_command = commands.add_parser(
+        "ecosystem", help="run a 2D multi-species ecosystem and export a browser viewer"
+    )
+    ecosystem_command.add_argument("experiment", help="path to an ecosystem JSON configuration")
+    ecosystem_command.add_argument("-o", "--output", help="directory for frames and viewer")
+    ecosystem_command.set_defaults(handler=_command_ecosystem)
     return parser
 
 
