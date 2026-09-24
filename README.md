@@ -10,8 +10,20 @@ state transitions, applies controlled perturbations, and records the full
 provenance of every run so that any result can be replayed.
 
 > **Status: Phase 0, specification.** This repository holds the design, the
-> package layout and the development infrastructure. There is no simulation
-> engine yet; see the [roadmap](docs/roadmap.md).
+> mathematical core and its validation, the package layout and the development
+> infrastructure. The simulation kernel that drives these models in space and
+> time is Phase 1; see the [roadmap](docs/roadmap.md).
+
+The mathematics is implemented and tested: growth kinetics, cardinal
+temperature and pH models, oxygen solubility and diffusivity, and analytical
+reference solutions that the validation suite checks against independent
+numerical integration. See [docs/theory.md](docs/theory.md) for the equations
+and [docs/parameters.md](docs/parameters.md) for sourced parameter values.
+
+```bash
+python examples/batch_growth.py        # Monod growth vs its closed-form solution
+python examples/oxygen_penetration.py  # why active biofilms are stratified
+```
 
 ## What MARSE v1.0 will do
 
@@ -51,19 +63,19 @@ predict clinical or vaccine outcomes, or produce experimental evidence; the
 src/marse/         the Python package
   core/            run loop, state, configuration, provenance
   schemas/         validated canonical objects
-  spatial/         domains, grids, diffusion and transport
-  microbes/        growth, resource use, adhesion, interactions
+  spatial/         domains, grids, diffusion; solute properties
+  microbes/        growth kinetics, cardinal models, interactions
   biofilm/         biomass, matrix, maturation
   adaptation/      state transitions and decision policies
   interventions/   perturbations
-  validation/      benchmark and regression cases
+  validation/      analytical references, benchmark and regression cases
+examples/          runnable reference calculations
 tests/             test suite
-docs/              specification, architecture, validation plan, roadmap
+docs/              theory, parameters, specification, architecture, validation, roadmap
 tools/             repository tooling (privacy guard)
 ```
 
-Planned: `examples/` for reproducible reference simulations and `paper/` for the
-software paper.
+Planned: `paper/` for the software paper.
 
 ## Development setup
 
@@ -82,6 +94,19 @@ marse --version
 
 Before your first commit, complete the one-time setup in
 [PRIVACY.md](PRIVACY.md#one-time-setup).
+
+## Documentation
+
+- [docs/theory.md](docs/theory.md): every equation, its assumptions, and the
+  numerical methods used.
+- [docs/parameters.md](docs/parameters.md): parameter values with units,
+  sources and explicit confidence levels.
+- [docs/specification.md](docs/specification.md): scientific scope of v1.0,
+  and what it does not claim.
+- [docs/architecture.md](docs/architecture.md): core abstractions and
+  extension contracts.
+- [docs/validation.md](docs/validation.md): benchmark definitions.
+- [docs/roadmap.md](docs/roadmap.md): development phases.
 
 ## Contributing, privacy and security
 

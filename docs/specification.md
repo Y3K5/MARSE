@@ -97,6 +97,10 @@ not implement them.
 | `SimulationRun` | Configuration, seed, versions, checkpoints, outputs and provenance |
 | `ValidationCase` | A known behaviour, target metric, tolerance and source |
 
+The equations that implement these objects, with their assumptions and
+limitations, are in [theory.md](theory.md); their numerical values and sources
+are in [parameters.md](parameters.md).
+
 ## Modelling rules
 
 1. **Explicit scales.** Modules connect only through declared state variables
