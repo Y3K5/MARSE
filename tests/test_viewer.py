@@ -12,3 +12,6 @@ def test_viewer_contains_interactive_layers_and_controls(tmp_path):
     assert "render-mode" in html
     assert "canvas.style.width" in html
     assert 'id="opacity"' in html
+    assert "Fields + particles" in html
+    assert "populationParticles" in html
+    assert "drawAgents" in html
