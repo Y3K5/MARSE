@@ -18,3 +18,10 @@ or clinical predictions. Fields must be supplied by the caller, units and
 sources remain part of the experiment definition, and the output reports
 removed biomass explicitly. Agent trajectories, contact mechanics, cytokine
 networks, and host-tissue models remain future opt-in layers.
+
+Ecosystem experiments can opt into these equations with
+`immune_interactions`. Each interaction names a species and an additive
+effector field; the configured susceptibility is the resistance-like
+parameter. Neutralizers can reference other additive fields through
+`immune_neutralizers`. If no interactions are configured, ecosystem behavior
+is unchanged.

@@ -20,6 +20,7 @@ from numpy.typing import NDArray
 from marse.additives import AdditiveEffect, apply_effect
 from marse.core.seeds import SeedRegistry
 from marse.ecosystem.providers import EcosystemProviders, NoBoundary
+from marse.immune import ImmuneInteraction, MolecularNeutralizer, apply_immune_pressure
 from marse.microbes.cardinal import cardinal_ph, cardinal_temperature
 from marse.microbes.growth import monod
 from marse.niche import Capability
@@ -239,6 +240,8 @@ class EcosystemConfig:
     competition_coefficients: tuple[tuple[float, ...], ...] | None = None
     conditions: tuple[ConditionConfig, ...] = ()
     additives: tuple[AdditiveConfig, ...] = ()
+    immune_interactions: tuple[ImmuneInteraction, ...] = ()
+    immune_neutralizers: tuple[MolecularNeutralizer, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.experiment_id.strip():
@@ -284,6 +287,25 @@ class EcosystemConfig:
         field_names = nutrient_names | condition_names
         if len(additive_names) != len(self.additives):
             raise EcosystemError("additive names must be unique")
+        species_names = {species.name for species in self.species}
+        for interaction in self.immune_interactions:
+            if interaction.species not in species_names:
+                raise EcosystemError(
+                    f"immune interaction references unknown species '{interaction.species}'"
+                )
+            if interaction.effector not in additive_names:
+                raise EcosystemError(
+                    f"immune interaction references unknown effector '{interaction.effector}'"
+                )
+        for neutralizer in self.immune_neutralizers:
+            if neutralizer.effector not in additive_names:
+                raise EcosystemError(
+                    f"immune neutralizer references unknown effector '{neutralizer.effector}'"
+                )
+            if neutralizer.molecule not in additive_names:
+                raise EcosystemError(
+                    f"immune neutralizer references unknown molecule '{neutralizer.molecule}'"
+                )
         for species in self.species:
             if species.chemotaxis_field is not None and species.chemotaxis_field not in (
                 field_names | additive_names
@@ -742,6 +764,56 @@ def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
             else (_ for _ in ()).throw(EcosystemError(f"additives[{i}]: expected an object"))
             for i, item in enumerate(raw.get("additives", ()))
         ),
+        immune_interactions=tuple(
+            ImmuneInteraction(
+                species=str(item.get("species", "")),
+                effector=str(item.get("effector", "")),
+                maximum_kill_per_h=_number(
+                    item.get("maximum_kill_per_h"),
+                    f"immune_interactions[{i}].maximum_kill_per_h",
+                ),
+                half_effect=_number(
+                    item.get("half_effect"),
+                    f"immune_interactions[{i}].half_effect",
+                ),
+                hill_coefficient=_number(
+                    item.get("hill_coefficient", 1.0),
+                    f"immune_interactions[{i}].hill_coefficient",
+                ),
+                susceptibility=_number(
+                    item.get("susceptibility", 1.0),
+                    f"immune_interactions[{i}].susceptibility",
+                ),
+            )
+            if isinstance(item, dict)
+            else (_ for _ in ()).throw(
+                EcosystemError(f"immune_interactions[{i}]: expected an object")
+            )
+            for i, item in enumerate(raw.get("immune_interactions", ()))
+        ),
+        immune_neutralizers=tuple(
+            MolecularNeutralizer(
+                effector=str(item.get("effector", "")),
+                molecule=str(item.get("molecule", "")),
+                neutralization_fraction=_number(
+                    item.get("neutralization_fraction"),
+                    f"immune_neutralizers[{i}].neutralization_fraction",
+                ),
+                half_effect=_number(
+                    item.get("half_effect"),
+                    f"immune_neutralizers[{i}].half_effect",
+                ),
+                hill_coefficient=_number(
+                    item.get("hill_coefficient", 1.0),
+                    f"immune_neutralizers[{i}].hill_coefficient",
+                ),
+            )
+            if isinstance(item, dict)
+            else (_ for _ in ()).throw(
+                EcosystemError(f"immune_neutralizers[{i}]: expected an object")
+            )
+            for i, item in enumerate(raw.get("immune_neutralizers", ()))
+        ),
     )
 
 
@@ -1176,6 +1248,20 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
                 * growth_factor
                 * np.maximum(1.0 - biomass[species_index] / config.carrying_capacity, 0.0)
             )
+
+        additive_fields = {name: additives[index] for index, name in enumerate(additive_names)}
+        species_indices = {species.name: index for index, species in enumerate(config.species)}
+        for interaction in config.immune_interactions:
+            target_index = species_indices[interaction.species]
+            pressure = apply_immune_pressure(
+                biomass[target_index],
+                effectors=additive_fields,
+                molecules=additive_fields,
+                interaction=interaction,
+                neutralizers=config.immune_neutralizers,
+                dt=dt,
+            )
+            biomass[target_index] = pressure.biomass
 
         nutrients = np.maximum(nutrients, 0.0)
         biomass = np.maximum(biomass, 0.0)

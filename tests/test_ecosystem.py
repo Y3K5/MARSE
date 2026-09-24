@@ -1,5 +1,6 @@
 """Tests for the deterministic 2D multi-species ecosystem foundation."""
 
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from marse.ecosystem import (
     run,
     write_viewer,
 )
+from marse.immune import ImmuneInteraction
 from marse.niche import Capability
 
 
@@ -425,6 +427,71 @@ def test_adhesion_transfers_biomass_to_a_surface_and_detachment_reduces_it():
 def test_adhesion_edges_are_validated():
     with pytest.raises(EcosystemError, match="adhesion edges"):
         SpeciesConfig("invalid", 0.1, 0.0, (0.2,), (1.0,), adhesion_edges=("diagonal",))
+
+
+def test_ecosystem_immune_pressure_reduces_target_species_and_resistance_matters():
+    species = (
+        SpeciesConfig("susceptible", 0.1, 0.0, (0.2,), (1.0,)),
+        SpeciesConfig("resistant", 0.1, 0.0, (0.2,), (1.0,)),
+    )
+    base = config(
+        duration_h=0.1,
+        nutrients=(NutrientConfig("food", 1.0, 0.0),),
+        additives=(AdditiveConfig("macrophage_effector", 2.0, 0.0),),
+        species=species,
+    )
+    pressured = config(
+        duration_h=0.1,
+        nutrients=(NutrientConfig("food", 1.0, 0.0),),
+        additives=(AdditiveConfig("macrophage_effector", 2.0, 0.0),),
+        species=species,
+        immune_interactions=(
+            ImmuneInteraction("susceptible", "macrophage_effector", 2.0, 1.0, susceptibility=1.0),
+            ImmuneInteraction("resistant", "macrophage_effector", 2.0, 1.0, susceptibility=0.1),
+        ),
+    )
+    without = run(base).final_state.biomass
+    with_pressure = run(pressured).final_state.biomass
+    assert with_pressure[0].sum() < without[0].sum()
+    assert with_pressure[1].sum() > with_pressure[0].sum()
+
+
+def test_ecosystem_immune_configuration_loads_from_json(tmp_path):
+    path = tmp_path / "immune.json"
+    path.write_text(
+        json.dumps(
+            {
+                "experiment_id": "immune",
+                "width": 3,
+                "height": 3,
+                "cell_size_um": 10.0,
+                "duration_h": 0.1,
+                "timestep_h": 0.01,
+                "seed": 1,
+                "nutrients": [{"name": "food", "initial": 1.0, "diffusivity": 0.0}],
+                "additives": [{"name": "effector", "initial": 1.0, "diffusivity": 0.0}],
+                "species": [
+                    {
+                        "name": "target",
+                        "initial_biomass": 0.1,
+                        "maximum_growth_per_h": 0.0,
+                        "half_saturation": [0.2],
+                        "yield_per_nutrient": [1.0],
+                    }
+                ],
+                "immune_interactions": [
+                    {
+                        "species": "target",
+                        "effector": "effector",
+                        "maximum_kill_per_h": 1.0,
+                        "half_effect": 1.0,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert load_experiment(path).immune_interactions[0].species == "target"
 
 
 def test_spatial_capability_rate_and_limiting_factor_are_exported():
