@@ -13,6 +13,11 @@ Each action has explicit rates and energy scaling, so resistance can be
 represented by lower susceptibility in `ImmuneInteraction` rather than by an
 implicit rule.
 
+Passing `ResourceBudget` values to `step_immune_agents` makes those actions
+finite: movement, attack, and secretion each consume the configured energy
+cost. Blocked actions are returned explicitly in `blocked_actions`; omitted
+budgets preserve the original unconstrained primitive behavior.
+
 These are not agent-based immune cells, receptor kinetics, pharmacokinetics,
 or clinical predictions. Fields must be supplied by the caller, units and
 sources remain part of the experiment definition, and the output reports

@@ -94,7 +94,8 @@ The post-Phase-3 plan is to make every result evidence-linked and falsifiable:
    tissue, and clinical models remain out of scope.)*
 10. **Action and resource economy** — make typed actions consume explicit
     resources and require declared capabilities. *(Reusable budget and
-    prerequisite accounting is implemented; spatial resource coupling remains.)*
+    prerequisite accounting and immune-agent budget enforcement are
+    implemented; spatial resource coupling remains.)*
 
 ## First publishable milestone
 
