@@ -70,6 +70,15 @@ class GrowthModel(Protocol):
     def rates(self, state: PopulationState, resources: ResourceField, dt: float) -> GrowthRates: ...
 ```
 
+The spatial ecosystem now has a concrete first contract in
+`marse.ecosystem.providers`. `ExplicitTransportProvider` advances one
+non-negative field with the validated finite-difference operator and fixed
+boundaries; `EcosystemProviders` declares transport, biomass spreading,
+reaction, biomass, and diagnostics versions. Every ecosystem result records
+these versions, and the default providers preserve the existing numerical
+behavior. Future reaction, mechanics, or stochastic providers must implement
+the same state-and-units boundary rather than modifying the orchestration loop.
+
 ## Run lifecycle
 
 1. Load and validate the experiment configuration: units, ranges, providers

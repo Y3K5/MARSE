@@ -19,6 +19,7 @@ from numpy.typing import NDArray
 
 from marse.additives import AdditiveEffect, apply_effect
 from marse.core.seeds import SeedRegistry
+from marse.ecosystem.providers import EcosystemProviders, NoBoundary
 from marse.microbes.cardinal import cardinal_ph, cardinal_temperature
 from marse.microbes.growth import monod
 from marse.niche import Capability
@@ -29,6 +30,7 @@ __all__ = [
     "EcosystemConfig",
     "EcosystemError",
     "EcosystemFrame",
+    "EcosystemProviders",
     "EcosystemResult",
     "EcosystemState",
     "NutrientConfig",
@@ -337,6 +339,7 @@ class EcosystemResult:
     config: EcosystemConfig
     frames: tuple[EcosystemFrame, ...]
     final_state: EcosystemState
+    provider_versions: dict[str, str] | None = None
 
     def write_frames(self, path: str | Path) -> Path:
         destination = Path(path)
@@ -349,6 +352,7 @@ class EcosystemResult:
             "nutrients": [n.name for n in self.config.nutrients],
             "conditions": [c.name for c in self.config.conditions],
             "additives": [a.name for a in self.config.additives],
+            "providers": self.provider_versions or {},
             "frames": [
                 frame.to_dict(
                     tuple(s.name for s in self.config.species),
@@ -748,8 +752,9 @@ def _additive_multiplier(
     return multiplier
 
 
-def run(config: EcosystemConfig) -> EcosystemResult:
+def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) -> EcosystemResult:
     """Run a deterministic ecosystem experiment and retain every frame."""
+    providers = providers or EcosystemProviders()
     max_diffusivity = max(
         (field.diffusivity for field in (*config.nutrients, *config.conditions, *config.additives)),
         default=0.0,
@@ -815,38 +820,39 @@ def run(config: EcosystemConfig) -> EcosystemResult:
         conditions = state.conditions.copy()
         additives = state.additives.copy()
         for condition_index, condition in enumerate(config.conditions):
-            conditions[condition_index] += (
-                dt
-                * condition.diffusivity
-                / config.cell_size_um**2
-                * _laplacian(conditions[condition_index])
+            conditions[condition_index] = providers.transport.advance(
+                conditions[condition_index],
+                diffusivity=condition.diffusivity,
+                dt=dt,
+                cell_size_um=config.cell_size_um,
+                boundary=condition,
             )
-            _apply_boundary(conditions[condition_index], condition)
         for additive_index, additive in enumerate(config.additives):
-            additives[additive_index] += (
-                dt
-                * additive.diffusivity
-                / config.cell_size_um**2
-                * _laplacian(additives[additive_index])
+            additives[additive_index] = providers.transport.advance(
+                additives[additive_index],
+                diffusivity=additive.diffusivity,
+                dt=dt,
+                cell_size_um=config.cell_size_um,
+                decay_per_h=additive.decay_per_h,
+                boundary=additive,
             )
-            additives[additive_index] *= np.exp(-dt * additive.decay_per_h)
-            _apply_boundary(additives[additive_index], additive)
         for nutrient_index, nutrient in enumerate(config.nutrients):
-            nutrients[nutrient_index] += (
-                dt
-                * nutrient.diffusivity
-                / config.cell_size_um**2
-                * _laplacian(nutrients[nutrient_index])
+            nutrients[nutrient_index] = providers.transport.advance(
+                nutrients[nutrient_index],
+                diffusivity=nutrient.diffusivity,
+                dt=dt,
+                cell_size_um=config.cell_size_um,
+                boundary=nutrient,
             )
-            _apply_boundary(nutrients[nutrient_index], nutrient)
 
         for species_index, species in enumerate(config.species):
             if species.spreading_per_h:
-                biomass[species_index] += (
-                    dt
-                    * species.spreading_per_h
-                    / config.cell_size_um**2
-                    * _laplacian(biomass[species_index])
+                biomass[species_index] = providers.biomass_transport.advance(
+                    biomass[species_index],
+                    diffusivity=species.spreading_per_h,
+                    dt=dt,
+                    cell_size_um=config.cell_size_um,
+                    boundary=NoBoundary(),
                 )
                 biomass[species_index] = np.maximum(biomass[species_index], 0.0)
             growth_factor = np.where(
@@ -933,4 +939,4 @@ def run(config: EcosystemConfig) -> EcosystemResult:
         if dt <= 0:
             break
 
-    return EcosystemResult(config, tuple(frames), state)
+    return EcosystemResult(config, tuple(frames), state, providers.versions)
