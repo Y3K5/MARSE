@@ -9,6 +9,17 @@ results for the same manifest is always called out.
 
 ### Added
 
+- **The spatial model is reachable from the kernel.** Until now `marse run`
+  could only do well-mixed batch culture: the biofilm code was library-only,
+  so MARSE's reproducibility claim did not cover its most interesting output.
+  An experiment may now carry a `biofilm` block (thickness, nodes,
+  diffusivity), and `marse run` solves the steady depth profile, writes
+  `profile.csv` in place of `trajectory.csv`, and records the transport and
+  solver versions in the manifest. `marse replay` reproduces it exactly.
+- Time settings are refused rather than ignored on a biofilm experiment,
+  because a fixed-biomass profile is solved to steady state and has no clock.
+- `examples/experiments/biofilm_oxygen_profile.json`.
+
 - **Growth coupled to the gradient (Phase 3, first increment).**
   `biofilm/biomass.py` joins the spatial solute field to the growth kinetics:
   uptake capacity follows the local biomass, the solute field is solved against

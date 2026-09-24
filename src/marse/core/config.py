@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 __all__ = [
+    "BiofilmConfig",
     "EnvironmentConfig",
     "ExperimentConfig",
     "OrganismConfig",
@@ -126,17 +127,52 @@ class OrganismConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class BiofilmConfig:
+    """A flat biofilm of fixed biomass, solved to steady state.
+
+    Adding this block changes what the experiment *is*. A batch run evolves a
+    well-mixed culture over time; a biofilm run holds the biomass fixed and
+    solves the depth profile the gradient supports, which has no time axis at
+    all. The two are different computations, so ``duration_h`` and
+    ``timestep_h`` are not required here and are refused if given, rather than
+    being silently ignored.
+
+    ``diffusivity_um2_per_h`` names its unit because the alternative is the
+    mistake that matters most in this model: reference tables quote
+    diffusivities per second while growth rates are per hour, and mixing them
+    shortens the penetration depth sixtyfold while still looking plausible
+    (docs/theory.md section 4.6).
+    """
+
+    thickness_um: float
+    cells: int
+    diffusivity_um2_per_h: float
+
+    def __post_init__(self) -> None:
+        _check(self.thickness_um > 0.0, "biofilm.thickness_um", "must be positive")
+        _check(
+            isinstance(self.cells, int) and self.cells >= 2,
+            "biofilm.cells",
+            "must be an integer of at least 2",
+        )
+        _check(
+            self.diffusivity_um2_per_h > 0.0, "biofilm.diffusivity_um2_per_h", "must be positive"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ExperimentConfig:
-    """A complete, runnable experiment."""
+    """A complete, runnable experiment: a batch culture or a biofilm profile."""
 
     experiment_id: str
     organisms: tuple[OrganismConfig, ...]
     environment: EnvironmentConfig
     substrate: SubstrateConfig
-    duration_h: float
-    timestep_h: float
-    checkpoint_interval_h: float
     seed: int
+    duration_h: float | None = None
+    timestep_h: float | None = None
+    checkpoint_interval_h: float | None = None
+    biofilm: BiofilmConfig | None = None
     description: str = ""
     assumptions: tuple[str, ...] = field(default_factory=tuple)
 
@@ -145,6 +181,22 @@ class ExperimentConfig:
         _check(len(self.organisms) > 0, "organisms", "at least one organism is required")
         names = [o.name for o in self.organisms]
         _check(len(names) == len(set(names)), "organisms", f"names must be unique, got {names}")
+        _check(
+            isinstance(self.seed, int) and self.seed >= 0, "seed", "must be a non-negative integer"
+        )
+
+        if self.biofilm is not None:
+            for name in ("duration_h", "timestep_h", "checkpoint_interval_h"):
+                _check(
+                    getattr(self, name) is None,
+                    name,
+                    "does not apply to a biofilm profile, which is solved to steady state "
+                    "and has no time axis; remove it",
+                )
+            return
+
+        _check(self.duration_h is not None, "duration_h", "is required for a batch run")
+        _check(self.timestep_h is not None, "timestep_h", "is required for a batch run")
         _check(self.duration_h > 0.0, "duration_h", "must be positive")
         _check(self.timestep_h > 0.0, "timestep_h", "must be positive")
         _check(
@@ -153,13 +205,16 @@ class ExperimentConfig:
             "must not exceed duration_h",
         )
         _check(
-            self.checkpoint_interval_h >= self.timestep_h,
+            self.checkpoint_interval_h is not None
+            and self.checkpoint_interval_h >= self.timestep_h,
             "checkpoint_interval_h",
             "must be at least one timestep",
         )
-        _check(
-            isinstance(self.seed, int) and self.seed >= 0, "seed", "must be a non-negative integer"
-        )
+
+    @property
+    def kind(self) -> str:
+        """``"biofilm_profile"`` or ``"batch"``. Recorded in the run manifest."""
+        return "biofilm_profile" if self.biofilm is not None else "batch"
 
     @property
     def steps(self) -> int:
@@ -169,6 +224,8 @@ class ExperimentConfig:
         is an exact multiple of the timestep in decimal, such as 24 / 0.001,
         does not gain a spurious extra step from binary floating point.
         """
+        if self.duration_h is None or self.timestep_h is None:
+            raise ConfigError(f"{self.kind}: has no timestepping, so no step count")
         return math.ceil(round(self.duration_h / self.timestep_h, 9))
 
     def to_dict(self) -> dict[str, Any]:
@@ -220,6 +277,30 @@ def _organism_from_dict(raw: dict[str, Any], index: int) -> OrganismConfig:
     )
 
 
+def _biofilm_from_dict(raw: Any) -> BiofilmConfig:
+    if not isinstance(raw, dict):
+        raise ConfigError("biofilm: expected an object")
+    known = {f for f in BiofilmConfig.__dataclass_fields__}
+    unknown = set(raw) - known
+    if unknown:
+        raise ConfigError(
+            f"biofilm: unknown field(s) {sorted(unknown)}; known fields are {sorted(known)}"
+        )
+    for name in known:
+        if name not in raw:
+            raise ConfigError(f"biofilm: missing required field '{name}'")
+    cells = raw["cells"]
+    if isinstance(cells, bool) or not isinstance(cells, int):
+        raise ConfigError("biofilm.cells: expected an integer")
+    return BiofilmConfig(
+        thickness_um=_number(raw["thickness_um"], "biofilm.thickness_um"),
+        cells=cells,
+        diffusivity_um2_per_h=_number(
+            raw["diffusivity_um2_per_h"], "biofilm.diffusivity_um2_per_h"
+        ),
+    )
+
+
 def experiment_from_dict(raw: dict[str, Any]) -> ExperimentConfig:
     """Build a validated :class:`ExperimentConfig` from plain data."""
     if not isinstance(raw, dict):
@@ -230,17 +311,18 @@ def experiment_from_dict(raw: dict[str, Any]) -> ExperimentConfig:
         raise ConfigError(
             f"experiment: unknown field(s) {sorted(unknown)}; known fields are {sorted(known)}"
         )
-    for required in (
-        "experiment_id",
-        "organisms",
-        "environment",
-        "substrate",
-        "duration_h",
-        "timestep_h",
-        "seed",
-    ):
-        if required not in raw:
-            raise ConfigError(f"experiment: missing required field '{required}'")
+
+    # A round-tripped config carries every optional key with a null value, so
+    # presence alone does not mean a field was set.
+    def given(name: str) -> bool:
+        return raw.get(name) is not None
+
+    required = ["experiment_id", "organisms", "environment", "substrate", "seed"]
+    if not given("biofilm"):  # a batch run needs a clock; a biofilm profile does not
+        required += ["duration_h", "timestep_h"]
+    for name in required:
+        if not given(name):
+            raise ConfigError(f"experiment: missing required field '{name}'")
 
     environment = raw["environment"]
     if not isinstance(environment, dict):
@@ -252,7 +334,8 @@ def experiment_from_dict(raw: dict[str, Any]) -> ExperimentConfig:
     if not isinstance(organisms, list) or not organisms:
         raise ConfigError("organisms: expected a non-empty list")
 
-    timestep = _number(raw["timestep_h"], "timestep_h")
+    timestep = _number(raw["timestep_h"], "timestep_h") if given("timestep_h") else None
+    checkpoint = raw["checkpoint_interval_h"] if given("checkpoint_interval_h") else timestep
     return ExperimentConfig(
         experiment_id=str(raw["experiment_id"]),
         organisms=tuple(_organism_from_dict(o, i) for i, o in enumerate(organisms)),
@@ -264,11 +347,12 @@ def experiment_from_dict(raw: dict[str, Any]) -> ExperimentConfig:
             name=str(substrate.get("name", "")),
             initial_mm=_number(substrate.get("initial_mm"), "substrate.initial_mm"),
         ),
-        duration_h=_number(raw["duration_h"], "duration_h"),
+        duration_h=_number(raw["duration_h"], "duration_h") if given("duration_h") else None,
         timestep_h=timestep,
-        checkpoint_interval_h=_number(
-            raw.get("checkpoint_interval_h", timestep), "checkpoint_interval_h"
+        checkpoint_interval_h=(
+            _number(checkpoint, "checkpoint_interval_h") if checkpoint is not None else None
         ),
+        biofilm=_biofilm_from_dict(raw["biofilm"]) if given("biofilm") else None,
         seed=int(raw["seed"]),
         description=str(raw.get("description", "")),
         assumptions=tuple(str(a) for a in raw.get("assumptions", ())),

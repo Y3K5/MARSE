@@ -420,7 +420,7 @@ def test_cli_run_then_replay(tmp_path):
 
     replay = marse("replay", str(outputs / "manifest.json"))
     assert replay.returncode == 0, replay.stderr
-    assert "reproduced the recorded final state exactly" in replay.stdout
+    assert "reproduced the recorded results exactly" in replay.stdout
 
 
 def test_cli_trajectory_has_units_in_its_headers(tmp_path):
@@ -456,6 +456,158 @@ def test_cli_with_no_command_prints_help():
     result = marse()
     assert result.returncode == 0
     assert "run a simulation" in result.stdout
+
+
+# --- biofilm profile runs ----------------------------------------------------
+
+BIOFILM_EXAMPLE = (
+    Path(__file__).resolve().parents[1] / "examples" / "experiments" / "biofilm_oxygen_profile.json"
+)
+
+
+def minimal_biofilm(**overrides) -> dict:
+    config = {
+        "experiment_id": "biofilm-unit-test",
+        "seed": 3,
+        "environment": {"temperature_c": 37.0, "ph": 7.0},
+        "substrate": {"name": "oxygen", "initial_mm": 0.21},
+        "biofilm": {"thickness_um": 300.0, "cells": 600, "diffusivity_um2_per_h": 4.062e6},
+        "organisms": [
+            {
+                "name": "aerobe",
+                "initial_biomass_g_per_l": 25.0,
+                "mu_opt_per_h": 0.3,
+                "k_s_mm": 1e-3,
+                "yield_g_per_mmol": 0.08,
+            }
+        ],
+    }
+    return config | overrides
+
+
+def test_a_biofilm_config_needs_no_clock():
+    config = experiment_from_dict(minimal_biofilm())
+    assert config.kind == "biofilm_profile"
+    assert config.duration_h is None
+    with pytest.raises(ConfigError, match="no timestepping"):
+        _ = config.steps
+
+
+@pytest.mark.parametrize("field", ["duration_h", "timestep_h", "checkpoint_interval_h"])
+def test_time_settings_are_refused_for_a_biofilm_rather_than_ignored(field):
+    with pytest.raises(ConfigError, match="does not apply to a biofilm"):
+        experiment_from_dict(minimal_biofilm(**{field: 1.0}))
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected"),
+    [
+        (lambda c: c["biofilm"].__setitem__("thickness_um", 0.0), "thickness_um"),
+        (lambda c: c["biofilm"].__setitem__("cells", 1), "cells"),
+        (lambda c: c["biofilm"].__setitem__("cells", 2.5), "cells"),
+        (lambda c: c["biofilm"].__setitem__("diffusivity_um2_per_h", -1.0), "diffusivity"),
+        (lambda c: c["biofilm"].pop("cells"), "missing required field"),
+        (lambda c: c["biofilm"].__setitem__("thickness", 10.0), "unknown field"),
+    ],
+)
+def test_invalid_biofilm_blocks_are_rejected(mutate, expected):
+    config = minimal_biofilm()
+    mutate(config)
+    with pytest.raises(ConfigError, match=expected):
+        experiment_from_dict(config)
+
+
+def test_a_biofilm_run_records_its_transport_models():
+    result = run(experiment_from_dict(minimal_biofilm()))
+    assert result.manifest.models["transport"] == "diffusion_1d_steady_v1"
+    assert result.manifest.models["solver"] == "newton_thomas_v1"
+    assert "integrator" not in result.manifest.models  # there is no clock
+    assert result.manifest.config["biofilm"]["cells"] == 600
+
+
+def test_a_biofilm_run_reports_the_quantities_that_matter():
+    outputs = run(experiment_from_dict(minimal_biofilm())).manifest.outputs
+    assert 0.0 < outputs["penetration_depth_um"] < 300.0
+    assert outputs["active_zone_um"] > 0.0
+    assert outputs["base_concentration_mm"] < 1e-6
+    assert 0.0 < outputs["mean_growth_rate_per_h"]["aerobe"] < 0.3
+    assert (
+        outputs["surface_growth_rate_per_h"]["aerobe"]
+        > (outputs["mean_growth_rate_per_h"]["aerobe"])
+    )
+
+
+def test_the_biofilm_manifest_output_keys_are_a_fixed_contract():
+    """A manifest is read years later, by people and by scripts.
+
+    Renaming or dropping a key silently invalidates every manifest already
+    written, so the set is pinned here and a change to it has to be deliberate.
+    """
+    outputs = run(experiment_from_dict(minimal_biofilm())).manifest.outputs
+    assert set(outputs) == {
+        "penetration_depth_um",
+        "active_zone_um",
+        "production_in_active_zone",
+        "surface_flux_mm_um_per_h",
+        "surface_concentration_mm",
+        "base_concentration_mm",
+        "newton_iterations",
+        "mean_growth_rate_per_h",
+        "surface_growth_rate_per_h",
+        "areal_biomass_g_per_m2",
+    }
+
+
+def test_production_in_the_active_zone_is_not_the_active_share_of_thickness():
+    """The two are easy to conflate and differ severalfold in a stratified film.
+
+    Nearly all of the growth happens in a small part of the depth, which is the
+    whole point of the model; the key names the quantity it actually holds.
+    """
+    outputs = run(experiment_from_dict(minimal_biofilm())).manifest.outputs
+    thickness_share = outputs["active_zone_um"] / 300.0
+    assert outputs["production_in_active_zone"] > 0.9
+    assert thickness_share < 0.6
+    assert outputs["production_in_active_zone"] > 1.5 * thickness_share
+
+
+def test_a_biofilm_run_replays_exactly(tmp_path):
+    original = run(load_experiment(BIOFILM_EXAMPLE))
+    path = original.manifest.write(tmp_path / "manifest.json")
+    replayed = run(Manifest.read(path).experiment())
+    assert replayed.manifest.run_id == original.manifest.run_id
+    np.testing.assert_array_equal(
+        replayed.profile.solute.concentration, original.profile.solute.concentration
+    )
+    assert replayed.manifest.outputs == original.manifest.outputs
+
+
+def test_a_thicker_biofilm_grows_more_slowly_on_average():
+    thin = run(experiment_from_dict(minimal_biofilm())).manifest.outputs
+    thick_config = minimal_biofilm()
+    thick_config["biofilm"]["thickness_um"] = 900.0
+    thick_config["biofilm"]["cells"] = 1800
+    thick = run(experiment_from_dict(thick_config)).manifest.outputs
+    assert thick["mean_growth_rate_per_h"]["aerobe"] < thin["mean_growth_rate_per_h"]["aerobe"]
+    # The active zone is set by the gradient, not by how much biomass sits below it.
+    assert thick["active_zone_um"] == pytest.approx(thin["active_zone_um"], rel=0.05)
+
+
+def test_cli_runs_and_replays_a_biofilm_profile(tmp_path):
+    outputs = tmp_path / "out"
+    result = marse("run", str(BIOFILM_EXAMPLE), "-o", str(outputs))
+    assert result.returncode == 0, result.stderr
+    assert "kind        biofilm_profile" in result.stdout
+    # A profile has no time axis, so it writes a profile rather than a trajectory.
+    assert (outputs / "profile.csv").is_file()
+    assert not (outputs / "trajectory.csv").exists()
+
+    header = (outputs / "profile.csv").read_text().splitlines()[0]
+    assert header == "depth_um,oxygen_mm,aerobe_growth_per_h"
+
+    replay = marse("replay", str(outputs / "manifest.json"))
+    assert replay.returncode == 0, replay.stderr
+    assert "reproduced the recorded results exactly" in replay.stdout
 
 
 def test_config_is_a_frozen_dataclass():
