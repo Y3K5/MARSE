@@ -103,6 +103,7 @@ class SpeciesConfig:
     mutation_growth_multiplier: float = 1.0
     seed_regions: tuple[SeedRegion, ...] = ()
     spreading_per_h: float = 0.0
+    production_per_nutrient: tuple[float, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -113,14 +114,24 @@ class SpeciesConfig:
             raise EcosystemError(f"species '{self.name}': at least one nutrient is required")
         if len(self.half_saturation) != len(self.yield_per_nutrient):
             raise EcosystemError(f"species '{self.name}': nutrient parameter lengths differ")
+        production = self.production_per_nutrient or (0.0,) * len(self.half_saturation)
+        if len(production) != len(self.half_saturation):
+            raise EcosystemError(f"species '{self.name}': production parameters differ")
         if any(value <= 0 for value in self.half_saturation + self.yield_per_nutrient):
             raise EcosystemError(f"species '{self.name}': nutrient parameters must be positive")
+        if any(value < 0 for value in production):
+            raise EcosystemError(f"species '{self.name}': production must be non-negative")
         if not 0 <= self.mutation_probability <= 1:
             raise EcosystemError(f"species '{self.name}': mutation probability must be in [0, 1]")
         if self.mutation_growth_multiplier <= 0:
             raise EcosystemError(f"species '{self.name}': mutation multiplier must be positive")
         if self.spreading_per_h < 0:
             raise EcosystemError(f"species '{self.name}': spreading rate must be non-negative")
+
+    @property
+    def production_coefficients(self) -> tuple[float, ...]:
+        """Production per unit biomass growth for each nutrient field."""
+        return self.production_per_nutrient or (0.0,) * len(self.half_saturation)
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,6 +333,14 @@ def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
                 ),
                 yield_per_nutrient=_tuple_numbers(
                     item.get("yield_per_nutrient"), f"species[{i}].yield_per_nutrient"
+                ),
+                production_per_nutrient=(
+                    _tuple_numbers(
+                        item["production_per_nutrient"],
+                        f"species[{i}].production_per_nutrient",
+                    )
+                    if item.get("production_per_nutrient") is not None
+                    else ()
                 ),
                 mutation_probability=_number(
                     item.get("mutation_probability", 0.0), f"species[{i}].mutation_probability"
@@ -529,6 +548,11 @@ def run(config: EcosystemConfig) -> EcosystemResult:
                     / config.carrying_capacity
                 )
             limitation /= 1.0 + competition_pressure
+            growth_rate = (
+                species.maximum_growth_per_h * limitation * growth_factor * biomass[species_index]
+            )
+            for nutrient_index, production in enumerate(species.production_coefficients):
+                nutrients[nutrient_index] += dt * production * growth_rate
             biomass[species_index] *= np.exp(
                 dt
                 * species.maximum_growth_per_h
