@@ -38,3 +38,16 @@ The returned `ExperimentCompilation` includes the selected sources, dataset
 checksum, assumptions, and unresolved requirements. Agar, semi-solid, and
 biofilm records are intentionally not projected into the well-mixed batch
 kernel; they remain evidence until a spatial compiler is implemented.
+
+## Growth-curve calibration
+
+`marse.calibration` accepts strictly increasing time points and one or more
+positive replicate trajectories. It supports exponential, logistic, Gompertz,
+and Baranyi screening fits and returns parameters, pointwise residuals, RMSE,
+replicate count, and identifiability warnings. Log transforms are explicit and
+must match the endpoint's measurement scale.
+
+These fits are deterministic calibration aids. They do not estimate confidence
+intervals, correct for censoring, or establish causal biological parameters.
+Those require an experiment-specific statistical model and should be added only
+when the observation design supplies enough information.
