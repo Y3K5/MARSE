@@ -152,7 +152,10 @@ def _biofilm_outputs(profile: GrowthProfile, diffusivity: float) -> dict[str, An
     return {
         "penetration_depth_um": profile.solute.penetration_depth(),
         "active_zone_um": profile.active_zone(),
-        "active_fraction": profile.active_fraction,
+        # Named for what it is, because a manifest is read without the code
+        # beside it and "active_fraction" next to "active_zone_um" invites
+        # reading it as a fraction of the thickness, which it is not.
+        "production_in_active_zone": profile.active_fraction,
         "surface_flux_mm_um_per_h": profile.solute.surface_flux(diffusivity),
         "surface_concentration_mm": profile.solute.surface,
         "base_concentration_mm": float(profile.solute.concentration[-1]),

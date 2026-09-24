@@ -537,6 +537,40 @@ def test_a_biofilm_run_reports_the_quantities_that_matter():
     )
 
 
+def test_the_biofilm_manifest_output_keys_are_a_fixed_contract():
+    """A manifest is read years later, by people and by scripts.
+
+    Renaming or dropping a key silently invalidates every manifest already
+    written, so the set is pinned here and a change to it has to be deliberate.
+    """
+    outputs = run(experiment_from_dict(minimal_biofilm())).manifest.outputs
+    assert set(outputs) == {
+        "penetration_depth_um",
+        "active_zone_um",
+        "production_in_active_zone",
+        "surface_flux_mm_um_per_h",
+        "surface_concentration_mm",
+        "base_concentration_mm",
+        "newton_iterations",
+        "mean_growth_rate_per_h",
+        "surface_growth_rate_per_h",
+        "areal_biomass_g_per_m2",
+    }
+
+
+def test_production_in_the_active_zone_is_not_the_active_share_of_thickness():
+    """The two are easy to conflate and differ severalfold in a stratified film.
+
+    Nearly all of the growth happens in a small part of the depth, which is the
+    whole point of the model; the key names the quantity it actually holds.
+    """
+    outputs = run(experiment_from_dict(minimal_biofilm())).manifest.outputs
+    thickness_share = outputs["active_zone_um"] / 300.0
+    assert outputs["production_in_active_zone"] > 0.9
+    assert thickness_share < 0.6
+    assert outputs["production_in_active_zone"] > 1.5 * thickness_share
+
+
 def test_a_biofilm_run_replays_exactly(tmp_path):
     original = run(load_experiment(BIOFILM_EXAMPLE))
     path = original.manifest.write(tmp_path / "manifest.json")
