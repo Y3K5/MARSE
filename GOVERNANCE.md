@@ -65,6 +65,8 @@ GitHub enforces these, not the repository. They are listed here so the
 intended posture is written down and auditable, and they are the part of
 [PRIVACY.md's checklist](PRIVACY.md#github-settings-checklist) that concerns
 access rather than disclosure.
+[docs/repository-setup.md](docs/repository-setup.md) walks through applying
+them, including which are unavailable on which plan.
 
 **Access**
 
@@ -74,6 +76,13 @@ access rather than disclosure.
 - [ ] Deploy keys: none, or read-only.
 
 **Default branch ruleset** (Settings → Rules → Rulesets, targeting the default branch)
+
+> Rulesets and classic branch protection are **not available for private
+> repositories on GitHub Free**; they need Pro, Team or Enterprise Cloud. They
+> are free for *public* repositories on every plan. While this repository is
+> private on a free plan, the checks below cannot be enforced by GitHub, and
+> the repository's own guards plus the maintainer's discipline are what stand
+> in for them. See [docs/repository-setup.md](docs/repository-setup.md).
 
 - [ ] Require a pull request before merging.
 - [ ] Require review from Code Owners.
@@ -91,15 +100,22 @@ access rather than disclosure.
 
 **Publishing**
 
-- [ ] Restrict who can create releases and tags to the maintainer.
+- [ ] Restrict tag creation with a **tag ruleset** targeting `v*`. The old tag
+      protection rules were sunset in 2024 and migrated into rulesets, so the
+      same plan limitation applies.
 - [ ] Create the protected environment before the first publishing workflow
       exists, not after.
 
 **Security** (Settings → Code security)
 
-- [ ] Private vulnerability reporting: on.
-- [ ] Secret scanning with push protection: on.
-- [ ] Dependabot alerts: on.
+- [ ] Dependabot alerts: on. Available on every plan.
+- [ ] Private vulnerability reporting: **public repositories only.** Enable it
+      as part of going public; until then there is no external reporter, since
+      nobody else can see the repository.
+- [ ] Secret scanning with push protection: free on public repositories. On
+      private repositories it needs the paid GitHub Secret Protection product,
+      so gitleaks in CI is what covers this repository meanwhile — it scans the
+      full history on every push and needs no licence.
 
 **Visibility**
 

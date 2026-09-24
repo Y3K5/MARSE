@@ -11,6 +11,10 @@ Report it privately instead:
 (*Security* tab → *Report a vulnerability*). Only you and the maintainers can
 see it.
 
+> While this repository is private, that link is not active: GitHub offers
+> private vulnerability reporting on public repositories only. It is enabled as
+> part of going public ([GOVERNANCE.md](GOVERNANCE.md#settings-only-the-owner-can-apply)).
+
 Include what you found and where (file, commit or release) and, for a
 vulnerability, how to reproduce it. Do not copy leaked data into the report;
 its location is enough.

@@ -174,12 +174,15 @@ Account:
 
 Repository settings:
 
-- [ ] Security: turn on private vulnerability reporting, secret scanning with
-      push protection (free for public repositories) and Dependabot alerts.
+- [ ] Security: turn on Dependabot alerts. Private vulnerability reporting and
+      free secret scanning arrive when the repository goes public; gitleaks in
+      CI covers secret scanning until then.
 - [ ] Actions: workflow permissions set to read-only, and approval required for
       workflows from outside contributors' forks.
 - [ ] Rules: protect `main` by requiring the CI and Privacy checks and blocking
-      force-pushes.
+      force-pushes. Needs a paid plan while the repository is private, and is
+      free once it is public — see
+      [docs/repository-setup.md](docs/repository-setup.md).
 - [ ] Features: turn off the wiki unless you need it; wiki edits bypass all of
       these checks.
 - [ ] Secrets: `PRIVATE_DENYLIST` (optional, setup step 5).

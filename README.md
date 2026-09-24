@@ -127,6 +127,7 @@ Before your first commit, complete the one-time setup in
 
 - [CONTRIBUTING.md](CONTRIBUTING.md): workflow, tests and scientific standards.
 - [GOVERNANCE.md](GOVERNANCE.md): who may merge and release, and the settings that enforce it.
+- [docs/repository-setup.md](docs/repository-setup.md): applying those settings, step by step.
 - [PRIVACY.md](PRIVACY.md): what never enters this repository, and how that is enforced.
 - [SECURITY.md](SECURITY.md): report vulnerabilities or leaked data privately.
 
