@@ -72,7 +72,9 @@ class Scenario:
     def from_config(cls, config: dict[str, Any]) -> Scenario:
         if not isinstance(config, dict):
             raise ValueError("scenario configuration must be an object")
-        return cls(config=json.loads(_canonical(config)), scenario_id=f"SCN-{_checksum(config)[:16]}")
+        return cls(
+            config=json.loads(_canonical(config)), scenario_id=f"SCN-{_checksum(config)[:16]}"
+        )
 
 
 @dataclass(frozen=True, slots=True)
