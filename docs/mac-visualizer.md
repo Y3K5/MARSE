@@ -19,6 +19,12 @@ to inspect the exact numerical cells. Zoom enlarges the canvas for colony-scale
 inspection without changing the simulation data, while opacity helps compare a
 field with the dark spatial background.
 
+Fields + particles adds deterministic population representatives sampled from
+biomass density. Agents only displays explicit agent positions when a frame
+contains them, and draws short movement trails between adjacent frames. The
+current ecosystem engine exports continuous biomass fields by default, so these
+particles are visual representatives rather than individually simulated cells.
+
 For a year-long experiment, do not export every integration step as a browser
 frame. Use a larger numerical timestep where the stability and biological
 timescales permit it, then export daily or weekly snapshots. Checkpointed
