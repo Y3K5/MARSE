@@ -9,6 +9,16 @@ results for the same manifest is always called out.
 
 ### Changed
 
+- Manifest format version 2 adds `kind` (`batch`, `biofilm_profile` or
+  `ecosystem`), and replay rebuilds the configuration with the matching parser,
+  refusing a manifest whose configuration contradicts its kind. Version 1
+  manifests remain readable. Batch and biofilm results, and their `run_id`s,
+  are unchanged.
+- The roadmap's stages follow revision 2 of the plan: Stage 2 builds the
+  conserving material core (stoichiometric processes with a load-time
+  continuity check and an every-step ledger) and replaces configuration
+  schema v1.
+
 - **The two-dimensional ecosystem engine is documented as unverified.** A
   review that ran it found nine defects. Among them: uptake follows potential
   rather than actual growth, production has no source, the examples give oxygen
@@ -38,6 +48,17 @@ results for the same manifest is always called out.
   and the acronym.
 
 ### Added
+
+- **Ecosystem runs are reproducible.** `marse ecosystem` writes a
+  `manifest.json` beside its frames and viewer, and `marse replay` reproduces
+  the run exactly, as it already did for batch and biofilm runs. The manifest
+  records every effective configuration value (defaults included), the seed,
+  the provider versions and the engine, plus readable totals and a SHA-256
+  digest of the entire final state, so a replay compares every value rather
+  than only the totals. The engine is named `ecosystem_v1_unverified` in the
+  manifest, because its known defects (docs/validation.md) travel with any
+  result it produces. Known defect 9 is fixed, and its test is now an ordinary
+  regression test.
 
 - **Two-dimensional multispecies ecosystem engine** (`marse.ecosystem`,
   `marse ecosystem`). It provides nutrient, condition and additive fields with

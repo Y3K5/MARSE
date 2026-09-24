@@ -1,9 +1,10 @@
 """Command-line entry point: ``marse``.
 
-Two commands matter at this stage:
+Three commands matter at this stage:
 
-    marse run experiment.json        run a simulation and write its manifest
-    marse replay manifest.json       re-run from a manifest and compare
+    marse run experiment.json        run a batch or biofilm simulation
+    marse ecosystem experiment.json  run a 2-D multispecies ecosystem
+    marse replay manifest.json       re-run either from its manifest and compare
 
 ``replay`` is the reproducibility claim made executable: it rebuilds the
 configuration from the manifest, verifies the checksum, runs again, and reports
@@ -23,9 +24,9 @@ from marse import __version__
 from marse.core.config import ConfigError, load_experiment
 from marse.core.provenance import Manifest
 from marse.core.simulation import BiofilmProfileResult, SimulationResult, run
+from marse.ecosystem import EcosystemResult, write_viewer
 from marse.ecosystem import load_experiment as load_ecosystem_experiment
 from marse.ecosystem import run as run_ecosystem
-from marse.ecosystem import write_viewer
 from marse.ensemble import ScenarioBatch, run_batch
 from marse.niche import NicheError, load_niche_scan, run_niche_scan
 
@@ -73,8 +74,19 @@ def _summarise(result: Result) -> None:
 _BIOFILM_KEYS = ("penetration_depth_um", "active_zone_um", "base_concentration_mm")
 
 
-def _comparable(outputs: dict) -> dict[str, float]:
-    """The numbers a replay must reproduce, flattened so the two kinds compare alike."""
+def _comparable(outputs: dict) -> dict[str, float | str]:
+    """The values a replay must reproduce, flattened so every kind compares alike."""
+    if "final_state_sha256" in outputs:  # an ecosystem run
+        values: dict[str, float | str] = {
+            "final_time_h": float(outputs["final_time_h"]),
+            "final state digest": str(outputs["final_state_sha256"]),
+        }
+        for group in ("biomass_summed_over_cells", "nutrient_summed_over_cells"):
+            values.update({f"{group}[{n}]": float(v) for n, v in outputs[group].items()})
+        values.update(
+            {f"mutated_cells[{n}]": float(v) for n, v in outputs["mutated_cells"].items()}
+        )
+        return values
     if "final_state" in outputs:  # a batch run
         final = outputs["final_state"]
         values = {"substrate": float(final["substrate_mm"])}
@@ -103,10 +115,18 @@ def _command_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _write_ecosystem_outputs(result: EcosystemResult, output_dir: Path) -> tuple[Path, ...]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    frames = result.write_frames(output_dir / "frames.json")
+    viewer = write_viewer(result, output_dir / "viewer.html")
+    manifest = result.manifest.write(output_dir / "manifest.json")
+    return frames, viewer, manifest
+
+
 def _command_replay(args: argparse.Namespace) -> int:
     original = Manifest.read(args.manifest)
     config = original.experiment()  # raises if the manifest was edited after the run
-    result = run(config)
+    result = run_ecosystem(config) if original.kind == "ecosystem" else run(config)
 
     recorded = _comparable(original.outputs)
     fresh = _comparable(result.manifest.outputs)
@@ -133,9 +153,12 @@ def _command_replay(args: argparse.Namespace) -> int:
         return 1
     print("\nreplay reproduced the recorded results exactly")
     if args.output:
-        trajectory, manifest = _write_outputs(result, Path(args.output))
-        print(f"wrote {trajectory}")
-        print(f"wrote {manifest}")
+        if isinstance(result, EcosystemResult):
+            written = _write_ecosystem_outputs(result, Path(args.output))
+        else:
+            written = _write_outputs(result, Path(args.output))
+        for path in written:
+            print(f"wrote {path}")
     return 0
 
 
@@ -147,14 +170,15 @@ def _command_ecosystem(args: argparse.Namespace) -> int:
         if args.output
         else Path(args.experiment).parent / "runs" / config.experiment_id
     )
-    output_dir.mkdir(parents=True, exist_ok=True)
-    frames = result.write_frames(output_dir / "frames.json")
-    viewer = write_viewer(result, output_dir / "viewer.html")
+    frames, viewer, manifest = _write_ecosystem_outputs(result, output_dir)
+    print(f"run_id      {result.manifest.run_id}")
     print(f"experiment  {config.experiment_id}")
     print(f"steps       {result.final_state.step} over {result.final_state.time_h:g} h")
     print(f"frames      {len(result.frames)}")
     print(f"wrote       {frames}")
     print(f"wrote       {viewer}")
+    print(f"wrote       {manifest}")
+    print(f"\nreplay it with:  marse replay {manifest}")
     return 0
 
 

@@ -132,6 +132,14 @@ experiment always carries the same identifier and re-running is idempotent.
 Reading a manifest re-verifies the checksum, so one edited after the run is
 refused rather than replayed into different results.
 
+Each manifest names its `kind` (`batch`, `biofilm_profile` or `ecosystem`), and
+`marse replay` rebuilds the configuration with the parser for that kind. A
+manifest whose configuration does not match its declared kind is refused.
+`kind` arrived with manifest format version 2. Version 1 manifests, which
+predate the ecosystem engine, remain readable: their kind is recovered from the
+configuration. An ecosystem manifest also records a SHA-256 digest of the
+entire final state, so a replay compares every value, not only summary totals.
+
 ### Privacy rules for manifests and outputs
 
 Manifests and outputs are designed to be shared, attached to papers, issues

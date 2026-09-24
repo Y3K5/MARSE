@@ -39,7 +39,7 @@ Every `ValidationCase` records:
 | V5 | Two-species competition | Expected dominance and coexistence regimes | 3 | **Passing, well mixed** |
 | V6 | Cross-feeding | Explicit beneficial exchange shifts the equilibrium as designed | 3 | Planned |
 | V7 | Environmental perturbation | Recovery or adaptation after a resource, pH or oxygen shift | 4 | Planned |
-| V8 | Reproducibility | Re-running a saved manifest reproduces outputs within stated tolerances | 5 | **Passing** |
+| V8 | Reproducibility | Re-running a saved manifest reproduces outputs within stated tolerances | 5 | **Passing** (batch, biofilm and ecosystem runs) |
 | V9 | IWA benchmark BM1 | Substrate flux and concentration for a monospecies biofilm at fixed biomass, against published reference solutions | 3 | **Now reachable** |
 | V10 | IWA benchmark BM3 | Multispecies, multisubstrate biofilm (heterotrophs, nitrifiers, inert biomass) | 4 | Proposed |
 
@@ -77,9 +77,12 @@ See [modeling-landscape.md §5.1](modeling-landscape.md#51-the-iwa-benchmark-pro
 
 Everything above concerns the well-mixed kernel and the one-dimensional biofilm
 solver. The two-dimensional multispecies engine in `marse.ecosystem` is not
-covered by any case in the table. Its transport has not been checked against
-`point_source_diffusion_2d`, and its runs write no manifest, so V8 does not
-reach them either. A review that ran the engine found the defects below. Each
+covered by any case in the table except V8: its runs now write a manifest and
+`marse replay` reproduces them bit for bit, including a SHA-256 digest of the
+whole final state. Reproducing a result is not the same as the result being
+right, though. Its transport has not been checked against
+`point_source_diffusion_2d`, and a review that ran the engine found the defects
+below. Each
 is written as a test in `tests/test_ecosystem_known_defects.py` that asserts
 the *correct* behaviour and is marked as an expected failure. Fixing a defect
 flips its test, which must then become an ordinary regression test.
@@ -94,7 +97,7 @@ flips its test, which must then become an ordinary regression test.
 | 6 | Mutation marks grid cells, including empty ones, not lineages, and every species draws from one shared random stream | At probability 1, every empty cell becomes "mutant" | Resistance does not move with the cells that carry it |
 | 7 | Species are updated one after another within a step | Swapping two competitors in the file changes their final biomass by 0.9% | Results depend on how the file is written |
 | 8 | Each species has its own carrying capacity | Two species fill a cell to twice its capacity | Space is not shared |
-| 9 | Ecosystem runs write no manifest and cannot be replayed | — | The reproducibility claim does not yet cover this engine |
+| 9 | ~~Ecosystem runs write no manifest and cannot be replayed~~ **Fixed:** they write a manifest (kind `ecosystem`) and replay exactly | — | The reproducibility claim now covers this engine; its manifests name the engine `ecosystem_v1_unverified` |
 
 Until these are fixed, results from `marse ecosystem`, including the
 periodontal study, support no quantitative or comparative conclusion. The

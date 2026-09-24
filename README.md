@@ -25,12 +25,19 @@ marse replay runs/batch/manifest.json
 # a biofilm, solved to the steady profile its oxygen gradient supports
 marse run examples/experiments/biofilm_oxygen_profile.json -o runs/biofilm
 marse replay runs/biofilm/manifest.json
+
+# a two-dimensional multispecies ecosystem, with a browser viewer
+marse ecosystem examples/experiments/two_species_ecosystem.json -o runs/ecosystem
+marse replay runs/ecosystem/manifest.json
 ```
 
 Adding a `biofilm` block to an experiment changes what it *is*: a batch run
 evolves a well-mixed culture over time, while a biofilm run holds the biomass
-fixed and solves the depth profile, which has no time axis. Both produce a
-manifest that replays them.
+fixed and solves the depth profile, which has no time axis. All three kinds
+produce a manifest that replays them. Replay proves a result can be
+reproduced, not that it is right: the ecosystem engine has known defects that
+are being fixed before anything is built on it
+([validation.md](docs/validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified)).
 
 The manifest records the configuration, its SHA-256 checksum, the random seed,
 the versioned models used and the software versions — and deliberately records
