@@ -8,3 +8,7 @@ def test_viewer_contains_interactive_layers_and_controls(tmp_path):
     assert "phenotype state" in html
     assert "Keyboard: Space" in html
     assert "additive" in html
+    assert "Smooth fields" in html
+    assert "render-mode" in html
+    assert "canvas.style.width" in html
+    assert 'id="opacity"' in html
