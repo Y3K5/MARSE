@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from marse.ecosystem import (
+    ConditionConfig,
     EcosystemConfig,
     EcosystemError,
     NutrientConfig,
@@ -15,6 +16,7 @@ from marse.ecosystem import (
     run,
     write_viewer,
 )
+from marse.niche import Capability
 
 
 def config(**overrides) -> EcosystemConfig:
@@ -232,3 +234,44 @@ def test_species_can_produce_a_metabolite_for_another_species():
 def test_negative_production_is_rejected():
     with pytest.raises(EcosystemError, match="production"):
         SpeciesConfig("invalid", 0.1, 0.2, (0.2,), (1.0,), production_per_nutrient=(-1.0,))
+
+
+def test_spatial_capability_rate_and_limiting_factor_are_exported():
+    result = run(
+        config(
+            duration_h=0.1,
+            nutrients=(NutrientConfig("carbon", 1.0, 0.0),),
+            conditions=(
+                ConditionConfig(
+                    "oxygen",
+                    0.0,
+                    10.0,
+                    boundary_value=1.0,
+                    boundary_edges=("top",),
+                ),
+            ),
+            species=(
+                SpeciesConfig(
+                    "aerobe",
+                    0.1,
+                    1.0,
+                    (0.2,),
+                    (1.0,),
+                    capabilities=(
+                        Capability(
+                            "aerobic-respiration",
+                            1.0,
+                            "carbon",
+                            0.2,
+                            oxygen_half_saturation=0.1,
+                        ),
+                    ),
+                ),
+            ),
+        )
+    )
+    frame = result.frames[-1]
+    assert frame.niche_rates[0][0, 0] > frame.niche_rates[0][-1, 0]
+    assert frame.niche_limiting_factors[0][-1, 0] == "oxygen"
+    exported = frame.to_dict(("aerobe",), ("carbon",), 1.0, ("oxygen",))
+    assert exported["niche"]["limiting_factor"]["aerobe"][-1][0] == "oxygen"
