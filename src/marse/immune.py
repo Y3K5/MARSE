@@ -15,16 +15,63 @@ from numpy.typing import ArrayLike, NDArray
 from marse.additives import hill_response
 
 __all__ = [
+    "ImmuneAgent",
+    "ImmuneAgentStepResult",
+    "ImmuneCellType",
     "ImmuneError",
     "ImmuneInteraction",
     "ImmunePressureResult",
     "MolecularNeutralizer",
     "apply_immune_pressure",
+    "step_immune_agents",
 ]
 
 
 class ImmuneError(ValueError):
     """An immune or molecular interaction is invalid."""
+
+
+@dataclass(frozen=True, slots=True)
+class ImmuneCellType:
+    """Configurable action and resource rules for one immune-cell archetype."""
+
+    name: str
+    action: str
+    effector: str
+    attack_per_h: float = 0.0
+    movement_per_h: float = 0.0
+    secretion_per_h: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not self.name.strip() or not self.effector.strip():
+            raise ImmuneError("immune cell name and effector must not be empty")
+        if self.action not in {"move_toward", "attack", "secrete"}:
+            raise ImmuneError("immune action must be move_toward, attack, or secrete")
+        if min(self.attack_per_h, self.movement_per_h, self.secretion_per_h) < 0:
+            raise ImmuneError("immune action rates must be non-negative")
+
+
+@dataclass(frozen=True, slots=True)
+class ImmuneAgent:
+    """A grid-local immune cell with an explicit action budget."""
+
+    cell_type: ImmuneCellType
+    y: int
+    x: int
+    energy: float = 1.0
+
+    def __post_init__(self) -> None:
+        if self.y < 0 or self.x < 0 or self.energy < 0:
+            raise ImmuneError("immune agent coordinates and energy must be non-negative")
+
+
+@dataclass(frozen=True, slots=True)
+class ImmuneAgentStepResult:
+    """Updated immune agents, target biomass, and secreted effector fields."""
+
+    agents: tuple[ImmuneAgent, ...]
+    biomass: NDArray[np.float64]
+    effectors: dict[str, NDArray[np.float64]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,3 +157,50 @@ def apply_immune_pressure(
     )
     updated = target * np.exp(-dt * kill_rate)
     return ImmunePressureResult(updated, target - updated)
+
+
+def step_immune_agents(
+    agents: tuple[ImmuneAgent, ...],
+    biomass: ArrayLike,
+    *,
+    dt: float,
+    effectors: dict[str, ArrayLike] | None = None,
+) -> ImmuneAgentStepResult:
+    """Execute one deterministic action step for grid-local immune agents.
+
+    ``move_toward`` follows the steepest adjacent biomass gradient, ``attack``
+    removes biomass at the agent cell, and ``secrete`` adds an effector field.
+    These are action primitives, not claims about a particular cell lineage.
+    """
+    if dt < 0:
+        raise ImmuneError("dt must be non-negative")
+    updated_biomass = np.maximum(np.asarray(biomass, dtype=float), 0.0).copy()
+    if updated_biomass.ndim != 2:
+        raise ImmuneError("biomass must be a 2D field")
+    fields = {
+        name: np.maximum(np.asarray(field, dtype=float), 0.0).copy()
+        for name, field in (effectors or {}).items()
+    }
+    if any(field.shape != updated_biomass.shape for field in fields.values()):
+        raise ImmuneError("effector and biomass fields must have matching shapes")
+    moved: list[ImmuneAgent] = []
+    height, width = updated_biomass.shape
+    for agent in agents:
+        if agent.y >= height or agent.x >= width:
+            raise ImmuneError("immune agent coordinates exceed biomass field")
+        cell_type = agent.cell_type
+        y, x = agent.y, agent.x
+        if cell_type.action == "move_toward":
+            candidates = [
+                (y, x),
+                *((y + dy, x + dx) for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1))),
+            ]
+            valid = [(cy, cx) for cy, cx in candidates if 0 <= cy < height and 0 <= cx < width]
+            y, x = max(valid, key=lambda position: updated_biomass[position])
+        elif cell_type.action == "attack":
+            updated_biomass[y, x] *= np.exp(-dt * cell_type.attack_per_h * agent.energy)
+        elif cell_type.action == "secrete":
+            field = fields.setdefault(cell_type.effector, np.zeros_like(updated_biomass))
+            field[y, x] += dt * cell_type.secretion_per_h * agent.energy
+        moved.append(ImmuneAgent(cell_type, y, x, agent.energy))
+    return ImmuneAgentStepResult(tuple(moved), updated_biomass, fields)

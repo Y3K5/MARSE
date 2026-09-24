@@ -89,8 +89,9 @@ The post-Phase-3 plan is to make every result evidence-linked and falsifiable:
    limits, evidence compatibility, convergence, and provenance for every run.
 9. **Immune and molecular extensions** — add explicit effector pressure and
    molecular neutralization primitives. *(Field-level deterministic pressure
-   and neutralization are implemented; agent trajectories, receptor kinetics,
-   host tissue, and clinical models remain out of scope.)*
+   neutralization, and deterministic immune-cell action primitives are
+   implemented; receptor kinetics, host tissue, and clinical models remain
+   out of scope.)*
 
 ## First publishable milestone
 
