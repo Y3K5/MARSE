@@ -14,6 +14,8 @@ def test_periodontal_pathogen_example_runs_and_keeps_three_species():
     assert len(result.frames) == result.config.steps + 1
     assert all(frame.biomass.shape == (3, 40, 60) for frame in result.frames)
     assert all(frame.biomass.min() >= 0 for frame in result.frames)
+    assert [additive.name for additive in result.config.additives] == ["succinate", "acetate"]
+    assert any(frame.additives.max() > 0 for frame in result.frames)
 
 
 def test_periodontal_variant_workflow_writes_compact_controls(tmp_path, monkeypatch):
@@ -43,6 +45,6 @@ def test_periodontal_controls_cover_pairwise_and_resource_controls(tmp_path, mon
     main()
     rows = (tmp_path / "summary.csv").read_text(encoding="utf-8").splitlines()
     manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
-    assert len(rows) == 169
-    assert manifest["scenario_count"] == 168
+    assert len(rows) == 253
+    assert manifest["scenario_count"] == 252
     assert len(manifest["communities"]) == 7

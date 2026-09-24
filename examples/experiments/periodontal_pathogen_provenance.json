@@ -108,6 +108,28 @@
         "three-species community abundance trajectories",
         "metabolite production and consumption measurements"
       ]
+    },
+    {
+      "id": "named-metabolite-proxies",
+      "paths": [
+        "additives.succinate",
+        "additives.acetate",
+        "species.*.production_per_additive",
+        "species.*.consumption_per_additive"
+      ],
+      "units": {
+        "additive concentration": "model concentration units",
+        "production_per_additive": "additive units per biomass-growth unit",
+        "consumption_per_additive": "additive units per biomass unit per hour"
+      },
+      "source_id": "placeholder-model-assumption",
+      "calibration_status": "not-calibrated",
+      "required_measurements": [
+        "named metabolite concentrations over time",
+        "species-specific production and uptake rates",
+        "metabolite diffusion and decay in the modeled medium",
+        "ablation or supplementation experiments"
+      ]
     }
   ]
 }
