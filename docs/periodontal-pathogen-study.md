@@ -43,3 +43,29 @@ open runs/periodontal-pathogen-biofilm/viewer.html
 Use **Fields + particles** to see continuous biomass fields with deterministic
 population representatives. The particles are visualization aids; the
 underlying simulation remains a spatial biomass-field model.
+
+## Controls and environmental variants
+
+Run the compact control and sensitivity workflow without exporting every frame:
+
+```bash
+python examples/periodontal_variant_analysis.py \
+  --output runs/periodontal-variant-analysis
+```
+
+It writes `summary.csv` and `manifest.json`, not large trajectory files. The
+workflow includes the mixed biofilm and one single-species control for each
+organism at 30, 37, and 40 C, with three deterministic replicate seeds at
+reference and reduced moisture. The controls help separate shared-resource
+competition from species-specific growth.
+
+Temperature is applied through each species' declared cardinal capability.
+Moisture is currently an explicit dimensionless condition whose illustrative
+reduced level scales available oxygen and carbon to 65% of reference. This is
+a sensitivity proxy, not a validated periodontal moisture law; replace it
+with measured medium or pocket data before quantitative conclusions.
+
+The manifest records the base configuration checksum, software environment,
+temperature levels, moisture levels, replicate set, and scenario count. Keep
+generated runs outside Git and archive a selected release plus the manifest
+with a DOI when preparing a paper.

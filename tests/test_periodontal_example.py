@@ -12,3 +12,16 @@ def test_periodontal_pathogen_example_runs_and_keeps_three_species():
     assert len(result.frames) == result.config.steps + 1
     assert all(frame.biomass.shape == (3, 40, 60) for frame in result.frames)
     assert all(frame.biomass.min() >= 0 for frame in result.frames)
+
+
+def test_periodontal_variant_workflow_writes_compact_controls(tmp_path, monkeypatch):
+    from examples.periodontal_variant_analysis import main
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["periodontal_variant_analysis", "--output", str(tmp_path)],
+    )
+    main()
+    assert (tmp_path / "summary.csv").is_file()
+    assert (tmp_path / "manifest.json").is_file()
+    assert len((tmp_path / "summary.csv").read_text(encoding="utf-8").splitlines()) == 73
