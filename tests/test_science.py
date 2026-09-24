@@ -1,5 +1,7 @@
 """Tests for evidence-backed culture records."""
 
+from dataclasses import replace
+
 import pytest
 
 from marse.science import (
@@ -11,6 +13,7 @@ from marse.science import (
     MeasurementMethod,
     MediumRecipe,
     SourceRecord,
+    compile_culture,
     dataset_checksum,
     load_culture_dataset,
 )
@@ -148,6 +151,46 @@ def test_dataset_rejects_unknown_source_and_medium():
             (),
             (),
         )
+
+
+def test_compiler_creates_a_traceable_batch_experiment():
+    evidence = dataset()
+    culture = replace(evidence.cultures[0], format="broth", agar=None)
+    evidence = replace(evidence, cultures=(culture,))
+    compilation = compile_culture(
+        evidence,
+        culture.id,
+        substrate_name="glucose",
+        substrate_initial_mm=10.0,
+        initial_biomass_g_per_l=0.01,
+        yield_g_per_mmol=0.1,
+        k_s_mm=0.2,
+        duration_h=8.0,
+        timestep_h=0.1,
+        seed=7,
+    )
+    assert compilation.runnable
+    assert compilation.experiment is not None
+    assert compilation.experiment.organisms[0].mu_opt_per_h == 0.8
+    assert any("evidence dataset sha256=" in item for item in compilation.assumptions)
+    assert compilation.selected_source_ids == ("method-standard",)
+
+
+def test_compiler_refuses_to_project_agar_into_well_mixed_batch():
+    compilation = compile_culture(
+        dataset(),
+        "strain-solid-assay",
+        substrate_name="glucose",
+        substrate_initial_mm=10.0,
+        initial_biomass_g_per_l=0.01,
+        yield_g_per_mmol=0.1,
+        k_s_mm=0.2,
+        duration_h=8.0,
+        timestep_h=0.1,
+    )
+    assert not compilation.runnable
+    assert compilation.experiment is None
+    assert "spatial compiler" in compilation.unresolved[0]
 
 
 def test_documented_culture_evidence_dataset_loads():

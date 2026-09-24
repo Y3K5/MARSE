@@ -15,16 +15,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from marse.core.config import EnvironmentConfig, ExperimentConfig, OrganismConfig, SubstrateConfig
+
 __all__ = [
     "AgarProtocol",
     "CultureDataset",
     "CultureError",
     "CultureRecord",
     "EvidenceGrade",
+    "ExperimentCompilation",
     "KineticObservation",
     "MeasurementMethod",
     "MediumRecipe",
     "SourceRecord",
+    "compile_culture",
     "dataset_checksum",
     "load_culture_dataset",
 ]
@@ -287,6 +291,122 @@ class CultureDataset:
             encoding="utf-8",
         )
         return destination
+
+
+@dataclass(frozen=True, slots=True)
+class ExperimentCompilation:
+    """Auditable result of translating evidence into a MARSE experiment."""
+
+    culture_id: str
+    dataset_version: str
+    dataset_sha256: str
+    experiment: ExperimentConfig | None
+    selected_source_ids: tuple[str, ...]
+    assumptions: tuple[str, ...]
+    unresolved: tuple[str, ...]
+
+    @property
+    def runnable(self) -> bool:
+        return self.experiment is not None and not self.unresolved
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "culture_id": self.culture_id,
+            "dataset_version": self.dataset_version,
+            "dataset_sha256": self.dataset_sha256,
+            "experiment": self.experiment.to_dict() if self.experiment else None,
+            "selected_source_ids": list(self.selected_source_ids),
+            "assumptions": list(self.assumptions),
+            "unresolved": list(self.unresolved),
+        }
+
+
+def compile_culture(
+    dataset: CultureDataset,
+    culture_id: str,
+    *,
+    substrate_name: str,
+    substrate_initial_mm: float,
+    initial_biomass_g_per_l: float,
+    yield_g_per_mmol: float,
+    k_s_mm: float,
+    duration_h: float | None = None,
+    timestep_h: float | None = None,
+    seed: int = 0,
+) -> ExperimentCompilation:
+    """Compile one culture record into a conservative MARSE batch experiment.
+
+    The compiler refuses to infer missing kinetic or format information.  The
+    caller supplies model parameters that the culture evidence does not
+    identify, and the returned assumptions retain the evidence checksum.
+    """
+    cultures = [culture for culture in dataset.cultures if culture.id == culture_id]
+    if not cultures:
+        raise CultureError(f"unknown culture '{culture_id}'")
+    culture = cultures[0]
+    sources = set(culture.source_ids)
+    kinetics = culture.kinetics
+    unresolved: list[str] = []
+    assumptions = [
+        f"compiled from culture '{culture.id}'",
+        f"medium '{culture.medium_id}'",
+        f"measurement '{culture.measurement_id}'",
+        f"evidence dataset sha256={dataset_checksum(dataset)}",
+    ]
+    if culture.format != "broth":
+        unresolved.append(
+            f"culture format '{culture.format}' requires a spatial compiler; "
+            "it cannot be represented by the well-mixed batch kernel"
+        )
+    if kinetics is None or kinetics.growth_rate_per_h is None:
+        unresolved.append("kinetics.growth_rate_per_h is required to compile a batch experiment")
+        mu = 0.0
+    else:
+        mu = kinetics.growth_rate_per_h
+        assumptions.append(f"growth rate from {kinetics.model} fit")
+    if duration_h is None:
+        unresolved.append("duration_h must be supplied by the experiment designer")
+    if timestep_h is None:
+        unresolved.append("timestep_h must be supplied by the experiment designer")
+    if unresolved:
+        return ExperimentCompilation(
+            culture.id,
+            dataset.dataset_version,
+            dataset_checksum(dataset),
+            None,
+            tuple(sorted(sources)),
+            tuple(assumptions),
+            tuple(unresolved),
+        )
+    config = ExperimentConfig(
+        experiment_id=f"culture-{culture.id}",
+        organisms=(
+            OrganismConfig(
+                name=culture.organism,
+                initial_biomass_g_per_l=initial_biomass_g_per_l,
+                mu_opt_per_h=mu,
+                k_s_mm=k_s_mm,
+                yield_g_per_mmol=yield_g_per_mmol,
+            ),
+        ),
+        environment=EnvironmentConfig(culture.temperature_c, culture.ph),
+        substrate=SubstrateConfig(substrate_name, substrate_initial_mm),
+        seed=seed,
+        duration_h=duration_h,
+        timestep_h=timestep_h,
+        checkpoint_interval_h=timestep_h,
+        description=f"Compiled from evidence culture record {culture.id}",
+        assumptions=tuple(assumptions),
+    )
+    return ExperimentCompilation(
+        culture.id,
+        dataset.dataset_version,
+        dataset_checksum(dataset),
+        config,
+        tuple(sorted(sources)),
+        tuple(assumptions),
+        (),
+    )
 
 
 def _references(references: tuple[str, ...], known: set[str], where: str) -> None:
