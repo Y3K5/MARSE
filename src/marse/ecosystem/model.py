@@ -140,6 +140,8 @@ class SpeciesConfig:
     production_per_nutrient: tuple[float, ...] = ()
     capabilities: tuple[Capability, ...] = ()
     additive_effects: tuple[AdditiveEffect, ...] = ()
+    chemotaxis_field: str | None = None
+    chemotaxis_sensitivity: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -163,6 +165,10 @@ class SpeciesConfig:
             raise EcosystemError(f"species '{self.name}': mutation multiplier must be positive")
         if self.spreading_per_h < 0:
             raise EcosystemError(f"species '{self.name}': spreading rate must be non-negative")
+        if not np.isfinite(self.chemotaxis_sensitivity):
+            raise EcosystemError(f"species '{self.name}': chemotaxis sensitivity must be finite")
+        if self.chemotaxis_field is not None and not self.chemotaxis_field.strip():
+            raise EcosystemError(f"species '{self.name}': chemotaxis field must not be empty")
         if len({effect.additive for effect in self.additive_effects}) != len(self.additive_effects):
             raise EcosystemError(f"species '{self.name}': additive effects must be unique")
 
@@ -236,6 +242,13 @@ class EcosystemConfig:
         if len(additive_names) != len(self.additives):
             raise EcosystemError("additive names must be unique")
         for species in self.species:
+            if species.chemotaxis_field is not None and species.chemotaxis_field not in (
+                field_names | additive_names
+            ):
+                raise EcosystemError(
+                    f"species '{species.name}' chemotaxis references unknown field "
+                    f"'{species.chemotaxis_field}'"
+                )
             for capability in species.capabilities:
                 required = {capability.substrate}
                 if capability.temperature_c is not None:
@@ -555,6 +568,15 @@ def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
                 additive_effects=_additive_effects(
                     item.get("additive_effects", []), f"species[{i}].additive_effects"
                 ),
+                chemotaxis_field=(
+                    str(item["chemotaxis_field"])
+                    if item.get("chemotaxis_field") is not None
+                    else None
+                ),
+                chemotaxis_sensitivity=_number(
+                    item.get("chemotaxis_sensitivity", 0.0),
+                    f"species[{i}].chemotaxis_sensitivity",
+                ),
             )
         )
         if len(parsed_species[-1].half_saturation) != nutrient_count:
@@ -752,6 +774,31 @@ def _additive_multiplier(
     return multiplier
 
 
+def _chemotaxis_step(
+    biomass: NDArray[np.float64],
+    signal: NDArray[np.float64],
+    *,
+    sensitivity: float,
+    dt: float,
+    cell_size_um: float,
+) -> NDArray[np.float64]:
+    """Move biomass up a signal gradient with conservative edge no-fluxes."""
+    gradient_x = np.diff(signal, axis=1) / cell_size_um
+    gradient_y = np.diff(signal, axis=0) / cell_size_um
+    flux_x = sensitivity * gradient_x * np.where(gradient_x >= 0.0, biomass[:, :-1], biomass[:, 1:])
+    flux_y = sensitivity * gradient_y * np.where(gradient_y >= 0.0, biomass[:-1, :], biomass[1:, :])
+    divergence_x = np.zeros_like(biomass)
+    divergence_y = np.zeros_like(biomass)
+    divergence_x[:, 1:-1] = (flux_x[:, 1:] - flux_x[:, :-1]) / cell_size_um
+    divergence_x[:, 0] = flux_x[:, 0] / cell_size_um
+    divergence_x[:, -1] = -flux_x[:, -1] / cell_size_um
+    divergence_y[1:-1, :] = (flux_y[1:, :] - flux_y[:-1, :]) / cell_size_um
+    divergence_y[0, :] = flux_y[0, :] / cell_size_um
+    divergence_y[-1, :] = -flux_y[-1, :] / cell_size_um
+    divergence = divergence_x + divergence_y
+    return np.maximum(biomass - dt * divergence, 0.0)
+
+
 def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) -> EcosystemResult:
     """Run a deterministic ecosystem experiment and retain every frame."""
     providers = providers or EcosystemProviders()
@@ -844,6 +891,11 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
                 cell_size_um=config.cell_size_um,
                 boundary=nutrient,
             )
+        field_map = {
+            **{name: nutrients[index] for index, name in enumerate(nutrient_names)},
+            **{name: conditions[index] for index, name in enumerate(condition_names)},
+            **{name: additives[index] for index, name in enumerate(additive_names)},
+        }
 
         for species_index, species in enumerate(config.species):
             if species.spreading_per_h:
@@ -855,6 +907,14 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
                     boundary=NoBoundary(),
                 )
                 biomass[species_index] = np.maximum(biomass[species_index], 0.0)
+            if species.chemotaxis_field is not None and species.chemotaxis_sensitivity != 0.0:
+                biomass[species_index] = _chemotaxis_step(
+                    biomass[species_index],
+                    field_map[species.chemotaxis_field],
+                    sensitivity=species.chemotaxis_sensitivity,
+                    dt=dt,
+                    cell_size_um=config.cell_size_um,
+                )
             growth_factor = np.where(
                 mutations[species_index] > 0, species.mutation_growth_multiplier, 1.0
             )

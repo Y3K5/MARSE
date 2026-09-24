@@ -256,6 +256,66 @@ def test_negative_production_is_rejected():
         SpeciesConfig("invalid", 0.1, 0.2, (0.2,), (1.0,), production_per_nutrient=(-1.0,))
 
 
+def test_chemotaxis_moves_biomass_up_a_declared_signal_gradient():
+    result = run(
+        config(
+            width=6,
+            height=6,
+            duration_h=0.2,
+            timestep_h=0.001,
+            nutrients=(NutrientConfig("food", 1.0, 0.0),),
+            conditions=(
+                ConditionConfig(
+                    "signal",
+                    0.0,
+                    0.0,
+                    boundary_value=1.0,
+                    boundary_edges=("top",),
+                ),
+            ),
+            species=(
+                SpeciesConfig(
+                    "motile",
+                    0.0,
+                    0.0,
+                    (0.2,),
+                    (1.0,),
+                    chemotaxis_field="signal",
+                    chemotaxis_sensitivity=100.0,
+                    seed_regions=(SeedRegion(0.5, 0.2, 0.12, 1.0),),
+                ),
+            ),
+        )
+    )
+    initial_center = np.average(
+        np.indices(result.frames[0].biomass[0].shape)[0],
+        weights=result.frames[0].biomass[0],
+    )
+    final_center = np.average(
+        np.indices(result.final_state.biomass[0].shape)[0],
+        weights=result.final_state.biomass[0],
+    )
+    assert final_center < initial_center
+
+
+def test_chemotaxis_requires_a_declared_field():
+    with pytest.raises(EcosystemError, match="unknown field"):
+        config(
+            species=(
+                SpeciesConfig(
+                    "invalid",
+                    0.1,
+                    0.1,
+                    (0.2, 0.2),
+                    (1.0, 1.0),
+                    chemotaxis_field="missing",
+                    chemotaxis_sensitivity=1.0,
+                ),
+                config().species[1],
+            )
+        )
+
+
 def test_spatial_capability_rate_and_limiting_factor_are_exported():
     result = run(
         config(
