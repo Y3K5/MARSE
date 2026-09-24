@@ -1,6 +1,23 @@
-"""Validation suite shipped with MARSE.
+"""Analytical references and source-linked benchmark contracts.
 
-Analytical references, regression (golden) trajectories and literature
-benchmark cases, each with a target metric, tolerance and source. It is part
-of the installed package so that anyone can re-run it. See docs/validation.md.
+The validation suite is shipped with MARSE so anyone can re-run its analytical
+and literature-backed cases. See docs/validation.md.
 """
+
+from marse.validation.benchmarks import (
+    BenchmarkCase,
+    BenchmarkError,
+    BenchmarkResult,
+    BenchmarkSuite,
+    analytical_benchmarks,
+    compare_benchmark,
+)
+
+__all__ = [
+    "BenchmarkCase",
+    "BenchmarkError",
+    "BenchmarkResult",
+    "BenchmarkSuite",
+    "analytical_benchmarks",
+    "compare_benchmark",
+]
