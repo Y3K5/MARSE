@@ -14,6 +14,7 @@ from marse.ecosystem import (
     EcosystemProviders,
     ExplicitTransportProvider,
     NutrientConfig,
+    PhenotypeConfig,
     SeedRegion,
     SpeciesConfig,
     load_experiment,
@@ -314,6 +315,43 @@ def test_chemotaxis_requires_a_declared_field():
                 config().species[1],
             )
         )
+
+
+def test_quorum_switching_activates_a_state_with_hysteresis_and_dwell():
+    result = run(
+        config(
+            duration_h=0.2,
+            timestep_h=0.01,
+            nutrients=(NutrientConfig("food", 1.0, 0.0),),
+            species=(
+                SpeciesConfig(
+                    "switcher",
+                    0.0,
+                    0.5,
+                    (0.2,),
+                    (1.0,),
+                    seed_regions=(SeedRegion(0.5, 0.5, 0.2, 0.8),),
+                    phenotypes=(
+                        PhenotypeConfig(
+                            "biofilm",
+                            activation_threshold=0.1,
+                            deactivation_threshold=0.05,
+                            growth_multiplier=0.2,
+                            minimum_dwell_h=0.05,
+                        ),
+                    ),
+                ),
+            ),
+        )
+    )
+    assert np.any(result.final_state.phenotype_indices[0] == 1)
+    assert result.frames[-1].phenotype_indices is not None
+    assert result.frames[-1].to_dict(("switcher",), ("food",), 1.0)["phenotypes"]
+
+
+def test_phenotype_thresholds_are_validated():
+    with pytest.raises(EcosystemError, match="deactivation_threshold"):
+        PhenotypeConfig("invalid", 0.2, 0.4)
 
 
 def test_spatial_capability_rate_and_limiting_factor_are_exported():

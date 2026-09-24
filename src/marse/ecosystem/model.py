@@ -34,6 +34,7 @@ __all__ = [
     "EcosystemResult",
     "EcosystemState",
     "NutrientConfig",
+    "PhenotypeConfig",
     "SeedRegion",
     "SpeciesConfig",
     "load_experiment",
@@ -125,6 +126,30 @@ class AdditiveConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class PhenotypeConfig:
+    """A quorum-activated state with hysteresis and explicit multipliers."""
+
+    name: str
+    activation_threshold: float
+    deactivation_threshold: float
+    growth_multiplier: float = 1.0
+    spreading_multiplier: float = 1.0
+    minimum_dwell_h: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise EcosystemError("phenotype.name: must not be empty")
+        if self.activation_threshold < 0 or self.deactivation_threshold < 0:
+            raise EcosystemError("phenotype thresholds must be non-negative")
+        if self.deactivation_threshold > self.activation_threshold:
+            raise EcosystemError("phenotype needs deactivation_threshold <= activation_threshold")
+        if self.growth_multiplier <= 0 or self.spreading_multiplier < 0:
+            raise EcosystemError("phenotype multipliers must be positive/non-negative")
+        if self.minimum_dwell_h < 0:
+            raise EcosystemError("phenotype.minimum_dwell_h must be non-negative")
+
+
+@dataclass(frozen=True, slots=True)
 class SpeciesConfig:
     """Species-level growth and nutrient-use parameters."""
 
@@ -142,6 +167,7 @@ class SpeciesConfig:
     additive_effects: tuple[AdditiveEffect, ...] = ()
     chemotaxis_field: str | None = None
     chemotaxis_sensitivity: float = 0.0
+    phenotypes: tuple[PhenotypeConfig, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -169,6 +195,8 @@ class SpeciesConfig:
             raise EcosystemError(f"species '{self.name}': chemotaxis sensitivity must be finite")
         if self.chemotaxis_field is not None and not self.chemotaxis_field.strip():
             raise EcosystemError(f"species '{self.name}': chemotaxis field must not be empty")
+        if len({phenotype.name for phenotype in self.phenotypes}) != len(self.phenotypes):
+            raise EcosystemError(f"species '{self.name}': phenotype names must be unique")
         if len({effect.additive for effect in self.additive_effects}) != len(self.additive_effects):
             raise EcosystemError(f"species '{self.name}': additive effects must be unique")
 
@@ -286,6 +314,8 @@ class EcosystemState:
     conditions: NDArray[np.float64]
     additives: NDArray[np.float64]
     mutations: NDArray[np.int64]
+    phenotype_indices: NDArray[np.int64] | None = None
+    phenotype_dwell_h: NDArray[np.float64] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,6 +330,7 @@ class EcosystemFrame:
     mutations: NDArray[np.int64]
     niche_rates: NDArray[np.float64]
     niche_limiting_factors: tuple[NDArray[np.str_], ...]
+    phenotype_indices: NDArray[np.int64] | None = None
 
     def to_dict(
         self,
@@ -331,6 +362,9 @@ class EcosystemFrame:
                 },
             },
             "mutations": self.mutations.tolist(),
+            "phenotypes": (
+                self.phenotype_indices.tolist() if self.phenotype_indices is not None else []
+            ),
             "statistics": {
                 "species_total_biomass": {
                     name: float(self.biomass[i].sum()) for i, name in enumerate(species_names)
@@ -577,6 +611,36 @@ def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
                     item.get("chemotaxis_sensitivity", 0.0),
                     f"species[{i}].chemotaxis_sensitivity",
                 ),
+                phenotypes=tuple(
+                    PhenotypeConfig(
+                        name=str(phenotype.get("name", "")),
+                        activation_threshold=_number(
+                            phenotype.get("activation_threshold"),
+                            f"species[{i}].phenotypes[{j}].activation_threshold",
+                        ),
+                        deactivation_threshold=_number(
+                            phenotype.get("deactivation_threshold"),
+                            f"species[{i}].phenotypes[{j}].deactivation_threshold",
+                        ),
+                        growth_multiplier=_number(
+                            phenotype.get("growth_multiplier", 1.0),
+                            f"species[{i}].phenotypes[{j}].growth_multiplier",
+                        ),
+                        spreading_multiplier=_number(
+                            phenotype.get("spreading_multiplier", 1.0),
+                            f"species[{i}].phenotypes[{j}].spreading_multiplier",
+                        ),
+                        minimum_dwell_h=_number(
+                            phenotype.get("minimum_dwell_h", 0.0),
+                            f"species[{i}].phenotypes[{j}].minimum_dwell_h",
+                        ),
+                    )
+                    if isinstance(phenotype, dict)
+                    else (_ for _ in ()).throw(
+                        EcosystemError(f"species[{i}].phenotypes[{j}]: expected an object")
+                    )
+                    for j, phenotype in enumerate(item.get("phenotypes", ()))
+                ),
             )
         )
         if len(parsed_species[-1].half_saturation) != nutrient_count:
@@ -702,6 +766,8 @@ def _initial_state(config: EcosystemConfig) -> EcosystemState:
         conditions=condition_array,
         additives=additive_array,
         mutations=np.zeros((len(config.species), *shape), dtype=np.int64),
+        phenotype_indices=np.zeros((len(config.species), *shape), dtype=np.int64),
+        phenotype_dwell_h=np.zeros((len(config.species), *shape), dtype=float),
     )
 
 
@@ -774,6 +840,32 @@ def _additive_multiplier(
     return multiplier
 
 
+def _update_phenotypes(
+    indices: NDArray[np.int64],
+    dwell: NDArray[np.float64],
+    biomass: NDArray[np.float64],
+    species: SpeciesConfig,
+    *,
+    dt: float,
+    carrying_capacity: float,
+) -> None:
+    """Apply quorum hysteresis in-place for one species."""
+    if not species.phenotypes:
+        return
+    previous = indices.copy()
+    dwell += dt
+    for phenotype_index, phenotype in enumerate(species.phenotypes, start=1):
+        activate = biomass >= phenotype.activation_threshold * carrying_capacity
+        deactivate = biomass <= phenotype.deactivation_threshold * carrying_capacity
+        eligible = dwell >= phenotype.minimum_dwell_h
+        if phenotype_index == 1:
+            indices[(previous == 0) & activate & eligible] = phenotype_index
+        else:
+            indices[(previous == phenotype_index - 1) & activate & eligible] = phenotype_index
+        indices[(previous == phenotype_index) & deactivate & eligible] = 0
+    dwell[indices != previous] = 0.0
+
+
 def _chemotaxis_step(
     biomass: NDArray[np.float64],
     signal: NDArray[np.float64],
@@ -807,7 +899,14 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
         default=0.0,
     )
     stability = config.timestep_h * max_diffusivity / config.cell_size_um**2
-    max_spreading = max(s.spreading_per_h for s in config.species)
+    max_spreading = max(
+        (
+            s.spreading_per_h
+            * max((phenotype.spreading_multiplier for phenotype in s.phenotypes), default=1.0)
+            for s in config.species
+        ),
+        default=0.0,
+    )
     spreading_stability = config.timestep_h * max_spreading / config.cell_size_um**2
     if max(stability, spreading_stability) > 0.25:
         raise EcosystemError(
@@ -817,6 +916,8 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
 
     state = _initial_state(config)
     mutations = state.mutations.copy()
+    phenotype_indices = state.phenotype_indices.copy()
+    phenotype_dwell_h = state.phenotype_dwell_h.copy()
     nutrient_names = tuple(n.name for n in config.nutrients)
     condition_names = tuple(c.name for c in config.conditions)
     additive_names = tuple(a.name for a in config.additives)
@@ -855,6 +956,7 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
                 )[1]
                 for species in config.species
             ),
+            phenotype_indices.copy(),
         )
     ]
     mutation_interval = config.mutation_interval_h
@@ -898,10 +1000,29 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
         }
 
         for species_index, species in enumerate(config.species):
+            _update_phenotypes(
+                phenotype_indices[species_index],
+                phenotype_dwell_h[species_index],
+                biomass[species_index],
+                species,
+                dt=dt,
+                carrying_capacity=config.carrying_capacity,
+            )
+            phenotype_index = phenotype_indices[species_index]
+            active_phenotypes = [phenotype for phenotype in species.phenotypes]
+            growth_multiplier = np.ones_like(biomass[species_index])
+            spreading_multiplier = np.ones_like(biomass[species_index])
+            for index, phenotype in enumerate(active_phenotypes, start=1):
+                growth_multiplier = np.where(
+                    phenotype_index == index, phenotype.growth_multiplier, growth_multiplier
+                )
+                spreading_multiplier = np.where(
+                    phenotype_index == index, phenotype.spreading_multiplier, spreading_multiplier
+                )
             if species.spreading_per_h:
                 biomass[species_index] = providers.biomass_transport.advance(
                     biomass[species_index],
-                    diffusivity=species.spreading_per_h,
+                    diffusivity=species.spreading_per_h * spreading_multiplier,
                     dt=dt,
                     cell_size_um=config.cell_size_um,
                     boundary=NoBoundary(),
@@ -918,6 +1039,7 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
             growth_factor = np.where(
                 mutations[species_index] > 0, species.mutation_growth_multiplier, 1.0
             )
+            growth_factor *= growth_multiplier
             if state.time_h + dt >= next_mutation:
                 events = mutation_rng.random(growth_factor.shape) < species.mutation_probability
                 new_events = events & (mutations[species_index] == 0)
@@ -976,7 +1098,15 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
             raise EcosystemError(f"state became non-finite at step {step}")
         time_h = state.time_h + dt
         state = EcosystemState(
-            time_h, step, biomass, nutrients, conditions, additives, mutations.copy()
+            time_h,
+            step,
+            biomass,
+            nutrients,
+            conditions,
+            additives,
+            mutations.copy(),
+            phenotype_indices.copy(),
+            phenotype_dwell_h.copy(),
         )
         niche_maps = tuple(
             _niche_maps(species, nutrients, conditions, nutrient_names, condition_names)
@@ -992,6 +1122,7 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
                 mutations.copy(),
                 tuple(result[0] for result in niche_maps),
                 tuple(result[1] for result in niche_maps),
+                phenotype_indices.copy(),
             )
         )
         while next_mutation <= time_h + 1e-12:
