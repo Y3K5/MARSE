@@ -15,12 +15,22 @@ provenance of every run so that any result can be replayed.
 > concentration rather than a well-mixed average. Letting that growth reshape
 > the biofilm over time is next; see the [roadmap](docs/roadmap.md).
 
-Run a two-species batch culture and then reproduce it exactly from its manifest:
+Run a simulation and then reproduce it exactly from its manifest:
 
 ```bash
-marse run examples/experiments/two_species_batch.json -o runs/demo
-marse replay runs/demo/manifest.json
+# a well-mixed batch culture, evolved over time
+marse run examples/experiments/two_species_batch.json -o runs/batch
+marse replay runs/batch/manifest.json
+
+# a biofilm, solved to the steady profile its oxygen gradient supports
+marse run examples/experiments/biofilm_oxygen_profile.json -o runs/biofilm
+marse replay runs/biofilm/manifest.json
 ```
+
+Adding a `biofilm` block to an experiment changes what it *is*: a batch run
+evolves a well-mixed culture over time, while a biofilm run holds the biomass
+fixed and solves the depth profile, which has no time axis. Both produce a
+manifest that replays them.
 
 The manifest records the configuration, its SHA-256 checksum, the random seed,
 the versioned models used and the software versions — and deliberately records

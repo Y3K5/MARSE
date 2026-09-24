@@ -23,18 +23,27 @@ import csv
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 
+from marse.biofilm.biomass import BiofilmState, GrowthProfile, Population, solve_growth_profile
 from marse.core.config import ExperimentConfig
 from marse.core.provenance import Manifest
 from marse.core.seeds import SeedRegistry
 from marse.core.state import SimulationState
 from marse.microbes.cardinal import cardinal_ph, cardinal_temperature
 from marse.microbes.growth import monod
+from marse.spatial.domain import Grid1D
 
-__all__ = ["ConservationError", "SimulationResult", "UnstableStepError", "run"]
+__all__ = [
+    "BiofilmProfileResult",
+    "ConservationError",
+    "SimulationResult",
+    "UnstableStepError",
+    "run",
+]
 
 MODELS = {
     "growth": "monod_v1",
@@ -44,6 +53,15 @@ MODELS = {
     "integrator": "rk4_v1",
 }
 """Versioned provider names, recorded in the manifest so a result names its models."""
+
+BIOFILM_MODELS = {
+    "growth": "monod_v1",
+    "temperature": "ctmi_v1",
+    "ph": "cpm_v1",
+    "transport": "diffusion_1d_steady_v1",
+    "solver": "newton_thomas_v1",
+}
+"""Providers for a biofilm profile: no integrator, because there is no clock."""
 
 CONSERVATION_TOLERANCE_MM = 1e-9
 """Absolute tolerance on the substrate balance, checked every step."""
@@ -92,6 +110,104 @@ class SimulationResult:
         return destination
 
 
+@dataclass(frozen=True, slots=True)
+class BiofilmProfileResult:
+    """Outcome of a biofilm run: the depth profile and the manifest.
+
+    A biofilm profile has no time axis, so there is no trajectory. What it
+    produces instead is the concentration and growth rate at each depth, which
+    is written as ``profile.csv`` where a batch run writes ``trajectory.csv``.
+    """
+
+    config: ExperimentConfig
+    manifest: Manifest
+    profile: GrowthProfile
+
+    @property
+    def organism_names(self) -> tuple[str, ...]:
+        return tuple(o.name for o in self.config.organisms)
+
+    def write_profile(self, path: str | Path) -> Path:
+        """Write the depth profile as CSV, with units in the headers."""
+        destination = Path(path)
+        depths = self.profile.depths
+        concentration = self.profile.solute.concentration
+        with destination.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(
+                ["depth_um", f"{self.config.substrate.name}_mm"]
+                + [f"{name}_growth_per_h" for name in self.organism_names]
+            )
+            for i, z in enumerate(depths):
+                writer.writerow(
+                    [f"{z:.6f}", f"{concentration[i]:.10g}"]
+                    + [f"{rate[i]:.10g}" for rate in self.profile.growth_rate]
+                )
+        return destination
+
+
+def _biofilm_outputs(profile: GrowthProfile, diffusivity: float) -> dict[str, Any]:
+    """The summary quantities recorded in a biofilm manifest."""
+    names = profile.state.names
+    return {
+        "penetration_depth_um": profile.solute.penetration_depth(),
+        "active_zone_um": profile.active_zone(),
+        "active_fraction": profile.active_fraction,
+        "surface_flux_mm_um_per_h": profile.solute.surface_flux(diffusivity),
+        "surface_concentration_mm": profile.solute.surface,
+        "base_concentration_mm": float(profile.solute.concentration[-1]),
+        "newton_iterations": profile.solute.iterations,
+        "mean_growth_rate_per_h": dict(
+            zip(names, (float(v) for v in profile.mean_growth_rate()), strict=True)
+        ),
+        "surface_growth_rate_per_h": dict(
+            zip(names, (float(row[0]) for row in profile.growth_rate), strict=True)
+        ),
+        "areal_biomass_g_per_m2": profile.state.areal_density(),
+    }
+
+
+def _run_biofilm_profile(config: ExperimentConfig) -> BiofilmProfileResult:
+    """Solve the steady depth profile this biomass and bulk concentration support."""
+    started = datetime.now(UTC)
+    settings = config.biofilm
+    assert settings is not None  # guaranteed by the caller
+
+    seeds = SeedRegistry(config.seed)
+    seeds.stream("core")
+
+    mu_max = _max_growth_rates(config)
+    populations = tuple(
+        Population(
+            name=organism.name,
+            mu_max=float(rate),
+            half_saturation=organism.k_s_mm,
+            yield_per_substrate=organism.yield_g_per_mmol,
+        )
+        for organism, rate in zip(config.organisms, mu_max, strict=True)
+    )
+    grid = Grid1D(thickness=settings.thickness_um, cells=settings.cells)
+    state = BiofilmState.uniform(
+        grid, populations, [o.initial_biomass_g_per_l for o in config.organisms]
+    )
+    profile = solve_growth_profile(
+        state,
+        diffusivity=settings.diffusivity_um2_per_h,
+        surface=config.substrate.initial_mm,
+    )
+
+    manifest = Manifest.build(
+        config=config,
+        models=BIOFILM_MODELS,
+        random_streams=seeds.issued_names,
+        started=started,
+        finished=datetime.now(UTC),
+        steps=profile.solute.iterations,
+        outputs=_biofilm_outputs(profile, settings.diffusivity_um2_per_h),
+    )
+    return BiofilmProfileResult(config=config, manifest=manifest, profile=profile)
+
+
 def _max_growth_rates(config: ExperimentConfig) -> NDArray[np.float64]:
     """Scale each organism's optimal rate by the environment (theory.md section 2)."""
     temperature = config.environment.temperature_c
@@ -124,7 +240,21 @@ def _derivatives(
     return growth, consumption
 
 
-def run(config: ExperimentConfig) -> SimulationResult:
+def run(config: ExperimentConfig) -> SimulationResult | BiofilmProfileResult:
+    """Run the experiment described by ``config``.
+
+    Dispatches on what the configuration asks for. A ``biofilm`` block means a
+    steady depth profile at fixed biomass, returning a
+    :class:`BiofilmProfileResult`; otherwise the run is a well-mixed batch
+    culture over time, returning a :class:`SimulationResult`. Both carry a
+    manifest that replays them.
+    """
+    if config.biofilm is not None:
+        return _run_biofilm_profile(config)
+    return _run_batch(config)
+
+
+def _run_batch(config: ExperimentConfig) -> SimulationResult:
     """Run a batch simulation to completion.
 
     Raises :class:`ConservationError` if the substrate balance drifts, rather

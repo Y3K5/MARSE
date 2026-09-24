@@ -21,26 +21,64 @@ import numpy as np
 from marse import __version__
 from marse.core.config import ConfigError, load_experiment
 from marse.core.provenance import Manifest
-from marse.core.simulation import SimulationResult, run
+from marse.core.simulation import BiofilmProfileResult, SimulationResult, run
+
+Result = SimulationResult | BiofilmProfileResult
 
 
-def _write_outputs(result: SimulationResult, output_dir: Path) -> tuple[Path, Path]:
+def _write_outputs(result: Result, output_dir: Path) -> tuple[Path, Path]:
+    """Write the run's data file and its manifest. The data file differs by kind."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    trajectory = result.write_trajectory(output_dir / "trajectory.csv")
+    if isinstance(result, BiofilmProfileResult):
+        data = result.write_profile(output_dir / "profile.csv")
+    else:
+        data = result.write_trajectory(output_dir / "trajectory.csv")
     manifest = result.manifest.write(output_dir / "manifest.json")
-    return trajectory, manifest
+    return data, manifest
 
 
-def _summarise(result: SimulationResult) -> None:
-    final = result.final_state
+def _summarise(result: Result) -> None:
     print(f"run_id      {result.manifest.run_id}")
     print(f"experiment  {result.config.experiment_id}")
+    print(f"kind        {result.config.kind}")
+
+    if isinstance(result, BiofilmProfileResult):
+        outputs = result.manifest.outputs
+        settings = result.config.biofilm
+        print(f"biofilm     {settings.thickness_um:g} um in {settings.cells} nodes")
+        print(f"solved      {outputs['newton_iterations']} Newton iterations")
+        print(f"penetration {outputs['penetration_depth_um']:.1f} um")
+        print(f"active zone {outputs['active_zone_um']:.1f} um")
+        for name, rate in outputs["mean_growth_rate_per_h"].items():
+            surface = outputs["surface_growth_rate_per_h"][name]
+            share = rate / surface if surface else 0.0
+            print(f"  {name:<24} mean {rate:.6g} /h ({share:.1%} of the surface rate)")
+        return
+
+    final = result.final_state
     print(f"steps       {final.step} over {final.time_h:g} h")
     print(
         f"substrate   {final.substrate_mm:.6g} mM left of {result.config.substrate.initial_mm:g} mM"
     )
     for name, value in zip(result.organism_names, final.biomass_g_per_l, strict=True):
         print(f"  {name:<24} {value:.6g} g/L")
+
+
+_BIOFILM_KEYS = ("penetration_depth_um", "active_zone_um", "base_concentration_mm")
+
+
+def _comparable(outputs: dict) -> dict[str, float]:
+    """The numbers a replay must reproduce, flattened so the two kinds compare alike."""
+    if "final_state" in outputs:  # a batch run
+        final = outputs["final_state"]
+        values = {"substrate": float(final["substrate_mm"])}
+        values.update({name: float(v) for name, v in final["biomass_g_per_l"].items()})
+        return values
+    values = {key: float(outputs[key]) for key in _BIOFILM_KEYS}
+    values.update(
+        {f"mean growth of {n}": float(v) for n, v in outputs["mean_growth_rate_per_h"].items()}
+    )
+    return values
 
 
 def _command_run(args: argparse.Namespace) -> int:
@@ -64,19 +102,17 @@ def _command_replay(args: argparse.Namespace) -> int:
     config = original.experiment()  # raises if the manifest was edited after the run
     result = run(config)
 
-    recorded = original.outputs["final_state"]
-    fresh = result.final_state.to_dict(result.organism_names)
-    differences: list[str] = []
-    if recorded["substrate_mm"] != fresh["substrate_mm"]:
-        was, now = recorded["substrate_mm"], fresh["substrate_mm"]
-        differences.append(f"  substrate: recorded {was!r}, replayed {now!r}")
-    for name, value in fresh["biomass_g_per_l"].items():
-        before = recorded["biomass_g_per_l"].get(name)
-        if before != value:
-            differences.append(f"  {name}: recorded {before!r}, replayed {value!r}")
+    recorded = _comparable(original.outputs)
+    fresh = _comparable(result.manifest.outputs)
+    differences = [
+        f"  {key}: recorded {recorded[key]!r}, replayed {value!r}"
+        for key, value in fresh.items()
+        if recorded.get(key) != value
+    ]
 
     print(f"run_id      {original.run_id}")
     print(f"experiment  {original.experiment_id}")
+    print(f"kind        {config.kind}")
     print(f"seed        {original.seed}")
     print(f"checksum    {original.config_sha256[:16]}... verified")
     if original.environment != result.manifest.environment:
@@ -89,7 +125,7 @@ def _command_replay(args: argparse.Namespace) -> int:
         print("\nreplay DIFFERS from the recorded run:")
         print("\n".join(differences))
         return 1
-    print("\nreplay reproduced the recorded final state exactly")
+    print("\nreplay reproduced the recorded results exactly")
     if args.output:
         trajectory, manifest = _write_outputs(result, Path(args.output))
         print(f"wrote {trajectory}")

@@ -1,0 +1,37 @@
+{
+  "experiment_id": "biofilm-oxygen-profile",
+  "description": "Oxygen through a 400 um aerobic biofilm at 37 C, held at a fixed biomass and solved to steady state. Most of the film sits beyond the penetration depth and does not grow, although every cell in it is identical.",
+  "assumptions": [
+    "Flat biofilm of uniform density; no structure, channels or roughness.",
+    "Biomass is fixed: this is the profile a given biofilm supports, not its development over time.",
+    "Oxygen is the only limiting substrate; all other nutrients are in excess.",
+    "The bulk liquid holds the surface concentration constant, and the base is impermeable.",
+    "Effective diffusivity is 0.43 of the value in water, the mean Stewart (1998) reports for small nonpolar solutes.",
+    "Parameters are illustrative (confidence C in docs/parameters.md) and do not describe a particular strain."
+  ],
+  "seed": 20260924,
+  "environment": {
+    "temperature_c": 37.0,
+    "ph": 7.0
+  },
+  "substrate": {
+    "name": "oxygen",
+    "initial_mm": 0.21
+  },
+  "biofilm": {
+    "thickness_um": 400.0,
+    "cells": 1200,
+    "diffusivity_um2_per_h": 4062000.0
+  },
+  "organisms": [
+    {
+      "name": "aerobe",
+      "initial_biomass_g_per_l": 25.0,
+      "mu_opt_per_h": 0.3,
+      "k_s_mm": 0.001,
+      "yield_g_per_mmol": 0.08,
+      "cardinal_temperature_c": [6.0, 40.0, 47.0],
+      "cardinal_ph": [4.0, 7.0, 9.0]
+    }
+  ]
+}
