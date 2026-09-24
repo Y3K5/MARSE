@@ -2,10 +2,13 @@ import numpy as np
 import pytest
 
 from marse.immune import (
+    ImmuneAgent,
+    ImmuneCellType,
     ImmuneError,
     ImmuneInteraction,
     MolecularNeutralizer,
     apply_immune_pressure,
+    step_immune_agents,
 )
 
 
@@ -44,3 +47,21 @@ def test_missing_effector_is_explicitly_rejected():
             interaction=ImmuneInteraction("target", "effector", 1.0, 1.0),
             dt=1.0,
         )
+
+
+def test_immune_actions_move_attack_and_secrete_explicitly():
+    mover = ImmuneCellType("macrophage", "move_toward", "il1", movement_per_h=1.0)
+    moved = step_immune_agents(
+        (ImmuneAgent(mover, 1, 1),),
+        np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]]),
+        dt=0.1,
+    )
+    assert moved.agents[0].x == 2
+
+    attacker = ImmuneCellType("neutrophil", "attack", "ros", attack_per_h=2.0)
+    attacked = step_immune_agents((ImmuneAgent(attacker, 0, 0),), [[1.0]], dt=1.0)
+    assert attacked.biomass[0, 0] < 1.0
+
+    secretor = ImmuneCellType("tcell", "secrete", "ifng", secretion_per_h=3.0)
+    secreted = step_immune_agents((ImmuneAgent(secretor, 0, 0),), [[0.0]], dt=0.5)
+    assert secreted.effectors["ifng"][0, 0] == pytest.approx(1.5)
