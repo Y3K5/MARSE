@@ -88,28 +88,24 @@ keeps the SHA-pinned actions current.
 makes [`CODEOWNERS`](../.github/CODEOWNERS) binding rather than advisory —
 without it, the file only **requests** review.
 
-**Settings → Rules → Rulesets → New ruleset → New branch ruleset.**
+The configuration is committed as JSON, so import it rather than clicking
+through it:
 
-1. **Name** it something explicit, such as `protect-default-branch`.
-2. **Enforcement status → Active.** A ruleset left in *Evaluate* mode reports
-   what it would have done and blocks nothing.
-3. **Bypass list → leave it empty.** Adding yourself here is the most common
-   way a ruleset ends up doing nothing; if you need to bypass it, do so
-   deliberately by disabling the rule and re-enabling it.
-4. **Target branches → Add target → Include default branch.**
-5. Tick these rules:
-   - **Restrict deletions**
-   - **Block force pushes**
-   - **Require a pull request before merging** → required approvals **1**, and
-     tick **Require review from Code Owners**
-   - **Require status checks to pass** → add `Lint and hygiene`, then the
-     `Personal data and commit identities` and `Secrets in the full history
-     (gitleaks)` checks. Status checks only appear in the picker once they
-     have run at least once on the repository, which they have.
-6. **Create.**
+**Settings → Rules → Rulesets → New ruleset ▾ → Import a ruleset**, choose
+[`.github/rulesets/protect-default-branch.json`](../.github/rulesets/protect-default-branch.json),
+then **Create**.
+
+That ruleset requires a pull request with passing checks, and blocks force
+pushes and deletion of the default branch. It sets **zero required approvals
+on purpose**: GitHub does not allow anyone to approve their own pull request,
+so requiring one approval as a lone maintainer would lock you out of your own
+default branch.
+[`.github/rulesets/README.md`](../.github/rulesets/README.md) explains that in
+full, and gives the two values to change when a second maintainer joins.
 
 Then verify it actually bites: push a trivial commit straight to the default
-branch and confirm GitHub refuses it.
+branch and confirm GitHub refuses it. If it succeeds, check that enforcement
+is **Active** rather than *Evaluate*, and that the bypass list is empty.
 
 > **A one-person repository still benefits from this.** Not because you do not
 > trust yourself, but because it removes the class of mistake where a tired
@@ -121,11 +117,9 @@ branch and confirm GitHub refuses it.
 into rulesets, so a tag ruleset is now the way to restrict who can cut a
 release.
 
-**Settings → Rules → Rulesets → New ruleset → New tag ruleset.**
-
-- Target: **Add target → Include by pattern → `v*`**
-- Rules: **Restrict creations**, **Restrict updates**, **Restrict deletions**
-- Enforcement: **Active**, bypass list empty
+Import [`.github/rulesets/protect-release-tags.json`](../.github/rulesets/protect-release-tags.json)
+the same way. It stops a `v*` tag being moved or deleted once cut, so a
+published release cannot be quietly repointed at different code.
 
 ## 6. When the repository goes public
 

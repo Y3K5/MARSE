@@ -9,6 +9,12 @@ results for the same manifest is always called out.
 
 ### Added
 
+- `.github/rulesets/`: branch and tag protection committed as importable JSON,
+  so a change to who may write to the default branch is reviewable like any
+  other change. The branch ruleset requires a pull request with all seven CI
+  and privacy checks passing and blocks force pushes and deletion; the tag
+  ruleset stops a `v*` release tag being moved or deleted.
+
 - **Repository hardening.** `tools/repo_guard.py` runs on every commit and in
   CI, and fails if a GitHub Action is not pinned to a commit SHA, a workflow
   uses `pull_request_target`, a workflow takes write permissions that were not
