@@ -72,6 +72,12 @@ A new model, rule or parameter set states:
 - a published source and a confidence note for every parameter;
 - at least one validation case. Benchmark definitions come before new biology.
 
+## Review and release
+
+Every change reaches the default branch through a pull request approved by the
+maintainer; nobody merges their own work. Releases are a deliberate, gated act.
+See [GOVERNANCE.md](GOVERNANCE.md).
+
 ## Maintenance
 
 - GitHub Actions are pinned to commit SHAs and updated by Dependabot.

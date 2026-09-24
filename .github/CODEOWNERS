@@ -1,0 +1,24 @@
+# Every change needs the owner's review.
+#
+# This file only has force once "Require review from Code Owners" is enabled in
+# a branch ruleset protecting the default branch. GOVERNANCE.md lists that and
+# the other settings that cannot be enforced from inside the repository.
+
+* @Y3K5
+
+# Called out separately so that a rule change to any of these is never a
+# quiet part of a larger diff. These are the paths that decide what runs with
+# access to the repository, what may leave it, and what protects it.
+/.github/                   @Y3K5
+/.github/workflows/         @Y3K5
+/.github/CODEOWNERS         @Y3K5
+/tools/                     @Y3K5
+/.pre-commit-config.yaml    @Y3K5
+/.privacy-allowlist         @Y3K5
+/.gitignore                 @Y3K5
+/pyproject.toml             @Y3K5
+/GOVERNANCE.md              @Y3K5
+/PRIVACY.md                 @Y3K5
+/SECURITY.md                @Y3K5
+/LICENSE                    @Y3K5
+/CITATION.cff               @Y3K5

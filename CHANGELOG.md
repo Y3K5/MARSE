@@ -9,6 +9,19 @@ results for the same manifest is always called out.
 
 ### Added
 
+- **Repository hardening.** `tools/repo_guard.py` runs on every commit and in
+  CI, and fails if a GitHub Action is not pinned to a commit SHA, a workflow
+  uses `pull_request_target`, a workflow takes write permissions that were not
+  declared, untrusted text is interpolated into a shell command, a publishing
+  step appears without an approval gate, a required file is missing, the
+  documented package layout is broken, or unexpected files accumulate at the
+  repository root. In CI it runs directly rather than through pre-commit, so
+  disabling it requires editing a workflow.
+- `GOVERNANCE.md`: who may merge and release, how a release is made, and the
+  GitHub settings that enforce access control.
+- `.github/CODEOWNERS`: the maintainer's review is requested on every path,
+  with the workflow, tooling and policy paths named separately.
+
 - **Simulation kernel (Phase 1).** A well-mixed batch culture of one or more
   organisms competing for a single limiting substrate can now be defined, run,
   saved and reproduced:
