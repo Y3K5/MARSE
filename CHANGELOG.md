@@ -9,6 +9,26 @@ results for the same manifest is always called out.
 
 ### Added
 
+- `docs/modeling-landscape.md`: survey of established microbial and biofilm
+  simulators, how growth in natural environments differs from laboratory
+  growth, and the consequences for MARSE's design.
+- A growth threshold: `net_growth_rate` and `minimum_substrate_concentration`
+  implement `S_min`, below which maintenance consumes all uptake and there is
+  no net growth. Bare Monod kinetics predicts growth at any positive substrate
+  concentration, which is wrong at environmental concentrations.
+- Growth kinetics: Monod, Haldane–Andrews substrate inhibition, Pirt uptake
+  with maintenance, Luedeking–Piret product formation, and the Baranyi–Roberts
+  growth curve with lag, evaluated in a numerically stable form.
+- Secondary models: cardinal temperature (CTMI) and pH (CPM) models and the
+  Ratkowsky square-root model, following the gamma concept.
+- Oxygen solubility (Benson–Krause) and diffusivity (Han–Bartels) correlations,
+  which refuse to extrapolate outside their stated validity ranges.
+- Analytical reference solutions for validation cases V1–V5, each checked in
+  the test suite against an independent numerical solution.
+- `docs/theory.md` (every equation, its assumptions, numerical methods and
+  limitations) and `docs/parameters.md` (values with units, sources and
+  explicit confidence levels).
+- Runnable examples: `batch_growth.py` and `oxygen_penetration.py`.
 - Package layout following the planned architecture, and a `marse --version`
   command.
 - Scientific specification, architecture, validation plan and roadmap in `docs/`.

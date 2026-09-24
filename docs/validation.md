@@ -40,6 +40,45 @@ Every `ValidationCase` records:
 | V6 | Cross-feeding | Explicit beneficial exchange shifts the equilibrium as designed | 3 | Planned |
 | V7 | Environmental perturbation | Recovery or adaptation after a resource, pH or oxygen shift | 4 | Planned |
 | V8 | Reproducibility | Re-running a saved manifest reproduces outputs within stated tolerances | 5 | Planned |
+| V9 | IWA benchmark BM1 | Substrate flux and concentration for a monospecies biofilm at fixed biomass, against published reference solutions | 3 | Proposed |
+| V10 | IWA benchmark BM3 | Multispecies, multisubstrate biofilm (heterotrophs, nitrifiers, inert biomass) | 4 | Proposed |
+
+V9 and V10 adopt the published benchmark problems of the IWA Task Group on
+Biofilm Modeling, which exist precisely to compare modelling approaches and
+have published reference solutions from multiple independent models. Using
+them is stronger evidence than any benchmark MARSE could define for itself.
+See [modeling-landscape.md §5.1](modeling-landscape.md#51-the-iwa-benchmark-problems).
+
+## Structural output metrics
+
+Simulated biofilm structure is reported using the vocabulary established for
+confocal microscopy analysis, so that simulations and images are directly
+comparable: **biovolume, mean and maximum thickness, substratum coverage,
+roughness coefficient** and **volume-to-surface ratio**
+([modeling-landscape.md §5.2](modeling-landscape.md#52-structural-metrics)).
+These give validation case V4 a quantitative target it currently lacks.
+
+## Analytical reference solutions
+
+Cases V1, V2, V3 and V5 have exact solutions, implemented in
+`marse.validation.analytical` and derived in [theory.md](theory.md):
+
+| Reference | Problem | Theory |
+|---|---|---|
+| `exponential_growth` | Unrestricted growth | §1.1 |
+| `logistic_growth` | Growth to a carrying capacity | §1.2 |
+| `monod_batch_time` | Integrated Monod batch culture | §3.5 |
+| `batch_final_biomass` | Final biomass from mass balance | §3.4 |
+| `zero_order_penetration_depth` | Solute penetration into a biofilm | §5.1 |
+| `point_source_diffusion_2d` | Diffusion from a point release | §4.2 |
+| `chemostat_break_even` | Break-even substrate level, the $R^{*}$ rule | §7.1 |
+
+A wrong reference would silently validate a wrong simulation, so each one is
+itself checked against an independent numerical solution — fourth-order
+Runge–Kutta for the growth problems, a Newton-solved nonlinear
+reaction–diffusion system for the penetration depth, finite differences for
+diffusion, and a full three-species ODE integration for the chemostat. These
+checks run as part of the ordinary test suite.
 
 ## Running the suite
 

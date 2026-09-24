@@ -97,6 +97,10 @@ not implement them.
 | `SimulationRun` | Configuration, seed, versions, checkpoints, outputs and provenance |
 | `ValidationCase` | A known behaviour, target metric, tolerance and source |
 
+The equations that implement these objects, with their assumptions and
+limitations, are in [theory.md](theory.md); their numerical values and sources
+are in [parameters.md](parameters.md).
+
 ## Modelling rules
 
 1. **Explicit scales.** Modules connect only through declared state variables
@@ -119,7 +123,11 @@ not implement them.
 To be settled in issues before Phase 1 starts:
 
 - Spatial representation for v1.0: a lattice of biomass densities, individual
-  agents, or a hybrid?
+  agents, or a hybrid? **Partly answered** by
+  [modeling-landscape.md §2](modeling-landscape.md#2-the-biomass-spreading-decision):
+  the choice of biomass-spreading mechanism measurably changes conclusions
+  about competition and cooperation, so it should be a declared, swappable
+  provider rather than a single fixed choice.
 - Dimensionality: two dimensions first, three later?
 - Units: one internal system (for example µm, minutes and mmol) with
   conversion at the configuration boundary?
