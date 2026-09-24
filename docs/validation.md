@@ -40,7 +40,7 @@ Every `ValidationCase` records:
 | V6 | Cross-feeding | Explicit beneficial exchange shifts the equilibrium as designed | 3 | Planned |
 | V7 | Environmental perturbation | Recovery or adaptation after a resource, pH or oxygen shift | 4 | Planned |
 | V8 | Reproducibility | Re-running a saved manifest reproduces outputs within stated tolerances | 5 | **Passing** |
-| V9 | IWA benchmark BM1 | Substrate flux and concentration for a monospecies biofilm at fixed biomass, against published reference solutions | 3 | Proposed |
+| V9 | IWA benchmark BM1 | Substrate flux and concentration for a monospecies biofilm at fixed biomass, against published reference solutions | 3 | **Now reachable** |
 | V10 | IWA benchmark BM3 | Multispecies, multisubstrate biofilm (heterotrophs, nitrifiers, inert biomass) | 4 | Proposed |
 
 **"Well mixed" is a real qualifier, not a hedge.** V1, V2 and V5 are verified
@@ -81,6 +81,30 @@ comparable: **biovolume, mean and maximum thickness, substratum coverage,
 roughness coefficient** and **volume-to-surface ratio**
 ([modeling-landscape.md §5.2](modeling-landscape.md#52-structural-metrics)).
 These give validation case V4 a quantitative target it currently lacks.
+
+## Stratified growth
+
+Coupling the solute field to the biomass that consumes it
+(`marse.biofilm.biomass`) reproduces the behaviour that motivates spatial
+modelling in the first place. With identical cells at uniform density, growth
+is confined to a surface layer whose depth stops increasing once the biofilm
+passes the penetration depth, so the biofilm-averaged growth rate falls
+roughly as 1/thickness while the surface keeps growing at its unlimited rate:
+
+| Thickness | Active zone | Mean growth rate | vs. surface |
+|---|---|---|---|
+| 25 µm | 25 µm | 0.299 h⁻¹ | 100% |
+| 100 µm | 100 µm | 0.298 h⁻¹ | 99.7% |
+| 200 µm | 137 µm | 0.200 h⁻¹ | 66.9% |
+| 400 µm | 137 µm | 0.100 h⁻¹ | 33.4% |
+| 800 µm | 137 µm | 0.050 h⁻¹ | 16.7% |
+
+Two limits are checked rather than just the interesting one: a film thinner
+than the penetration depth must reduce to the well-mixed answer, and a thicker
+one must stratify. This is qualitatively the narrow band of protein synthesis
+reported for real biofilms; turning it into a quantitative benchmark is what
+V9 (IWA BM1) is for, and BM1's fixed-biomass monospecies setup is exactly the
+problem this code now solves.
 
 ## Analytical reference solutions
 

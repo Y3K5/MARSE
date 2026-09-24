@@ -9,6 +9,20 @@ results for the same manifest is always called out.
 
 ### Added
 
+- **Growth coupled to the gradient (Phase 3, first increment).**
+  `biofilm/biomass.py` joins the spatial solute field to the growth kinetics:
+  uptake capacity follows the local biomass, the solute field is solved against
+  it, and each depth then grows at the rate its own concentration supports.
+  Reports per-depth growth rates, the active-zone thickness and the
+  biomass-weighted mean growth rate.
+- The diffusion solver accepts a per-node uptake capacity, not only a uniform
+  one, which is what makes that coupling possible.
+- `oxygen_diffusivity_um2_per_h`, because combining a per-second diffusivity
+  with per-hour growth rates understates penetration sixtyfold while still
+  producing a plausible-looking number. A test pins the size of that error.
+- `examples/stratified_growth.py`: identical cells at uniform density, and the
+  gradient alone decides which of them grow.
+
 - **Spatial transport (Phase 2).** `spatial/domain.py` provides a uniform
   one-dimensional grid through the depth of a slab, with an imposed surface
   concentration and an impermeable base. `spatial/diffusion.py` solves the

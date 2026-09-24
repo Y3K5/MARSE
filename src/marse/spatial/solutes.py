@@ -13,9 +13,14 @@ from marse._numeric import FloatOrArray, as_array, require, unwrap
 
 __all__ = [
     "OXYGEN_MOLAR_MASS",
+    "SECONDS_PER_HOUR",
     "oxygen_diffusivity_m2_per_s",
+    "oxygen_diffusivity_um2_per_h",
     "oxygen_saturation_mg_per_l",
 ]
+
+SECONDS_PER_HOUR = 3600.0
+"""Diffusivities are published per second; MARSE works in hours internally."""
 
 OXYGEN_MOLAR_MASS = 31.998
 """Molar mass of O2 in g/mol; divide mg/L by it to get mM."""
@@ -53,3 +58,15 @@ def oxygen_diffusivity_m2_per_s(temperature_c: ArrayLike) -> FloatOrArray:
     kelvin = temp + 273.15
     log10_cm2_per_s = -4.410 + 773.8 / kelvin - (506.4 / kelvin) ** 2
     return unwrap(1e-4 * 10.0**log10_cm2_per_s)
+
+
+def oxygen_diffusivity_um2_per_h(temperature_c: ArrayLike) -> FloatOrArray:
+    """Oxygen diffusivity in um^2/h, the unit the rest of MARSE works in.
+
+    The same quantity as :func:`oxygen_diffusivity_m2_per_s`, converted. It
+    exists because growth rates are per hour while diffusivities are published
+    per second, and combining the two unconverted understates how far a solute
+    penetrates by a factor of sixty while still producing a plausible-looking
+    number.
+    """
+    return unwrap(as_array(oxygen_diffusivity_m2_per_s(temperature_c)) * 1e12 * SECONDS_PER_HOUR)

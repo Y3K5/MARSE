@@ -25,9 +25,32 @@ def run_example(name: str) -> str:
     return result.stdout
 
 
-@pytest.mark.parametrize("name", ["batch_growth.py", "oxygen_penetration.py", "biofilm_profile.py"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "batch_growth.py",
+        "oxygen_penetration.py",
+        "biofilm_profile.py",
+        "stratified_growth.py",
+    ],
+)
 def test_example_runs_cleanly(name):
     assert run_example(name).strip()
+
+
+def test_stratified_growth_shows_the_active_zone_saturating():
+    """Past the penetration depth, added thickness must add no active biomass."""
+    output = run_example("stratified_growth.py")
+    rows = [
+        line.split()
+        for line in output.splitlines()
+        if line.strip().endswith("%") and "um" in line and "thickness" not in line
+    ]
+    zones = {float(r[0].rstrip("um")): float(r[1].rstrip("um")) for r in rows if len(r) == 4}
+    assert zones, output
+    thick = [z for t, z in sorted(zones.items()) if t >= 200.0]
+    assert len(thick) >= 2
+    assert max(thick) - min(thick) < 1e-6, f"active zone should saturate, got {thick}"
 
 
 def test_biofilm_profile_conserves_oxygen_and_is_stratified():
