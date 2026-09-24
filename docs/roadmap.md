@@ -4,9 +4,11 @@ MARSE is developed in the open, in phases. Each phase has an exit criterion,
 and the next phase starts once it is met. Progress is tracked in issues and
 milestones.
 
-**Current phase: 1, simulation kernel.** A well-mixed batch simulation can be
-defined, run, saved and reproduced exactly from its manifest. Space and
-diffusion are next.
+**Current phase: 2, space and resources.** A well-mixed batch simulation can be
+defined, run, saved and reproduced exactly from its manifest (Phase 1), and the
+one-dimensional steady-state reaction-diffusion solver is in place and
+validated against three analytical limits (validation case V3). Coupling it to
+growing biomass is Phase 3.
 
 | Phase | Deliverable | Exit criterion |
 |---|---|---|
@@ -33,6 +35,9 @@ diffusion are next.
 3. Deterministic simulation clock, state checkpoints, random-seed handling and
    the run manifest. *(Done.)*
 4. A simple spatial domain and diffusion solver, validated on its own.
+   *(Done: `spatial/domain.py` and `spatial/diffusion.py`, validated against
+   no-uptake, first-order and zero-order analytical limits, a flux balance and
+   a second-order convergence study.)*
 5. One microbial growth model and one resource-consumption model.
 6. Local interaction and adhesion rules sufficient for a first biofilm
    demonstration.

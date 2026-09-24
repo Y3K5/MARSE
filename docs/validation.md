@@ -34,7 +34,7 @@ Every `ValidationCase` records:
 |---|---|---|---|---|
 | V1 | Single-species unrestricted growth | The chosen growth law and carrying-capacity behaviour | 3 | **Passing, well mixed** |
 | V2 | Resource-limited growth | Expected saturation or starvation behaviour | 3 | **Passing, well mixed** |
-| V3 | Diffusion only | The numerical diffusion method, separately from microbial rules | 2 | **Reference ready, solver pending** |
+| V3 | Diffusion only | The numerical diffusion method, separately from microbial rules | 2 | **Passing, 1-D steady state** |
 | V4 | Attachment and biofilm initiation | Transition from planktonic or seeded biomass to attached growth | 4 | Planned |
 | V5 | Two-species competition | Expected dominance and coexistence regimes | 3 | **Passing, well mixed** |
 | V6 | Cross-feeding | Explicit beneficial exchange shifts the equilibrium as designed | 3 | Planned |
@@ -51,9 +51,21 @@ well-mixed answer substantially. V5 is the clearest example: competitive
 exclusion is a well-mixed result, and spatial structure can permit the
 coexistence it forbids (theory.md §7.3).
 
-V3's analytical references exist and are verified (`point_source_diffusion_2d`,
-`zero_order_penetration_depth`); what is missing is the solver to compare
-against them, which is the Phase 2 deliverable.
+V3 covers the one-dimensional steady-state solver
+(`marse.spatial.diffusion`). It is checked against three analytical limits
+that bracket real Monod uptake — no uptake, first order and zero order — plus
+a flux balance and a convergence study confirming the discretisation is
+second order. The transient and two-dimensional cases, for which
+`point_source_diffusion_2d` is the reference, arrive with biofilm structure.
+
+One note from building it, because it generalises. Comparing a numerical
+solution against an *approximate* analytical solution carries two errors: the
+discretisation error, which shrinks under refinement, and the error in the
+approximation itself, which does not. In the first-order limit the second is
+of order `C / K`, and at `K = 1e4` it sat above the grid error and flattened
+the measured convergence to zero — the solver looked first-order-at-best when
+it is second order. Any convergence study here must first establish that the
+reference is closer to exact than the grid error being measured.
 
 V9 and V10 adopt the published benchmark problems of the IWA Task Group on
 Biofilm Modeling, which exist precisely to compare modelling approaches and

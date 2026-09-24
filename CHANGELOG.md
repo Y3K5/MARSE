@@ -9,6 +9,21 @@ results for the same manifest is always called out.
 
 ### Added
 
+- **Spatial transport (Phase 2).** `spatial/domain.py` provides a uniform
+  one-dimensional grid through the depth of a slab, with an imposed surface
+  concentration and an impermeable base. `spatial/diffusion.py` solves the
+  steady reaction-diffusion equation with Monod uptake by Newton iteration on
+  a tridiagonal system, and reports the concentration profile, surface flux,
+  total uptake, penetration depth and anoxic fraction.
+- Validation case V3 now passes for the one-dimensional steady state, checked
+  against three analytical limits that bracket real Monod uptake — no uptake,
+  first order and zero order — plus a flux balance and a convergence study
+  confirming the discretisation is second order.
+- `first_order_profile` and `first_order_surface_flux` analytical references,
+  written so that a thick slab cannot overflow `cosh`.
+- `examples/biofilm_profile.py`: solves the oxygen profile through a biofilm
+  and compares the result with the closed-form penetration depth.
+
 - `.github/rulesets/`: branch and tag protection committed as importable JSON,
   so a change to who may write to the default branch is reviewable like any
   other change. The branch ruleset requires a pull request with all seven CI
