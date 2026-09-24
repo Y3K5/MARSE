@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import numpy as np
 from dataclasses import dataclass
+
+import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-__all__ = ["AdditiveEffect", "hill_response", "apply_effect"]
+__all__ = ["AdditiveEffect", "apply_effect", "hill_response"]
 
 
 def hill_response(concentration: ArrayLike, half_effect: float, coefficient: float) -> NDArray:
@@ -44,6 +45,7 @@ def apply_effect(effect: AdditiveEffect, concentration: ArrayLike) -> NDArray:
     occupancy = hill_response(concentration, effect.half_effect, effect.coefficient)
     if effect.direction == "decreasing":
         occupancy = 1.0 - occupancy
-    return effect.minimum_multiplier + (
-        effect.maximum_multiplier - effect.minimum_multiplier
-    ) * occupancy
+    return (
+        effect.minimum_multiplier
+        + (effect.maximum_multiplier - effect.minimum_multiplier) * occupancy
+    )
