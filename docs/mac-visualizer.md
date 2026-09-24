@@ -13,7 +13,11 @@ open runs/two-species/viewer.html
 The viewer renders species, nutrients, conditions, additives, phenotype states,
 effective growth rates, and limiting factors. It supports playback speed,
 single-frame stepping, keyboard controls, responsive canvas sizing, and
-click-to-inspect local fields.
+click-to-inspect local fields. The default Smooth fields mode uses browser
+interpolation for continuous density gradients and can be switched to Cell grid
+to inspect the exact numerical cells. Zoom enlarges the canvas for colony-scale
+inspection without changing the simulation data, while opacity helps compare a
+field with the dark spatial background.
 
 For a year-long experiment, do not export every integration step as a browser
 frame. Use a larger numerical timestep where the stability and biological
