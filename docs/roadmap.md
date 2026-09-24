@@ -73,7 +73,9 @@ The post-Phase-3 plan is to make every result evidence-linked and falsifiable:
    *(Bounded sampling, summary quantiles, and rank-based screening implemented;
    posterior inference and model-form comparison remain.)*
 5. **Benchmark organisms and experiments** — maintain a small source-linked
-   validation panel before expanding mechanism count.
+   validation panel before expanding mechanism count. *(Analytical benchmark
+   registry and comparison contracts implemented; curated organism cases
+   remain.)*
 6. **Adaptive spatial behaviour** — add chemotaxis, quorum signals, adhesion,
    detachment, morphology, and phenotype switching after the provider contracts
    are stable.
