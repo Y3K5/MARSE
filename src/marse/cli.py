@@ -25,6 +25,7 @@ from marse.core.simulation import BiofilmProfileResult, SimulationResult, run
 from marse.ecosystem import load_experiment as load_ecosystem_experiment
 from marse.ecosystem import run as run_ecosystem
 from marse.ecosystem import write_viewer
+from marse.niche import NicheError, load_niche_scan, run_niche_scan
 
 Result = SimulationResult | BiofilmProfileResult
 
@@ -155,6 +156,24 @@ def _command_ecosystem(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_niche_scan(args: argparse.Namespace) -> int:
+    scan = load_niche_scan(args.experiment)
+    result = run_niche_scan(scan)
+    output_dir = (
+        Path(args.output)
+        if args.output
+        else Path(args.experiment).parent / "runs" / scan.experiment_id
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    json_path = result.write_json(output_dir / "niche-scan.json")
+    csv_path = result.write_csv(output_dir / "niche-scan.csv")
+    print(f"experiment  {scan.experiment_id}")
+    print(f"rows        {len(result.rows)}")
+    print(f"wrote       {json_path}")
+    print(f"wrote       {csv_path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="marse",
@@ -181,6 +200,13 @@ def build_parser() -> argparse.ArgumentParser:
     ecosystem_command.add_argument("experiment", help="path to an ecosystem JSON configuration")
     ecosystem_command.add_argument("-o", "--output", help="directory for frames and viewer")
     ecosystem_command.set_defaults(handler=_command_ecosystem)
+
+    niche_command = commands.add_parser(
+        "niche-scan", help="scan environmental conditions against species capabilities"
+    )
+    niche_command.add_argument("experiment", help="path to a niche scan JSON configuration")
+    niche_command.add_argument("-o", "--output", help="directory for scan outputs")
+    niche_command.set_defaults(handler=_command_niche_scan)
     return parser
 
 
@@ -194,6 +220,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return int(args.handler(args))
     except ConfigError as error:
         print(f"marse: invalid experiment: {error}")
+        return 2
+    except NicheError as error:
+        print(f"marse: invalid niche scan: {error}")
         return 2
     except (OSError, ValueError, KeyError) as error:
         print(f"marse: {type(error).__name__}: {error}")
