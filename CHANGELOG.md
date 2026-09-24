@@ -7,7 +7,69 @@ results for the same manifest is always called out.
 
 ## [Unreleased]
 
+### Changed
+
+- **The two-dimensional ecosystem engine is documented as unverified.** A
+  review that ran it found nine defects. Among them: uptake follows potential
+  rather than actual growth, production has no source, the examples give oxygen
+  a diffusivity about 4×10⁵ below its physical value, and the periodontal
+  anaerobes are modelled as needing oxygen. `docs/validation.md` lists them with
+  measurements. Each is a test in `tests/test_ecosystem_known_defects.py` that
+  asserts the correct behaviour and is marked as an expected failure, so the fix
+  is what flips it. No simulation result changes in this release.
+- `docs/roadmap.md` puts correctness first: no new mechanism until the known
+  defects are fixed, and after that a mechanism lands only with its equations,
+  units, conservation test, verification case, graded parameters and changelog
+  entry.
+- `docs/specification.md` marks the immune and action primitives as
+  experimental and outside the v1.0 claims, and names the periodontal biofilm
+  as the flagship application, bounded as a research example.
+- `docs/architecture.md` no longer calls the two-dimensional transport operator
+  validated. It has not been checked against an analytical solution.
+- The benchmark registry's first test scored each case against its own expected
+  values, so it could not fail. It is now named for what it does check (the
+  comparison machinery). A new test scores the first-order oxygen case against
+  the validated one-dimensional solver and confirms second-order convergence.
+- Long parameter sweeps are marked `slow`, left out of pull-request CI and run
+  nightly (`.github/workflows/nightly.yml`). The pull-request suite drops from
+  about nine minutes to about one.
+- The project is named "Microbial Adaptability Resource Simulation Engine"
+  throughout (citation metadata, package metadata and CLI), matching the README
+  and the acronym.
+
 ### Added
+
+- **Two-dimensional multispecies ecosystem engine** (`marse.ecosystem`,
+  `marse ecosystem`). It provides nutrient, condition and additive fields with
+  explicit transport and fixed-value boundaries; seeded colonies and colony
+  spreading; competition coefficients; production into nutrient fields;
+  mutation flags; versioned provider contracts; and a self-contained
+  interactive HTML viewer with rendering modes and agent-level overlays. It is
+  not yet verified: see Changed above.
+- Niche capabilities and condition scans (`marse.niche`, `marse niche-scan`),
+  coupled to ecosystem growth and shown as viewer layers.
+- Chemotaxis up a field gradient; diffusing quorum signals with
+  quorum-triggered phenotype switching and hysteresis; surface adhesion and
+  detachment.
+- Continuous small-molecule additive fields with dose-response effects
+  (`marse.additives`).
+- Reproducible ecosystem ensembles over parameter grids (`marse.ensemble`,
+  `marse ecosystem-batch`).
+- An evidence layer for culture conditions and measurements (`marse.science`),
+  and a compiler from evidence records to validated configurations.
+- Replicate-aware growth-curve calibration (`marse.calibration`), and
+  uncertainty propagation with rank-based sensitivity screening
+  (`marse.uncertainty`).
+- A benchmark registry with comparison metrics
+  (`marse.validation.benchmarks`).
+- Explicit genotype-to-capability parameter mappings (`marse.genotype`).
+- Experimental host-pressure primitives: effector pressure and molecular
+  neutralisation, immune-cell action rules and action budgets (`marse.immune`,
+  `marse.actions`), with an integrated resistance scenario. These are outside
+  the v1.0 claims.
+- A three-species periodontal biofilm study with control and environment
+  variants, community-control workflows, and a parameter-provenance sidecar
+  that marks every value as an uncalibrated placeholder (confidence C).
 
 - **The spatial model is reachable from the kernel.** Until now `marse run`
   could only do well-mixed batch culture: the biofilm code was library-only,

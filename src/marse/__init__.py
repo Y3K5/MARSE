@@ -1,8 +1,9 @@
-"""MARSE: Microbial Adaptability Resource Engine.
+"""MARSE: Microbial Adaptability Resource Simulation Engine.
 
 An open, modular framework for reproducible spatial simulation of microbial
-populations and biofilms. MARSE is in Phase 0 (specification); see
-docs/roadmap.md for what exists today and what comes next.
+populations and biofilms. MARSE is under development and has no stable
+release yet; docs/roadmap.md says what exists today, docs/validation.md what
+has been verified, and the roadmap what comes next.
 """
 
 __version__ = "0.1.0.dev0"

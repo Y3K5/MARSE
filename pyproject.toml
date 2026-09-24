@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "marse"
 dynamic = ["version"]
-description = "Microbial Adaptability Resource Engine: reproducible spatial simulation of microbial populations and biofilms."
+description = "Microbial Adaptability Resource Simulation Engine: reproducible spatial simulation of microbial populations and biofilms."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]

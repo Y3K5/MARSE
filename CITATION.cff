@@ -2,7 +2,7 @@
 # affiliations when you decide to publish them (PRIVACY.md, "Publishing").
 cff-version: 1.2.0
 message: "If you use MARSE in your research, please cite it using these metadata."
-title: "MARSE: Microbial Adaptability Resource Engine"
+title: "MARSE: Microbial Adaptability Resource Simulation Engine"
 abstract: >-
   MARSE is an open, modular framework for reproducible spatial simulation of
   microbial populations and biofilms, with explicit adaptation states,
