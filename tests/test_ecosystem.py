@@ -194,3 +194,41 @@ def test_json_experiment_loader_and_viewer(tmp_path: Path):
     assert viewer.is_file()
     assert (tmp_path / "frames.json").is_file()
     assert "canvas" in viewer.read_text()
+
+
+def test_species_can_produce_a_metabolite_for_another_species():
+    producer = SpeciesConfig(
+        "producer",
+        0.2,
+        0.8,
+        (0.2, 0.01),
+        (1.0, 1.0),
+        production_per_nutrient=(0.0, 2.0),
+    )
+    consumer = SpeciesConfig(
+        "consumer",
+        0.1,
+        0.5,
+        (10.0, 0.02),
+        (1.0, 1.0),
+    )
+    result = run(
+        config(
+            duration_h=0.5,
+            timestep_h=0.001,
+            nutrients=(
+                NutrientConfig("carbon", 1.0, 0.0),
+                NutrientConfig("acetate", 0.1, 1.0),
+            ),
+            species=(producer, consumer),
+        )
+    )
+    initial_acetate = result.frames[0].nutrients[1].sum()
+    final_acetate = result.final_state.nutrients[1].sum()
+    assert final_acetate > initial_acetate
+    assert result.final_state.biomass[1].sum() > result.frames[0].biomass[1].sum()
+
+
+def test_negative_production_is_rejected():
+    with pytest.raises(EcosystemError, match="production"):
+        SpeciesConfig("invalid", 0.1, 0.2, (0.2,), (1.0,), production_per_nutrient=(-1.0,))
