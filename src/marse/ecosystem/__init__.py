@@ -1,6 +1,7 @@
 """Deterministic 2D ecosystem simulation and visualization frames."""
 
 from marse.ecosystem.model import (
+    ConditionConfig,
     EcosystemConfig,
     EcosystemError,
     EcosystemFrame,
@@ -15,6 +16,7 @@ from marse.ecosystem.model import (
 from marse.ecosystem.viewer import write_viewer
 
 __all__ = [
+    "ConditionConfig",
     "EcosystemConfig",
     "EcosystemError",
     "EcosystemFrame",
