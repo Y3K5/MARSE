@@ -16,6 +16,8 @@ __all__ = [
     "batch_final_biomass",
     "chemostat_break_even",
     "exponential_growth",
+    "first_order_profile",
+    "first_order_surface_flux",
     "logistic_growth",
     "monod_batch_time",
     "point_source_diffusion_2d",
@@ -77,6 +79,69 @@ def zero_order_penetration_depth(
     d, c0, k = as_array(diffusivity), as_array(boundary_concentration), as_array(uptake_rate)
     require(np.all(d > 0) and np.all(c0 >= 0) and np.all(k > 0), "invalid transport values")
     return unwrap(np.sqrt(2.0 * d * c0 / k))
+
+
+def _first_order_length(diffusivity: float, max_uptake: float, half_saturation: float) -> float:
+    """Reaction-diffusion length lambda = sqrt(D K / k_max) for first-order uptake."""
+    require(diffusivity > 0, "diffusivity must be positive")
+    require(max_uptake > 0, "max_uptake must be positive")
+    require(half_saturation > 0, "half_saturation must be positive")
+    return float(np.sqrt(diffusivity * half_saturation / max_uptake))
+
+
+def first_order_profile(
+    depth: ArrayLike,
+    *,
+    thickness: float,
+    diffusivity: float,
+    surface: float,
+    max_uptake: float,
+    half_saturation: float,
+) -> FloatOrArray:
+    """Steady profile of a solute consumed in proportion to its concentration.
+
+    The opposite limit to :func:`zero_order_penetration_depth`. When the solute
+    is everywhere far below the half-saturation constant, Monod uptake becomes
+    first order, ``R = (k_max / K) C``, and the steady state solves
+    ``D C'' = (k_max / K) C``. With ``C = surface`` at the top and no flux at
+    the base of a slab of the given ``thickness``,
+
+        C(z) = C0 cosh((L - z) / lambda) / cosh(L / lambda),
+        lambda = sqrt(D K / k_max).
+
+    Unlike the zero-order case the solute never runs out completely: it decays
+    towards the base rather than reaching a penetration depth. Together the two
+    limits bracket the behaviour of a real Monod uptake profile, which is why
+    MARSE checks its solver against both. Case V3.
+    """
+    require(thickness > 0, "thickness must be positive")
+    require(surface >= 0, "surface concentration must be non-negative")
+    z = as_array(depth)
+    require(np.all((z >= 0) & (z <= thickness)), "depth must lie within the slab")
+    scale = _first_order_length(diffusivity, max_uptake, half_saturation)
+    # cosh(a)/cosh(b) written so that a thick slab (b >> 1) cannot overflow.
+    a, b = (thickness - z) / scale, thickness / scale
+    ratio = np.exp(a - b) * (1.0 + np.exp(-2.0 * a)) / (1.0 + np.exp(-2.0 * b))
+    return unwrap(surface * ratio)
+
+
+def first_order_surface_flux(
+    *,
+    thickness: float,
+    diffusivity: float,
+    surface: float,
+    max_uptake: float,
+    half_saturation: float,
+) -> float:
+    """Flux into the slab for :func:`first_order_profile`, D C0 tanh(L/lambda) / lambda.
+
+    At steady state this must equal the total uptake integrated over the slab,
+    which is the strongest single check on a numerical solver: it ties the
+    boundary condition to the interior chemistry.
+    """
+    require(thickness > 0, "thickness must be positive")
+    scale = _first_order_length(diffusivity, max_uptake, half_saturation)
+    return float(diffusivity * surface * np.tanh(thickness / scale) / scale)
 
 
 def point_source_diffusion_2d(

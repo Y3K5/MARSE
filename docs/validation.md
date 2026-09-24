@@ -32,16 +32,40 @@ Every `ValidationCase` records:
 
 | ID | Case | What it demonstrates | Phase | Status |
 |---|---|---|---|---|
-| V1 | Single-species unrestricted growth | The chosen growth law and carrying-capacity behaviour | 3 | Planned |
-| V2 | Resource-limited growth | Expected saturation or starvation behaviour | 3 | Planned |
-| V3 | Diffusion only | The numerical diffusion method, separately from microbial rules | 2 | Planned |
+| V1 | Single-species unrestricted growth | The chosen growth law and carrying-capacity behaviour | 3 | **Passing, well mixed** |
+| V2 | Resource-limited growth | Expected saturation or starvation behaviour | 3 | **Passing, well mixed** |
+| V3 | Diffusion only | The numerical diffusion method, separately from microbial rules | 2 | **Passing, 1-D steady state** |
 | V4 | Attachment and biofilm initiation | Transition from planktonic or seeded biomass to attached growth | 4 | Planned |
-| V5 | Two-species competition | Expected dominance and coexistence regimes | 3 | Planned |
+| V5 | Two-species competition | Expected dominance and coexistence regimes | 3 | **Passing, well mixed** |
 | V6 | Cross-feeding | Explicit beneficial exchange shifts the equilibrium as designed | 3 | Planned |
 | V7 | Environmental perturbation | Recovery or adaptation after a resource, pH or oxygen shift | 4 | Planned |
-| V8 | Reproducibility | Re-running a saved manifest reproduces outputs within stated tolerances | 5 | Planned |
+| V8 | Reproducibility | Re-running a saved manifest reproduces outputs within stated tolerances | 5 | **Passing** |
 | V9 | IWA benchmark BM1 | Substrate flux and concentration for a monospecies biofilm at fixed biomass, against published reference solutions | 3 | Proposed |
 | V10 | IWA benchmark BM3 | Multispecies, multisubstrate biofilm (heterotrophs, nitrifiers, inert biomass) | 4 | Proposed |
+
+**"Well mixed" is a real qualifier, not a hedge.** V1, V2 and V5 are verified
+for a homogeneous batch or chemostat, where the analytical solutions apply.
+Their spatial counterparts — the same behaviours inside a biofilm with
+gradients — are what Phases 2 and 3 add, and they can diverge from the
+well-mixed answer substantially. V5 is the clearest example: competitive
+exclusion is a well-mixed result, and spatial structure can permit the
+coexistence it forbids (theory.md §7.3).
+
+V3 covers the one-dimensional steady-state solver
+(`marse.spatial.diffusion`). It is checked against three analytical limits
+that bracket real Monod uptake — no uptake, first order and zero order — plus
+a flux balance and a convergence study confirming the discretisation is
+second order. The transient and two-dimensional cases, for which
+`point_source_diffusion_2d` is the reference, arrive with biofilm structure.
+
+One note from building it, because it generalises. Comparing a numerical
+solution against an *approximate* analytical solution carries two errors: the
+discretisation error, which shrinks under refinement, and the error in the
+approximation itself, which does not. In the first-order limit the second is
+of order `C / K`, and at `K = 1e4` it sat above the grid error and flattened
+the measured convergence to zero — the solver looked first-order-at-best when
+it is second order. Any convergence study here must first establish that the
+reference is closer to exact than the grid error being measured.
 
 V9 and V10 adopt the published benchmark problems of the IWA Task Group on
 Biofilm Modeling, which exist precisely to compare modelling approaches and

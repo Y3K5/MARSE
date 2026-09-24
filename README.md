@@ -9,9 +9,10 @@ environmental conditions on a spatial domain, represents adaptation as explicit
 state transitions, applies controlled perturbations, and records the full
 provenance of every run so that any result can be replayed.
 
-> **Status: Phase 1, simulation kernel.** MARSE can define, run, save and
-> reproduce a well-mixed batch simulation. Space, diffusion and biofilm
-> structure are Phases 2–4; see the [roadmap](docs/roadmap.md).
+> **Status: Phase 2, space and resources.** MARSE can define, run, save and
+> reproduce a well-mixed batch simulation, and can solve the steady
+> reaction-diffusion profile through a biofilm. Coupling the two, and biofilm
+> structure itself, are Phases 3–4; see the [roadmap](docs/roadmap.md).
 
 Run a two-species batch culture and then reproduce it exactly from its manifest:
 
@@ -34,6 +35,7 @@ and [docs/parameters.md](docs/parameters.md) for sourced parameter values.
 ```bash
 python examples/batch_growth.py        # Monod growth vs its closed-form solution
 python examples/oxygen_penetration.py  # why active biofilms are stratified
+python examples/biofilm_profile.py     # solved oxygen profile through a biofilm
 ```
 
 ## What MARSE v1.0 will do

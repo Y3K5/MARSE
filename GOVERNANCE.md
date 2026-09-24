@@ -77,12 +77,16 @@ them, including which are unavailable on which plan.
 
 **Default branch ruleset** (Settings → Rules → Rulesets, targeting the default branch)
 
-> Rulesets and classic branch protection are **not available for private
-> repositories on GitHub Free**; they need Pro, Team or Enterprise Cloud. They
-> are free for *public* repositories on every plan. While this repository is
-> private on a free plan, the checks below cannot be enforced by GitHub, and
-> the repository's own guards plus the maintainer's discipline are what stand
-> in for them. See [docs/repository-setup.md](docs/repository-setup.md).
+> The configuration is committed as JSON in
+> [`.github/rulesets/`](.github/rulesets/) and is imported through
+> **Settings → Rules → Rulesets → New ruleset ▾ → Import a ruleset**.
+> Rulesets are free on public repositories and unavailable for private ones on
+> GitHub Free.
+>
+> Required approvals are set to **zero** deliberately, because GitHub does not
+> permit approving your own pull request and this project has one maintainer;
+> [`.github/rulesets/README.md`](.github/rulesets/README.md) explains the
+> trade-off and what to change when that stops being true.
 
 - [ ] Require a pull request before merging.
 - [ ] Require review from Code Owners.

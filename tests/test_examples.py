@@ -25,9 +25,23 @@ def run_example(name: str) -> str:
     return result.stdout
 
 
-@pytest.mark.parametrize("name", ["batch_growth.py", "oxygen_penetration.py"])
+@pytest.mark.parametrize("name", ["batch_growth.py", "oxygen_penetration.py", "biofilm_profile.py"])
 def test_example_runs_cleanly(name):
     assert run_example(name).strip()
+
+
+def test_biofilm_profile_conserves_oxygen_and_is_stratified():
+    output = run_example("biofilm_profile.py")
+    difference = float(
+        next(line for line in output.splitlines() if "relative difference" in line).split()[-1]
+    )
+    assert difference < 1e-5, "oxygen entering the surface must equal oxygen consumed inside"
+    anoxic = float(
+        next(line for line in output.splitlines() if "anoxic fraction" in line)
+        .split()[-1]
+        .rstrip("%")
+    )
+    assert 40.0 < anoxic < 95.0
 
 
 def test_batch_growth_reproduces_the_analytical_solution():
