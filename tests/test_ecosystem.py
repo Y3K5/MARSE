@@ -1,5 +1,6 @@
 """Tests for the deterministic 2D multi-species ecosystem foundation."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -395,6 +396,35 @@ def test_quorum_signal_must_reference_an_additive():
                 config().species[1],
             )
         )
+
+
+def test_adhesion_transfers_biomass_to_a_surface_and_detachment_reduces_it():
+    base_species = SpeciesConfig(
+        "surface_colonizer",
+        0.1,
+        0.0,
+        (0.2, 0.2),
+        (1.0, 1.0),
+        spreading_per_h=1.0,
+        seed_regions=(SeedRegion(0.5, 0.5, 0.2, 0.4),),
+        adhesion_per_h=10.0,
+        adhesion_edges=("top",),
+    )
+    attached = run(config(duration_h=0.1, species=(base_species,))).final_state.biomass[0]
+    assert attached[0].sum() > attached[-1].sum()
+
+    detached = run(
+        config(
+            duration_h=0.1,
+            species=(replace(base_species, detachment_per_h=20.0),),
+        )
+    ).final_state.biomass[0]
+    assert detached[0].sum() < attached[0].sum()
+
+
+def test_adhesion_edges_are_validated():
+    with pytest.raises(EcosystemError, match="adhesion edges"):
+        SpeciesConfig("invalid", 0.1, 0.0, (0.2,), (1.0,), adhesion_edges=("diagonal",))
 
 
 def test_spatial_capability_rate_and_limiting_factor_are_exported():

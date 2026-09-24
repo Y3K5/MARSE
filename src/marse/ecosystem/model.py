@@ -170,6 +170,9 @@ class SpeciesConfig:
     phenotypes: tuple[PhenotypeConfig, ...] = ()
     quorum_signal: str | None = None
     quorum_secretion_per_h: float = 0.0
+    adhesion_per_h: float = 0.0
+    detachment_per_h: float = 0.0
+    adhesion_edges: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -201,6 +204,12 @@ class SpeciesConfig:
             raise EcosystemError(f"species '{self.name}': quorum signal must not be empty")
         if self.quorum_secretion_per_h < 0:
             raise EcosystemError(f"species '{self.name}': quorum secretion must be non-negative")
+        if self.adhesion_per_h < 0 or self.detachment_per_h < 0:
+            raise EcosystemError(
+                f"species '{self.name}': adhesion and detachment must be non-negative"
+            )
+        if any(edge not in {"top", "bottom", "left", "right"} for edge in self.adhesion_edges):
+            raise EcosystemError(f"species '{self.name}': adhesion edges are invalid")
         if len({phenotype.name for phenotype in self.phenotypes}) != len(self.phenotypes):
             raise EcosystemError(f"species '{self.name}': phenotype names must be unique")
         if len({effect.additive for effect in self.additive_effects}) != len(self.additive_effects):
@@ -629,6 +638,13 @@ def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
                     item.get("quorum_secretion_per_h", 0.0),
                     f"species[{i}].quorum_secretion_per_h",
                 ),
+                adhesion_per_h=_number(
+                    item.get("adhesion_per_h", 0.0), f"species[{i}].adhesion_per_h"
+                ),
+                detachment_per_h=_number(
+                    item.get("detachment_per_h", 0.0), f"species[{i}].detachment_per_h"
+                ),
+                adhesion_edges=tuple(str(edge) for edge in item.get("adhesion_edges", ())),
                 phenotypes=tuple(
                     PhenotypeConfig(
                         name=str(phenotype.get("name", "")),
@@ -913,6 +929,37 @@ def _chemotaxis_step(
     return np.maximum(biomass - dt * divergence, 0.0)
 
 
+def _adhesion_step(
+    biomass: NDArray[np.float64],
+    *,
+    adhesion_per_h: float,
+    detachment_per_h: float,
+    edges: tuple[str, ...],
+    dt: float,
+) -> NDArray[np.float64]:
+    """Transfer biomass toward selected surfaces and remove detached edge biomass."""
+    if not edges or (adhesion_per_h == 0.0 and detachment_per_h == 0.0):
+        return biomass
+    updated = biomass.copy()
+    for edge in edges:
+        if edge == "top":
+            surface, interior = (0, slice(None)), (1, slice(None))
+        elif edge == "bottom":
+            surface, interior = (-1, slice(None)), (-2, slice(None))
+        elif edge == "left":
+            surface, interior = (slice(None), 0), (slice(None), 1)
+        else:
+            surface, interior = (slice(None), -1), (slice(None), -2)
+        transfer = np.minimum(
+            biomass[interior] * dt * adhesion_per_h,
+            biomass[interior],
+        )
+        updated[interior] -= transfer
+        updated[surface] += transfer
+        updated[surface] *= np.exp(-dt * detachment_per_h)
+    return np.maximum(updated, 0.0)
+
+
 def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) -> EcosystemResult:
     """Run a deterministic ecosystem experiment and retain every frame."""
     providers = providers or EcosystemProviders()
@@ -1067,6 +1114,13 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
                     dt=dt,
                     cell_size_um=config.cell_size_um,
                 )
+            biomass[species_index] = _adhesion_step(
+                biomass[species_index],
+                adhesion_per_h=species.adhesion_per_h,
+                detachment_per_h=species.detachment_per_h,
+                edges=species.adhesion_edges,
+                dt=dt,
+            )
             growth_factor = np.where(
                 mutations[species_index] > 0, species.mutation_growth_multiplier, 1.0
             )

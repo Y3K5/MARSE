@@ -79,8 +79,8 @@ The post-Phase-3 plan is to make every result evidence-linked and falsifiable:
 6. **Adaptive spatial behaviour** — add chemotaxis, quorum signals, adhesion,
    detachment, morphology, and phenotype switching after the provider contracts
    are stable. *(Optional conservative chemotaxis, explicit diffusing quorum
-   signals, and quorum-triggered phenotype switching are implemented;
-   adhesion, detachment, and morphology remain.)*
+   signals, quorum-triggered phenotype switching, and opt-in surface
+   adhesion/detachment are implemented; morphology remains.)*
 7. **Genotype-to-capability maps** — connect genotype to regulated protein
    abundance and traits only where data constrain the mapping.
 8. **Scientific observability** — expose conservation residuals, validity
