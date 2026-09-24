@@ -11,9 +11,31 @@ Report it privately instead:
 (*Security* tab → *Report a vulnerability*). Only you and the maintainers can
 see it.
 
+> While this repository is private, that link is not active: GitHub offers
+> private vulnerability reporting on public repositories only. It is enabled as
+> part of going public ([GOVERNANCE.md](GOVERNANCE.md#settings-only-the-owner-can-apply)).
+
 Include what you found and where (file, commit or release) and, for a
 vulnerability, how to reproduce it. Do not copy leaked data into the report;
 its location is enough.
+
+## How this repository is protected
+
+Who may change and release MARSE is set out in
+[GOVERNANCE.md](GOVERNANCE.md), along with the GitHub settings that enforce it.
+
+The repository also defends itself on every commit and in CI:
+
+- [`tools/repo_guard.py`](tools/repo_guard.py) requires every GitHub Action to
+  be pinned to a commit SHA, refuses the `pull_request_target` trigger, refuses
+  undeclared write permissions, refuses untrusted text interpolated into shell
+  commands, and refuses any publishing step that is not behind an approval
+  gate. It also keeps the documented package layout intact.
+- [`tools/privacy_guard.py`](tools/privacy_guard.py) and gitleaks keep personal
+  data and secrets out of the files and the history ([PRIVACY.md](PRIVACY.md)).
+
+No workflow in this repository publishes anything, and one cannot be added
+without an approval gate.
 
 ## Supported versions
 

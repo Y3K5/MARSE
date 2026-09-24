@@ -9,12 +9,23 @@ environmental conditions on a spatial domain, represents adaptation as explicit
 state transitions, applies controlled perturbations, and records the full
 provenance of every run so that any result can be replayed.
 
-> **Status: Phase 0, specification.** This repository holds the design, the
-> mathematical core and its validation, the package layout and the development
-> infrastructure. The simulation kernel that drives these models in space and
-> time is Phase 1; see the [roadmap](docs/roadmap.md).
+> **Status: Phase 1, simulation kernel.** MARSE can define, run, save and
+> reproduce a well-mixed batch simulation. Space, diffusion and biofilm
+> structure are Phases 2–4; see the [roadmap](docs/roadmap.md).
 
-The mathematics is implemented and tested: growth kinetics, cardinal
+Run a two-species batch culture and then reproduce it exactly from its manifest:
+
+```bash
+marse run examples/experiments/two_species_batch.json -o runs/demo
+marse replay runs/demo/manifest.json
+```
+
+The manifest records the configuration, its SHA-256 checksum, the random seed,
+the versioned models used and the software versions — and deliberately records
+no username, hostname or absolute path, so it is safe to attach to a paper or
+an issue.
+
+The mathematics underneath is implemented and tested: growth kinetics, cardinal
 temperature and pH models, oxygen solubility and diffusivity, and analytical
 reference solutions that the validation suite checks against independent
 numerical integration. See [docs/theory.md](docs/theory.md) for the equations
@@ -61,7 +72,7 @@ predict clinical or vaccine outcomes, or produce experimental evidence; the
 
 ```text
 src/marse/         the Python package
-  core/            run loop, state, configuration, provenance
+  core/            run loop, state, configuration, seeds, provenance
   schemas/         validated canonical objects
   spatial/         domains, grids, diffusion; solute properties
   microbes/        growth kinetics, cardinal models, interactions
@@ -70,6 +81,7 @@ src/marse/         the Python package
   interventions/   perturbations
   validation/      analytical references, benchmark and regression cases
 examples/          runnable reference calculations
+  experiments/     experiment configurations for `marse run`
 tests/             test suite
 docs/              theory, parameters, specification, architecture, validation, roadmap
 tools/             repository tooling (privacy guard)
@@ -114,6 +126,8 @@ Before your first commit, complete the one-time setup in
 ## Contributing, privacy and security
 
 - [CONTRIBUTING.md](CONTRIBUTING.md): workflow, tests and scientific standards.
+- [GOVERNANCE.md](GOVERNANCE.md): who may merge and release, and the settings that enforce it.
+- [docs/repository-setup.md](docs/repository-setup.md): applying those settings, step by step.
 - [PRIVACY.md](PRIVACY.md): what never enters this repository, and how that is enforced.
 - [SECURITY.md](SECURITY.md): report vulnerabilities or leaked data privately.
 

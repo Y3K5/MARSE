@@ -4,7 +4,9 @@ MARSE is developed in the open, in phases. Each phase has an exit criterion,
 and the next phase starts once it is met. Progress is tracked in issues and
 milestones.
 
-**Current phase: 0, specification.**
+**Current phase: 1, simulation kernel.** A well-mixed batch simulation can be
+defined, run, saved and reproduced exactly from its manifest. Space and
+diffusion are next.
 
 | Phase | Deliverable | Exit criterion |
 |---|---|---|
@@ -25,9 +27,11 @@ milestones.
    scientific specification. *(Done.)*
 2. Validated configuration models for `Organism`, `Environment`,
    `ResourceField`, `PopulationState`, `Interaction`, `Perturbation` and
-   `SimulationRun`.
+   `SimulationRun`. *(Done for the non-spatial subset: organism, environment,
+   substrate and run. `ResourceField`, `Interaction` and `Perturbation` arrive
+   with Phases 2–4.)*
 3. Deterministic simulation clock, state checkpoints, random-seed handling and
-   the run manifest.
+   the run manifest. *(Done.)*
 4. A simple spatial domain and diffusion solver, validated on its own.
 5. One microbial growth model and one resource-consumption model.
 6. Local interaction and adhesion rules sufficient for a first biofilm

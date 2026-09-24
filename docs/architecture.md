@@ -44,8 +44,10 @@ src/marse/
   validation/      analytical/, regression/, literature_cases/
 ```
 
-So far only the subpackages exist, each documenting its responsibility. The
-modules are added phase by phase.
+Implemented so far: `core/config.py`, `core/state.py`, `core/seeds.py`,
+`core/provenance.py` and `core/simulation.py` (the Phase 1 kernel), plus
+`microbes/growth.py`, `microbes/cardinal.py`, `spatial/solutes.py` and
+`validation/analytical.py`. The remaining modules are added phase by phase.
 
 ## Providers
 
@@ -109,6 +111,13 @@ outputs:
 Manifests record random seeds, software and provider versions, parameters,
 numerical methods, boundary conditions, initial states and a SHA-256 checksum
 of every input.
+
+The implemented manifest (`marse.core.provenance`) is JSON with sorted keys, so
+the same run produces byte-identical output and manifests diff cleanly. The
+`run_id` is derived from the configuration checksum, which means the same
+experiment always carries the same identifier and re-running is idempotent.
+Reading a manifest re-verifies the checksum, so one edited after the run is
+refused rather than replayed into different results.
 
 ### Privacy rules for manifests and outputs
 

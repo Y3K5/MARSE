@@ -36,6 +36,16 @@ repos:
     hooks:
       - id: gitleaks
 
+  # Repository structure and workflow security: tools/repo_guard.py
+  - repo: local
+    hooks:
+      - id: repo-guard
+        name: repo guard (workflows and structure)
+        entry: python tools/repo_guard.py
+        language: python
+        pass_filenames: false
+        always_run: true
+
   # Personal data: tools/privacy_guard.py
   - repo: local
     hooks:

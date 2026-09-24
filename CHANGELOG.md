@@ -9,6 +9,36 @@ results for the same manifest is always called out.
 
 ### Added
 
+- **Repository hardening.** `tools/repo_guard.py` runs on every commit and in
+  CI, and fails if a GitHub Action is not pinned to a commit SHA, a workflow
+  uses `pull_request_target`, a workflow takes write permissions that were not
+  declared, untrusted text is interpolated into a shell command, a publishing
+  step appears without an approval gate, a required file is missing, the
+  documented package layout is broken, or unexpected files accumulate at the
+  repository root. In CI it runs directly rather than through pre-commit, so
+  disabling it requires editing a workflow.
+- `GOVERNANCE.md`: who may merge and release, how a release is made, and the
+  GitHub settings that enforce access control.
+- `.github/CODEOWNERS`: the maintainer's review is requested on every path,
+  with the workflow, tooling and policy paths named separately.
+
+- **Simulation kernel (Phase 1).** A well-mixed batch culture of one or more
+  organisms competing for a single limiting substrate can now be defined, run,
+  saved and reproduced:
+  - `marse run <experiment.json>` writes a trajectory and a run manifest;
+    `marse replay <manifest.json>` rebuilds the configuration, verifies its
+    checksum, re-runs and reports whether the results match.
+  - Validated configuration with units in every field name; unknown fields and
+    out-of-range values are refused with the offending field named.
+  - Deterministic RK4 clock, checkpoints, and a substrate balance checked every
+    step. A diverging run or a timestep too large for the configured rates is
+    reported rather than silently clamped.
+  - Name-keyed random streams, so adding a provider cannot perturb the stream
+    any other provider sees.
+  - Run manifests recording the configuration, its SHA-256 checksum, the seed,
+    versioned model names and software versions — and no username, hostname or
+    absolute path.
+
 - `docs/modeling-landscape.md`: survey of established microbial and biofilm
   simulators, how growth in natural environments differs from laboratory
   growth, and the consequences for MARSE's design.
