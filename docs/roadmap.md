@@ -4,11 +4,15 @@ MARSE is developed in the open, in phases. Each phase has an exit criterion,
 and the next phase starts once it is met. Progress is tracked in issues and
 milestones.
 
-**Current phase: 2, space and resources.** A well-mixed batch simulation can be
-defined, run, saved and reproduced exactly from its manifest (Phase 1), and the
-one-dimensional steady-state reaction-diffusion solver is in place and
-validated against three analytical limits (validation case V3). Coupling it to
-growing biomass is Phase 3.
+**Current phase: 3, microbial dynamics.** A well-mixed batch simulation can be
+defined, run, saved and reproduced exactly from its manifest (Phase 1); the
+one-dimensional reaction-diffusion solver is validated against three analytical
+limits (Phase 2, validation case V3); and growth is now coupled to the solute
+gradient, so each depth grows at the rate its own local concentration supports.
+What remains in Phase 3 is letting that growth change the biomass distribution
+over time, which is where the biomass-spreading choice of
+[modeling-landscape.md](modeling-landscape.md#2-the-biomass-spreading-decision)
+has to be made.
 
 | Phase | Deliverable | Exit criterion |
 |---|---|---|

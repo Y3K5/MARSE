@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 
 from marse._numeric import require
 from marse.spatial.domain import Grid1D
@@ -50,15 +50,21 @@ class SoluteProfile:
     def depths(self) -> NDArray[np.float64]:
         return self.grid.depths
 
-    def uptake(self, max_uptake: float, half_saturation: float) -> NDArray[np.float64]:
+    def uptake(self, max_uptake: ArrayLike, half_saturation: float) -> NDArray[np.float64]:
         """Volumetric uptake rate at each node."""
         c = self.concentration
-        return max_uptake * c / (half_saturation + c)
+        return np.asarray(max_uptake, dtype=float) * c / (half_saturation + c)
 
-    def total_uptake(self, max_uptake: float, half_saturation: float) -> float:
-        """Uptake integrated over the full depth, per unit surface area."""
-        surface_rate = max_uptake * self.surface / (half_saturation + self.surface)
-        return self.grid.integrate(surface_rate, self.uptake(max_uptake, half_saturation))
+    def total_uptake(self, max_uptake: ArrayLike, half_saturation: float) -> float:
+        """Uptake integrated over the full depth, per unit surface area.
+
+        With per-node capacity the surface rate uses the capacity of the
+        topmost node, since the boundary itself holds no biomass of its own.
+        """
+        capacity = np.asarray(max_uptake, dtype=float)
+        topmost = float(capacity if capacity.ndim == 0 else capacity[0])
+        surface_rate = topmost * self.surface / (half_saturation + self.surface)
+        return self.grid.integrate(surface_rate, self.uptake(capacity, half_saturation))
 
     def surface_flux(self, diffusivity: float) -> float:
         """Flux into the slab, from a second-order one-sided derivative at the surface.
@@ -123,7 +129,7 @@ def solve_steady_state(
     *,
     diffusivity: float,
     surface: float,
-    max_uptake: float,
+    max_uptake: ArrayLike,
     half_saturation: float,
     tolerance: float = 1e-12,
     max_iterations: int = 200,
@@ -134,13 +140,25 @@ def solve_steady_state(
     depth in micrometres, ``diffusivity`` is um^2/s, ``surface`` and
     ``half_saturation`` are mM, and ``max_uptake`` is mM/s.
 
-    ``max_uptake`` of zero is permitted and gives the pure-diffusion case.
+    ``max_uptake`` may be a single value, for uniform demand, or one value per
+    node. The per-node form is what couples this solver to a biofilm whose
+    biomass varies with depth: uptake capacity is proportional to the local
+    biomass, so a sparsely colonised region consumes less and lets the solute
+    travel further. Zero is permitted and gives the pure-diffusion case.
     """
     require(diffusivity > 0, "diffusivity must be positive")
     require(surface >= 0, "surface concentration must be non-negative")
-    require(max_uptake >= 0, "max_uptake must be non-negative")
     require(half_saturation > 0, "half_saturation must be positive")
     require(tolerance > 0, "tolerance must be positive")
+
+    capacity = np.asarray(max_uptake, dtype=float)
+    require(bool(np.all(capacity >= 0)), "max_uptake must be non-negative")
+    require(
+        capacity.ndim == 0 or capacity.shape == (grid.cells,),
+        f"max_uptake must be a single value or one per node; "
+        f"got shape {capacity.shape} for {grid.cells} nodes",
+    )
+    max_uptake = capacity
 
     n, dx = grid.cells, grid.dx
     conduction = diffusivity / dx**2
