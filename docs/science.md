@@ -25,3 +25,16 @@ Datasets are loaded from JSON with `load_culture_dataset` and serialized in
 canonical form for a reproducible SHA-256 checksum. Missing references,
 unsupported endpoints, invalid ranges, and universal optimum claims are
 rejected before a record can be used to construct a simulation.
+
+## Evidence-to-experiment compilation
+
+`compile_culture` is the first bridge from evidence to execution. It compiles
+a strain-specific **broth** record with a fitted growth rate into a validated
+`ExperimentConfig`, while requiring the experiment designer to provide
+substrate concentration, yield, half-saturation, initial biomass, duration,
+and timestep. Those values are not safely inferable from a culture record.
+
+The returned `ExperimentCompilation` includes the selected sources, dataset
+checksum, assumptions, and unresolved requirements. Agar, semi-solid, and
+biofilm records are intentionally not projected into the well-mixed batch
+kernel; they remain evidence until a spatial compiler is implemented.

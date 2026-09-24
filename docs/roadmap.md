@@ -52,6 +52,32 @@ has to be made.
 10. Experimental external policy adapters, compared against the deterministic
     policies on bounded decisions.
 
+## Long-term scientific platform plan
+
+The post-Phase-3 plan is to make every result evidence-linked and falsifiable:
+
+1. **Evidence-to-experiment compiler** — compile only context-compatible
+   culture records into validated configurations; preserve source IDs,
+   assumptions, unresolved values, and dataset checksums. *(Broth slice
+   implemented; spatial formats remain explicit.)*
+2. **Provider-based ecosystem kernel** — separate transport, reactions,
+   capability responses, biomass, events, mechanics, and diagnostics behind
+   versioned contracts with fixed update order.
+3. **Calibration and inverse modelling** — fit growth, CFU, colony-area,
+   inhibition, nutrient, and oxygen observations with replicate-aware
+   uncertainty and identifiability checks.
+4. **Uncertainty and sensitivity** — propagate measurement, parameter,
+   numerical, and model-form uncertainty through reproducible ensembles.
+5. **Benchmark organisms and experiments** — maintain a small source-linked
+   validation panel before expanding mechanism count.
+6. **Adaptive spatial behaviour** — add chemotaxis, quorum signals, adhesion,
+   detachment, morphology, and phenotype switching after the provider contracts
+   are stable.
+7. **Genotype-to-capability maps** — connect genotype to regulated protein
+   abundance and traits only where data constrain the mapping.
+8. **Scientific observability** — expose conservation residuals, validity
+   limits, evidence compatibility, convergence, and provenance for every run.
+
 ## First publishable milestone
 
 A researcher can install MARSE, run a documented single- and multispecies
