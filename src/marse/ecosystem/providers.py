@@ -45,7 +45,7 @@ class TransportProvider(Protocol):
         self,
         field: NDArray[np.float64],
         *,
-        diffusivity: float,
+        diffusivity: float | NDArray[np.float64],
         dt: float,
         cell_size_um: float,
         decay_per_h: float = 0.0,
@@ -83,13 +83,13 @@ class ExplicitTransportProvider:
         self,
         field: NDArray[np.float64],
         *,
-        diffusivity: float,
+        diffusivity: float | NDArray[np.float64],
         dt: float,
         cell_size_um: float,
         decay_per_h: float = 0.0,
         boundary: FieldBoundary,
     ) -> NDArray[np.float64]:
-        updated = field + dt * diffusivity / cell_size_um**2 * _laplacian(field)
+        updated = field + dt * np.asarray(diffusivity) / cell_size_um**2 * _laplacian(field)
         if decay_per_h:
             updated *= np.exp(-dt * decay_per_h)
         _apply_boundary(updated, boundary)
