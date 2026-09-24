@@ -35,7 +35,14 @@ COMMUNITIES = (
     ("T. forsythia", "P. gingivalis"),
     SPECIES,
 )
-RESOURCE_PERTURBATIONS = ("reference", "oxygen", "heme", "peptides")
+RESOURCE_PERTURBATIONS = (
+    "reference",
+    "oxygen",
+    "heme",
+    "peptides",
+    "succinate_ablation",
+    "acetate_ablation",
+)
 COMPETITION_MODES = ("reference", "none")
 
 
@@ -54,6 +61,8 @@ def _record(config: dict, competition_mode: str, resource_perturbation: str) -> 
     for index, species in enumerate(config["species"]):
         record[f"biomass:{species['name']}"] = float(final.biomass[index].sum())
         record[f"occupied:{species['name']}"] = int(occupied[index].sum())
+    for index, additive in enumerate(config.get("additives", [])):
+        record[f"metabolite_mean:{additive['name']}"] = float(final.additives[index].mean())
     return record
 
 

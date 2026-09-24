@@ -22,6 +22,9 @@ quantitative interpretation.
 - **Declared production fields:** growth contributes small, named nutrient
   production terms as bookkeeping proxies for cross-feeding or released
   resources. These are not assigned to a particular metabolite.
+- **Named metabolite proxies:** `succinate` and `acetate` are transported and
+  decayed as explicit additive fields with declared producer/consumer rates.
+  Their names do not imply calibrated exchange stoichiometry.
 - **Mutation flags:** low-probability growth multipliers provide a way to
   visualize sensitivity to heritable variation, not a gene-level model.
 
