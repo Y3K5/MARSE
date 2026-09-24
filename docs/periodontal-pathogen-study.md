@@ -69,3 +69,19 @@ The manifest records the base configuration checksum, software environment,
 temperature levels, moisture levels, replicate set, and scenario count. Keep
 generated runs outside Git and archive a selected release plus the manifest
 with a DOI when preparing a paper.
+
+## Parameter provenance and calibration status
+
+`periodontal_pathogen_provenance.json` is a sidecar register for the
+experiment. It records parameter paths, units, the current source identifier,
+evidence grade, calibration status, and the measurements needed to replace
+placeholders. Its current status is explicitly `exploratory-placeholder`:
+the repository does not yet claim organism-specific measurements for these
+values.
+
+The variant workflow hashes both the experiment and provenance sidecar into
+`manifest.json`. Before quantitative publication, replace the placeholder
+source with source-linked growth curves, uptake/yield data, pairwise and
+three-species competition observations, attachment/detachment measurements,
+and named metabolite measurements. Calibration should then be performed
+against controls before interpreting mixed-community outcomes.

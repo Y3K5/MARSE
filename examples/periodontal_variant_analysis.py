@@ -25,6 +25,7 @@ from typing import Any
 from marse.ecosystem.model import ecosystem_from_dict, run
 
 BASE = Path(__file__).parent / "experiments" / "periodontal_pathogen_biofilm.json"
+PROVENANCE = Path(__file__).parent / "experiments" / "periodontal_pathogen_provenance.json"
 TEMPERATURES = (30.0, 37.0, 40.0)
 MOISTURES = ("reduced", "reference")
 REPLICATES = (0, 1, 2)
@@ -89,6 +90,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     base = json.loads(BASE.read_text(encoding="utf-8"))
+    provenance = json.loads(PROVENANCE.read_text(encoding="utf-8"))
     species = [item["name"] for item in base["species"]]
     records = []
     for temperature in TEMPERATURES:
@@ -115,6 +117,13 @@ def main() -> None:
     manifest = {
         "base_experiment": str(BASE.relative_to(BASE.parents[1])),
         "base_sha256": _checksum(base),
+        "provenance_file": str(PROVENANCE.relative_to(PROVENANCE.parents[1])),
+        "provenance_sha256": _checksum(provenance),
+        "provenance_status": provenance["status"],
+        "parameter_group_ids": [group["id"] for group in provenance["parameter_groups"]],
+        "calibration_status": sorted(
+            {group["calibration_status"] for group in provenance["parameter_groups"]}
+        ),
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "temperatures_c": TEMPERATURES,

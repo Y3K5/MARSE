@@ -1,3 +1,5 @@
+import json
+
 from marse.ecosystem import load_experiment, run
 
 
@@ -25,3 +27,7 @@ def test_periodontal_variant_workflow_writes_compact_controls(tmp_path, monkeypa
     assert (tmp_path / "summary.csv").is_file()
     assert (tmp_path / "manifest.json").is_file()
     assert len((tmp_path / "summary.csv").read_text(encoding="utf-8").splitlines()) == 73
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["provenance_status"] == "exploratory-placeholder"
+    assert manifest["calibration_status"] == ["not-calibrated"]
+    assert "community-interactions" in manifest["parameter_group_ids"]
