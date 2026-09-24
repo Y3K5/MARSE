@@ -131,6 +131,7 @@ def evaluate_capability(
     capability: Capability, conditions: dict[str, float]
 ) -> CapabilityEvaluation:
     """Evaluate one capability and identify its strongest limiting factor."""
+
     def condition(name: str) -> float:
         if name not in conditions:
             raise NicheError(f"missing condition '{name}'")
@@ -172,11 +173,7 @@ def _capability_from_dict(raw: dict[str, Any], index: int) -> Capability:
                 if raw.get("temperature_c") is not None
                 else None
             ),
-            ph=(
-                tuple(float(value) for value in raw["ph"])
-                if raw.get("ph") is not None
-                else None
-            ),
+            ph=(tuple(float(value) for value in raw["ph"]) if raw.get("ph") is not None else None),
             oxygen_half_saturation=(
                 float(raw["oxygen_half_saturation"])
                 if raw.get("oxygen_half_saturation") is not None
@@ -218,9 +215,7 @@ def run_niche_scan(scan: NicheScan) -> NicheScanResult:
     """Evaluate every species capability at every Cartesian axis combination."""
     axis_names = tuple(scan.axes)
     required_axes = {
-        capability.substrate
-        for species in scan.species
-        for capability in species.capabilities
+        capability.substrate for species in scan.species for capability in species.capabilities
     }
     required_axes.update(
         condition
@@ -241,7 +236,9 @@ def run_niche_scan(scan: NicheScan) -> NicheScanResult:
     for values in itertools.product(*(scan.axes[name] for name in axis_names)):
         conditions = dict(zip(axis_names, values, strict=True))
         for species in scan.species:
-            evaluations = [evaluate_capability(capability, conditions) for capability in species.capabilities]
+            evaluations = [
+                evaluate_capability(capability, conditions) for capability in species.capabilities
+            ]
             best = max(evaluations, key=lambda evaluation: evaluation.rate_per_h)
             rows.append(
                 {
