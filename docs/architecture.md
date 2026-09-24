@@ -72,9 +72,13 @@ class GrowthModel(Protocol):
 
 The spatial ecosystem now has a concrete first contract in
 `marse.ecosystem.providers`. `ExplicitTransportProvider` advances one
-non-negative field with the validated finite-difference operator and fixed
-boundaries; `EcosystemProviders` declares transport, biomass spreading,
-reaction, biomass, and diagnostics versions. Every ecosystem result records
+field with an explicit two-dimensional finite-difference operator and fixed
+boundaries. That operator is not yet verified: unlike the one-dimensional
+solver in `marse.spatial.diffusion`, it has not been checked against an
+analytical solution (see
+[validation.md](validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified)).
+`EcosystemProviders` declares transport, biomass spreading, reaction, biomass,
+and diagnostics versions. Every ecosystem result records
 these versions, and the default providers preserve the existing numerical
 behavior. Future reaction, mechanics, or stochastic providers must implement
 the same state-and-units boundary rather than modifying the orchestration loop.

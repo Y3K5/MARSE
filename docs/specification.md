@@ -63,6 +63,30 @@ molecular providers and multiscale coupling
 ([architecture](architecture.md#extension-points-after-v10)), but v1.0 does
 not implement them.
 
+### Experimental code outside the v1.0 claims
+
+The repository contains phenomenological host-pressure primitives:
+`marse.immune` (effector pressure, molecular neutralisation and immune-cell
+action rules) and `marse.actions` (action budgets). They are **experimental**.
+They are not part of v1.0, none of the claims below covers them, and the
+software paper will not describe them. Their presence does not change the
+deferral above: detailed simulation of host immune cells remains out of scope.
+They will move to a `marse.experimental.host` namespace so that the boundary
+is visible in every import.
+
+### Flagship application
+
+The reference application against which v1.0 is to be validated with real
+data is a subgingival multispecies biofilm built around the "red complex"
+anaerobes *Porphyromonas gingivalis*, *Tannerella forsythia* and *Treponema
+denticola* (`docs/periodontal-pathogen-study.md`). It is a research example of
+spatial community ecology, not a clinical model. It does not claim to
+reproduce a periodontal pocket, a disease course or a treatment outcome. Its
+parameters are currently placeholders (confidence C), and the engine it runs
+on has known defects
+([validation.md](validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified)).
+Until both are addressed it supports no quantitative conclusion.
+
 ## Claims
 
 | MARSE v1.0 may claim | MARSE v1.0 must not claim |

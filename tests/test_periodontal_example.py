@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from marse.ecosystem import load_experiment, run
 
 
@@ -16,6 +18,7 @@ def test_periodontal_pathogen_example_runs_and_keeps_three_species():
     assert all(frame.biomass.min() >= 0 for frame in result.frames)
 
 
+@pytest.mark.slow
 def test_periodontal_variant_workflow_writes_compact_controls(tmp_path, monkeypatch):
     from examples.periodontal_variant_analysis import main
 
@@ -33,6 +36,7 @@ def test_periodontal_variant_workflow_writes_compact_controls(tmp_path, monkeypa
     assert "community-interactions" in manifest["parameter_group_ids"]
 
 
+@pytest.mark.slow
 def test_periodontal_controls_cover_pairwise_and_resource_controls(tmp_path, monkeypatch):
     from examples.periodontal_controls_analysis import main
 

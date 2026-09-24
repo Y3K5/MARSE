@@ -193,7 +193,7 @@ def _command_ecosystem_batch(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="marse",
-        description="MARSE: Microbial Adaptability Resource Engine.",
+        description="MARSE: Microbial Adaptability Resource Simulation Engine.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command")

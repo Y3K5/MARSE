@@ -212,7 +212,11 @@ def analytical_benchmarks() -> BenchmarkSuite:
                 ),
                 "concentration",
                 tolerance=1e-12,
-                notes="Steady one-dimensional reaction-diffusion limit.",
+                notes=(
+                    "Steady one-dimensional first-order limit. Depends on uptake only "
+                    "through max_uptake / half_saturation (5 per h); a Monod model meets "
+                    "it only when the solute stays far below half_saturation."
+                ),
             ),
         ),
     )
