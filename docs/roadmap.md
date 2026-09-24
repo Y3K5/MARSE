@@ -82,7 +82,9 @@ The post-Phase-3 plan is to make every result evidence-linked and falsifiable:
    signals, quorum-triggered phenotype switching, and opt-in surface
    adhesion/detachment are implemented; morphology remains.)*
 7. **Genotype-to-capability maps** — connect genotype to regulated protein
-   abundance and traits only where data constrain the mapping.
+   abundance and traits only where data constrain the mapping. *(Explicit
+   allele-to-capability parameter modifiers are implemented; sequence
+   interpretation and regulated abundance remain future work.)*
 8. **Scientific observability** — expose conservation residuals, validity
    limits, evidence compatibility, convergence, and provenance for every run.
 9. **Immune and molecular extensions** — add explicit effector pressure and
