@@ -1,4 +1,4 @@
-# MARSE: Microbial Adaptability Resource Engine
+# MARSE: Microbial Adaptability Resource Simulation Engine
 
 [![CI](https://github.com/Y3K5/MARSE/actions/workflows/ci.yml/badge.svg)](https://github.com/Y3K5/MARSE/actions/workflows/ci.yml)
 [![Privacy](https://github.com/Y3K5/MARSE/actions/workflows/privacy.yml/badge.svg)](https://github.com/Y3K5/MARSE/actions/workflows/privacy.yml)
