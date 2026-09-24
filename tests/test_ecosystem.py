@@ -5,7 +5,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from marse.additives import AdditiveEffect, apply_effect, hill_response
 from marse.ecosystem import (
+    AdditiveConfig,
     ConditionConfig,
     EcosystemConfig,
     EcosystemError,
@@ -275,3 +277,59 @@ def test_spatial_capability_rate_and_limiting_factor_are_exported():
     assert frame.niche_limiting_factors[0][-1, 0] == "oxygen"
     exported = frame.to_dict(("aerobe",), ("carbon",), 1.0, ("oxygen",))
     assert exported["niche"]["limiting_factor"]["aerobe"][-1][0] == "oxygen"
+
+
+def test_hill_additive_response_supports_inhibition_and_stimulation():
+    concentrations = np.array([0.0, 1.0, 10.0])
+    inhibition = apply_effect(
+        AdditiveEffect("drug", 0.1, 1.0, 1.0, direction="decreasing"), concentrations
+    )
+    stimulation = apply_effect(AdditiveEffect("signal", 1.0, 2.0, 1.0), concentrations)
+    assert hill_response(concentrations, 1.0, 1.0)[0] == 0.0
+    assert inhibition[0] == pytest.approx(1.0)
+    assert inhibition[-1] < inhibition[0]
+    assert stimulation[-1] > stimulation[0]
+
+
+def test_additive_field_diffuses_decays_and_changes_growth(tmp_path: Path):
+    result = run(
+        config(
+            duration_h=0.2,
+            nutrients=(NutrientConfig("carbon", 1.0, 0.0),),
+            additives=(
+                AdditiveConfig(
+                    "drug",
+                    1.0,
+                    10.0,
+                    decay_per_h=1.0,
+                    boundary_value=0.0,
+                    boundary_edges=("bottom",),
+                ),
+            ),
+            species=(
+                SpeciesConfig(
+                    "target",
+                    0.1,
+                    1.0,
+                    (0.2,),
+                    (1.0,),
+                    additive_effects=(AdditiveEffect("drug", 0.1, 1.0, 0.2, 2.0),),
+                ),
+            ),
+        )
+    )
+    assert result.final_state.additives[0].mean() < result.frames[0].additives[0].mean()
+    assert (
+        result.final_state.biomass[0].mean()
+        < run(
+            config(
+                duration_h=0.2,
+                nutrients=(NutrientConfig("carbon", 1.0, 0.0),),
+                species=(SpeciesConfig("target", 0.1, 1.0, (0.2,), (1.0,)),),
+            )
+        )
+        .final_state.biomass[0]
+        .mean()
+    )
+    exported = result.write_frames(tmp_path / "frames.json")
+    assert '"additives"' in exported.read_text()
