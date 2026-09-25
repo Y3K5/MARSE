@@ -39,15 +39,32 @@ src/marse/
   spatial/         domain.py, grid.py, neighborhoods.py, diffusion.py
   microbes/        growth.py, resource_use.py, adhesion.py, phenotype.py, interactions.py
   biofilm/         biomass.py, matrix.py, maturation.py
+  ecosystem/       the 2-D multispecies engine (model.py, providers.py, framestore.py, viewer.py)
   adaptation/      transitions.py, policies.py
   interventions/   perturbations.py
+  analysis/        calibration.py, uncertainty.py, ensemble.py
+  evidence/        science.py (culture evidence and the evidence-to-experiment compiler)
+  experimental/    host/: immune.py, actions.py, outside the v1.0 claims
   validation/      analytical/, regression/, literature_cases/
 ```
 
-Implemented so far: `core/config.py`, `core/state.py`, `core/seeds.py`,
-`core/provenance.py` and `core/simulation.py` (the Phase 1 kernel), plus
-`microbes/growth.py`, `microbes/cardinal.py`, `spatial/solutes.py` and
-`validation/analytical.py`. The remaining modules are added phase by phase.
+Implemented so far (the rest of the layout above is planned):
+
+| Package | Modules |
+|---|---|
+| `core/` | `config`, `state`, `seeds`, `provenance`, `simulation` |
+| `spatial/` | `domain`, `diffusion`, `solutes` |
+| `microbes/` | `growth`, `cardinal`, `niche`, `genotype`, `additives` |
+| `biofilm/` | `biomass` |
+| `ecosystem/` | `model`, `providers`, `framestore`, `viewer` (not yet verified: see validation.md) |
+| `analysis/` | `calibration`, `uncertainty`, `ensemble` |
+| `evidence/` | `science` |
+| `experimental/host/` | `immune`, `actions` |
+| `validation/` | `analytical`, `benchmarks` |
+
+`schemas/`, `adaptation/` and `interventions/` exist but are still empty.
+Modules that used to sit at the package root (`marse.niche`,
+`marse.ensemble` and so on) keep a deprecated alias there for one release.
 
 ## Providers
 

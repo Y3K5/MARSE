@@ -9,6 +9,18 @@ results for the same manifest is always called out.
 
 ### Changed
 
+- **The package follows its documented layout.** Modules that had been added
+  at the package root now live in subpackages:
+  - `niche`, `genotype` and `additives` are in `marse.microbes`;
+  - `science` is in `marse.evidence`;
+  - `calibration`, `uncertainty` and `ensemble` are in `marse.analysis`;
+  - `immune` and `actions` are in `marse.experimental.host`, which makes the
+    specification's "experimental, outside the v1.0 claims" visible in every
+    import.
+
+  `tools/repo_guard.py` now requires the new subpackages, and the module maps
+  in the README and `docs/architecture.md` match the tree.
+
 - **Frames are recorded on demand and streamed to disk.** `marse ecosystem`
   writes its frames to a `frames/` store: one NumPy `.npy` file per field,
   in single precision, plus an `index.json`. This replaces `frames.json`, and
@@ -67,6 +79,15 @@ results for the same manifest is always called out.
 - The project is named "Microbial Adaptability Resource Simulation Engine"
   throughout (citation metadata, package metadata and CLI), matching the README
   and the acronym.
+
+### Deprecated
+
+- The old import paths (`marse.niche`, `marse.genotype`, `marse.additives`,
+  `marse.science`, `marse.calibration`, `marse.uncertainty`, `marse.ensemble`,
+  `marse.immune`, `marse.actions`) still work for one release. Each emits a
+  `DeprecationWarning` and exports the same objects as its new location. A
+  test holds every alias to that, and another imports all of MARSE with
+  warnings as errors, so nothing inside MARSE uses an alias.
 
 ### Added
 

@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from marse.uncertainty import (
+from marse.analysis.uncertainty import (
     ParameterRange,
     UncertaintyError,
     propagate,

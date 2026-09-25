@@ -65,14 +65,14 @@ not implement them.
 
 ### Experimental code outside the v1.0 claims
 
-The repository contains phenomenological host-pressure primitives:
-`marse.immune` (effector pressure, molecular neutralisation and immune-cell
-action rules) and `marse.actions` (action budgets). They are **experimental**.
-They are not part of v1.0, none of the claims below covers them, and the
-software paper will not describe them. Their presence does not change the
-deferral above: detailed simulation of host immune cells remains out of scope.
-They will move to a `marse.experimental.host` namespace so that the boundary
-is visible in every import.
+The repository contains phenomenological host-pressure primitives in
+`marse.experimental.host`: `immune` (effector pressure, molecular
+neutralisation and immune-cell action rules) and `actions` (action budgets).
+They are **experimental**. They are not part of v1.0, none of the claims below
+covers them, and the software paper will not describe them. Their presence
+does not change the deferral above: detailed simulation of host immune cells
+remains out of scope. The namespace makes that boundary visible in every
+import.
 
 ### Flagship application
 

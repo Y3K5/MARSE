@@ -1,6 +1,6 @@
 # Uncertainty and sensitivity
 
-`marse.uncertainty` provides a model-agnostic wrapper around deterministic
+`marse.analysis.uncertainty` provides a model-agnostic wrapper around deterministic
 evaluators. A caller declares finite parameter ranges, supplies an evaluator
 that returns one scalar outcome, and receives reproducible samples, output
 quantiles, and rank-based screening correlations.

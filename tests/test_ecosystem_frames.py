@@ -30,7 +30,7 @@ from marse.ecosystem.framestore import (
 )
 from marse.ecosystem.model import recorded_steps
 from marse.ecosystem.viewer import _rounded
-from marse.niche import Capability
+from marse.microbes.niche import Capability
 
 
 def config(**overrides) -> EcosystemConfig:

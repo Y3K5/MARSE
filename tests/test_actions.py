@@ -1,6 +1,6 @@
 import pytest
 
-from marse.actions import ActionError, ActionRule, ResourceBudget, try_action
+from marse.experimental.host.actions import ActionError, ActionRule, ResourceBudget, try_action
 
 
 def test_action_consumes_only_declared_resource():

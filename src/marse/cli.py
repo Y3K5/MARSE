@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 
 from marse import __version__
+from marse.analysis.ensemble import ScenarioBatch, run_batch
 from marse.core.config import ConfigError, load_experiment
 from marse.core.provenance import Manifest
 from marse.core.simulation import BiofilmProfileResult, SimulationResult, run
@@ -30,8 +31,7 @@ from marse.ecosystem import load_experiment as load_ecosystem_experiment
 from marse.ecosystem import run as run_ecosystem
 from marse.ecosystem.framestore import EcosystemFrameSink, FrameStore, StoredFrames
 from marse.ecosystem.model import recorded_steps
-from marse.ensemble import ScenarioBatch, run_batch
-from marse.niche import NicheError, load_niche_scan, run_niche_scan
+from marse.microbes.niche import NicheError, load_niche_scan, run_niche_scan
 
 Result = SimulationResult | BiofilmProfileResult
 

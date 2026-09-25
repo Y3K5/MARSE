@@ -96,16 +96,20 @@ src/marse/         the Python package
   core/            run loop, state, configuration, seeds, provenance
   schemas/         validated canonical objects
   spatial/         domains, grids, diffusion; solute properties
-  microbes/        growth kinetics, cardinal models, interactions
+  microbes/        growth kinetics, cardinal models, niches, genotypes, dose responses
   biofilm/         biomass, matrix, maturation
+  ecosystem/       the 2-D multispecies engine, frame store and viewer
   adaptation/      state transitions and decision policies
   interventions/   perturbations
+  analysis/        calibration, uncertainty and sensitivity, ensembles
+  evidence/        culture conditions and measurements, with their sources
+  experimental/    outside the v1.0 claims (host/: host-pressure primitives)
   validation/      analytical references, benchmark and regression cases
 examples/          runnable reference calculations
-  experiments/     experiment configurations for `marse run`
+  experiments/     experiment configurations for `marse run` and `marse ecosystem`
 tests/             test suite
 docs/              theory, parameters, specification, architecture, validation, roadmap
-tools/             repository tooling (privacy guard)
+tools/             repository tooling (privacy and repository guards)
 ```
 
 Planned: `paper/` for the software paper.

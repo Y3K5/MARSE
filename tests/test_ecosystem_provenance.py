@@ -13,7 +13,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from marse.additives import AdditiveEffect
 from marse.cli import main
 from marse.core.config import load_experiment as load_core_experiment
 from marse.core.provenance import Manifest, config_checksum
@@ -29,8 +28,9 @@ from marse.ecosystem import (
     run,
 )
 from marse.ecosystem.model import ENGINE_VERSION, _state_digest, ecosystem_from_dict
-from marse.immune import ImmuneInteraction, MolecularNeutralizer
-from marse.niche import Capability
+from marse.experimental.host.immune import ImmuneInteraction, MolecularNeutralizer
+from marse.microbes.additives import AdditiveEffect
+from marse.microbes.niche import Capability
 
 EXPERIMENTS = Path(__file__).resolve().parents[1] / "examples" / "experiments"
 

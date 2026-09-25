@@ -7,7 +7,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from marse.additives import AdditiveEffect, apply_effect, hill_response
 from marse.ecosystem import (
     AdditiveConfig,
     ConditionConfig,
@@ -23,8 +22,9 @@ from marse.ecosystem import (
     run,
     write_viewer,
 )
-from marse.immune import ImmuneInteraction
-from marse.niche import Capability
+from marse.experimental.host.immune import ImmuneInteraction
+from marse.microbes.additives import AdditiveEffect, apply_effect, hill_response
+from marse.microbes.niche import Capability
 
 
 def config(**overrides) -> EcosystemConfig:

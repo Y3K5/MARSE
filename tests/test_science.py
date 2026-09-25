@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from marse.science import (
+from marse.evidence.science import (
     AgarProtocol,
     CultureDataset,
     CultureError,
