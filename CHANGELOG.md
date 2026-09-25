@@ -9,6 +9,27 @@ results for the same manifest is always called out.
 
 ### Changed
 
+- **Frames are recorded on demand and streamed to disk.** `marse ecosystem`
+  writes its frames to a `frames/` store: one NumPy `.npy` file per field,
+  in single precision, plus an `index.json`. This replaces `frames.json`, and
+  memory stays flat however long the run. It stores about 200 evenly spaced
+  frames by default; `--frame-interval-h` sets the spacing. On the two-species
+  example the outputs fall from 314 MB to 43 MB, the run from 25 s to 3 s, and
+  peak memory from 952 MB to 235 MB. **Breaking:** `marse ecosystem` and
+  `write_viewer` no longer write `frames.json`. `EcosystemResult.write_frames`
+  remains for library use until configuration schema v2 replaces this engine.
+- `run()` takes `frame_every` (record every so many steps plus the last;
+  `None` for only the first and last) and `sink` (receive each frame as it is
+  made). Recording only observes: a test requires a bit-identical final state
+  for every setting. The niche maps a frame shows are computed only for frames
+  that are recorded. They had been computed every step, which was 37% of a
+  periodontal run's time.
+- The ensemble and both periodontal sweeps read only the final state, so they
+  now record no intermediate frames.
+- The viewer is self-contained. It embeds up to 100 evenly spaced frames,
+  always the first and last, with fields rounded to four significant digits
+  and totals from the unrounded values.
+
 - Manifest format version 2 adds `kind` (`batch`, `biofilm_profile` or
   `ecosystem`), and replay rebuilds the configuration with the matching parser,
   refusing a manifest whose configuration contradicts its kind. Version 1

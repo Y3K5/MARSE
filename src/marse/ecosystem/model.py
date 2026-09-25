@@ -14,7 +14,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -1107,12 +1107,80 @@ def _ecosystem_outputs(config: EcosystemConfig, state: EcosystemState) -> dict[s
     }
 
 
-def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) -> EcosystemResult:
-    """Run a deterministic ecosystem experiment and retain every frame.
+class FrameSink(Protocol):
+    """Receives recorded frames as a run produces them, such as a frame store."""
+
+    def write(self, index: int, step: int, frame: EcosystemFrame) -> None: ...
+
+
+def _check_frame_every(frame_every: int | None) -> None:
+    if frame_every is not None and (
+        isinstance(frame_every, bool) or not isinstance(frame_every, int) or frame_every < 1
+    ):
+        raise EcosystemError(f"frame_every must be a positive integer or None, got {frame_every!r}")
+
+
+def _records(step: int, steps: int, frame_every: int | None) -> bool:
+    """Whether ``step`` is recorded. Arithmetic, so memory does not grow with run length."""
+    return step == steps or (frame_every is not None and step % frame_every == 0)
+
+
+def recorded_steps(steps: int, frame_every: int | None) -> tuple[int, ...]:
+    """The steps at which a run records a frame: every ``frame_every``-th, plus the last.
+
+    Counted in whole steps, not hours, so there is no rounding question about
+    which step an interval lands on. ``None`` records only the first and last.
+    """
+    _check_frame_every(frame_every)
+    chosen = [0] if frame_every is None else list(range(0, steps + 1, frame_every))
+    if chosen[-1] != steps:
+        chosen.append(steps)
+    return tuple(chosen)
+
+
+def _frame(
+    config: EcosystemConfig,
+    state: EcosystemState,
+    nutrient_names: tuple[str, ...],
+    condition_names: tuple[str, ...],
+) -> EcosystemFrame:
+    """A snapshot of ``state``. Frames only observe: building one changes nothing."""
+    niche = tuple(
+        _niche_maps(species, state.nutrients, state.conditions, nutrient_names, condition_names)
+        for species in config.species
+    )
+    return EcosystemFrame(
+        state.time_h,
+        state.biomass.copy(),
+        state.nutrients.copy(),
+        state.conditions.copy(),
+        state.additives.copy(),
+        state.mutations.copy(),
+        tuple(rates for rates, _ in niche),
+        tuple(limiting for _, limiting in niche),
+        state.phenotype_indices.copy(),
+    )
+
+
+def run(
+    config: EcosystemConfig,
+    providers: EcosystemProviders | None = None,
+    *,
+    frame_every: int | None = 1,
+    sink: FrameSink | None = None,
+) -> EcosystemResult:
+    """Run a deterministic ecosystem experiment.
+
+    Frames are recorded every ``frame_every`` steps and at the last step;
+    ``None`` records only the first and last. Recording is observation only,
+    so it never changes the result. With a ``sink``, each recorded frame is
+    handed to it as it is made and the result keeps only the first and last
+    in memory, so memory no longer grows with the length of the run.
 
     The result carries a manifest, so the run can be replayed with
     ``marse replay`` exactly as the core runs can.
     """
+    _check_frame_every(frame_every)
     started = datetime.now(UTC)
     providers = providers or EcosystemProviders()
     max_diffusivity = max(
@@ -1149,37 +1217,24 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
     )
     seed_registry = SeedRegistry(config.seed)
     mutation_rng = seed_registry.stream("ecosystem.mutations")
-    frames = [
-        EcosystemFrame(
-            0.0,
-            state.biomass.copy(),
-            state.nutrients.copy(),
-            state.conditions.copy(),
-            state.additives.copy(),
-            state.mutations.copy(),
-            tuple(
-                _niche_maps(
-                    species,
-                    state.nutrients,
-                    state.conditions,
-                    nutrient_names,
-                    condition_names,
-                )[0]
-                for species in config.species
-            ),
-            tuple(
-                _niche_maps(
-                    species,
-                    state.nutrients,
-                    state.conditions,
-                    nutrient_names,
-                    condition_names,
-                )[1]
-                for species in config.species
-            ),
-            phenotype_indices.copy(),
-        )
-    ]
+    frames: list[EcosystemFrame] = []
+    recorded = 0
+
+    def record(snapshot: EcosystemState) -> None:
+        nonlocal recorded
+        frame = _frame(config, snapshot, nutrient_names, condition_names)
+        if sink is None:
+            frames.append(frame)
+        else:
+            sink.write(recorded, snapshot.step, frame)
+            # Keep the first and the most recent only; the sink holds the rest.
+            if len(frames) < 2:
+                frames.append(frame)
+            else:
+                frames[-1] = frame
+        recorded += 1
+
+    record(state)
     mutation_interval = config.mutation_interval_h
     next_mutation = mutation_interval if mutation_interval is not None else np.inf
 
@@ -1359,23 +1414,9 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
             phenotype_indices.copy(),
             phenotype_dwell_h.copy(),
         )
-        niche_maps = tuple(
-            _niche_maps(species, nutrients, conditions, nutrient_names, condition_names)
-            for species in config.species
-        )
-        frames.append(
-            EcosystemFrame(
-                time_h,
-                biomass.copy(),
-                nutrients.copy(),
-                conditions.copy(),
-                additives.copy(),
-                mutations.copy(),
-                tuple(result[0] for result in niche_maps),
-                tuple(result[1] for result in niche_maps),
-                phenotype_indices.copy(),
-            )
-        )
+        # A step that cannot advance ends the run, so it is recorded as the last frame.
+        if _records(step, config.steps, frame_every) or dt <= 0:
+            record(state)
         while next_mutation <= time_h + 1e-12:
             next_mutation += mutation_interval if mutation_interval is not None else np.inf
         if dt <= 0:

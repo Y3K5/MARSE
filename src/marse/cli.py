@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -24,9 +25,11 @@ from marse import __version__
 from marse.core.config import ConfigError, load_experiment
 from marse.core.provenance import Manifest
 from marse.core.simulation import BiofilmProfileResult, SimulationResult, run
-from marse.ecosystem import EcosystemResult, write_viewer
+from marse.ecosystem import EcosystemConfig, EcosystemResult, write_viewer
 from marse.ecosystem import load_experiment as load_ecosystem_experiment
 from marse.ecosystem import run as run_ecosystem
+from marse.ecosystem.framestore import EcosystemFrameSink, FrameStore, StoredFrames
+from marse.ecosystem.model import recorded_steps
 from marse.ensemble import ScenarioBatch, run_batch
 from marse.niche import NicheError, load_niche_scan, run_niche_scan
 
@@ -115,18 +118,57 @@ def _command_run(args: argparse.Namespace) -> int:
     return 0
 
 
-def _write_ecosystem_outputs(result: EcosystemResult, output_dir: Path) -> tuple[Path, ...]:
+MAX_STORED_FRAMES = 200
+"""About how many frames ``marse ecosystem`` stores by default, whatever the run length."""
+
+
+def _frame_every(config: EcosystemConfig, interval_h: float | None) -> int:
+    """Steps between stored frames: from ``--frame-interval-h``, else a cap on the count."""
+    if interval_h is not None:
+        if not interval_h > 0:
+            raise ValueError("--frame-interval-h must be positive")
+        return max(1, round(interval_h / config.timestep_h))
+    return max(1, math.ceil(config.steps / MAX_STORED_FRAMES))
+
+
+def _run_ecosystem_into(
+    config: EcosystemConfig, output_dir: Path, frame_every: int
+) -> tuple[EcosystemResult, int, tuple[Path, ...]]:
+    """Run, streaming frames into ``output_dir/frames``; then write the viewer and manifest.
+
+    Memory stays flat however long the run: frames go to disk as they are made.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
-    frames = result.write_frames(output_dir / "frames.json")
-    viewer = write_viewer(result, output_dir / "viewer.html")
+    capacity = len(recorded_steps(config.steps, frame_every))
+    sink = EcosystemFrameSink.create(
+        output_dir / "frames", config, capacity=capacity, overwrite=True
+    )
+    try:
+        result = run_ecosystem(config, frame_every=frame_every, sink=sink)
+    finally:
+        index = sink.close()
+    store = FrameStore.open(output_dir / "frames")
+    try:
+        viewer = write_viewer(result, output_dir / "viewer.html", frames=StoredFrames(store))
+    finally:
+        store.close()  # release the memory maps, which Windows requires before files move
     manifest = result.manifest.write(output_dir / "manifest.json")
-    return frames, viewer, manifest
+    return result, capacity, (index, viewer, manifest)
 
 
 def _command_replay(args: argparse.Namespace) -> int:
     original = Manifest.read(args.manifest)
     config = original.experiment()  # raises if the manifest was edited after the run
-    result = run_ecosystem(config) if original.kind == "ecosystem" else run(config)
+    written: tuple[Path, ...] = ()
+    if original.kind != "ecosystem":
+        result = run(config)
+    elif args.output:
+        # The replay's own outputs, streamed as it runs.
+        result, _, written = _run_ecosystem_into(
+            config, Path(args.output), _frame_every(config, None)
+        )
+    else:
+        result = run_ecosystem(config, frame_every=None)  # only the final state is compared
 
     recorded = _comparable(original.outputs)
     fresh = _comparable(result.manifest.outputs)
@@ -150,31 +192,32 @@ def _command_replay(args: argparse.Namespace) -> int:
     if differences:
         print("\nreplay DIFFERS from the recorded run:")
         print("\n".join(differences))
+        if written:
+            print(f"\nthe outputs written to {args.output} come from this differing replay")
         return 1
     print("\nreplay reproduced the recorded results exactly")
-    if args.output:
-        if isinstance(result, EcosystemResult):
-            written = _write_ecosystem_outputs(result, Path(args.output))
-        else:
-            written = _write_outputs(result, Path(args.output))
-        for path in written:
-            print(f"wrote {path}")
+    if args.output and not isinstance(result, EcosystemResult):
+        written = _write_outputs(result, Path(args.output))
+    for path in written:
+        print(f"wrote {path}")
     return 0
 
 
 def _command_ecosystem(args: argparse.Namespace) -> int:
     config = load_ecosystem_experiment(args.experiment)
-    result = run_ecosystem(config)
     output_dir = (
         Path(args.output)
         if args.output
         else Path(args.experiment).parent / "runs" / config.experiment_id
     )
-    frames, viewer, manifest = _write_ecosystem_outputs(result, output_dir)
+    frame_every = _frame_every(config, args.frame_interval_h)
+    result, stored, (frames, viewer, manifest) = _run_ecosystem_into(
+        config, output_dir, frame_every
+    )
     print(f"run_id      {result.manifest.run_id}")
     print(f"experiment  {config.experiment_id}")
     print(f"steps       {result.final_state.step} over {result.final_state.time_h:g} h")
-    print(f"frames      {len(result.frames)}")
+    print(f"frames      {stored} stored, one every {frame_every} step(s)")
     print(f"wrote       {frames}")
     print(f"wrote       {viewer}")
     print(f"wrote       {manifest}")
@@ -239,6 +282,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ecosystem_command.add_argument("experiment", help="path to an ecosystem JSON configuration")
     ecosystem_command.add_argument("-o", "--output", help="directory for frames and viewer")
+    ecosystem_command.add_argument(
+        "--frame-interval-h",
+        type=float,
+        help=f"hours between stored frames (default: about {MAX_STORED_FRAMES} frames per run)",
+    )
     ecosystem_command.set_defaults(handler=_command_ecosystem)
 
     niche_command = commands.add_parser(

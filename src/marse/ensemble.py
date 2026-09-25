@@ -144,7 +144,7 @@ class RunCatalog:
 def _execute(scenario: Scenario) -> RunRecord:
     try:
         config = ecosystem_from_dict(scenario.config)
-        result = run(config)
+        result = run(config, frame_every=None)  # only the final state is read
         final = result.final_state
         signature: dict[str, float] = {
             f"biomass:{species.name}": float(final.biomass[index].sum())

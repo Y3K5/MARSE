@@ -140,6 +140,17 @@ predate the ecosystem engine, remain readable: their kind is recovered from the
 configuration. An ecosystem manifest also records a SHA-256 digest of the
 entire final state, so a replay compares every value, not only summary totals.
 
+Frames, the snapshots a run records along the way, are separate from the
+result. `run(config, frame_every=..., sink=...)` records every `frame_every`
+steps plus the last, or only the first and last when `frame_every` is `None`,
+and hands each frame to an optional sink as it is made. Recording only
+observes: every setting yields a bit-identical final state, and a test holds
+the engine to that. `marse.ecosystem.framestore` provides the standard sink:
+one preallocated `.npy` file per field, written in place through a memory map,
+with an `index.json` naming the fields, their shapes and types, and each
+frame's time and step. The store knows nothing about ecosystems, so a later
+engine reuses it with different fields.
+
 ### Privacy rules for manifests and outputs
 
 Manifests and outputs are designed to be shared, attached to papers, issues
