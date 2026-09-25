@@ -1,10 +1,11 @@
 """Command-line entry point: ``marse``.
 
-Three commands matter at this stage:
+Four commands matter at this stage:
 
     marse run experiment.json        run a batch or biofilm simulation
     marse ecosystem experiment.json  run a 2-D multispecies ecosystem
     marse replay manifest.json       re-run either from its manifest and compare
+    marse check network.json         check a reaction network (schema version 2)
 
 ``replay`` is the reproducibility claim made executable: it rebuilds the
 configuration from the manifest, verifies the checksum, runs again, and reports
@@ -16,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import textwrap
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -32,6 +34,8 @@ from marse.ecosystem import run as run_ecosystem
 from marse.ecosystem.framestore import EcosystemFrameSink, FrameStore, StoredFrames
 from marse.ecosystem.model import recorded_steps
 from marse.microbes.niche import NicheError, load_niche_scan, run_niche_scan
+from marse.schemas import Network, load_network
+from marse.schemas.network import SCHEMA_VERSION
 
 Result = SimulationResult | BiofilmProfileResult
 
@@ -257,6 +261,53 @@ def _command_ecosystem_batch(args: argparse.Namespace) -> int:
     return 0
 
 
+def _report_network(network: Network, source: str) -> None:
+    dissolved = sum(c.phase == "dissolved" for c in network.components)
+    particulate = len(network.components) - dissolved
+    print(f"network     {source}, schema version {SCHEMA_VERSION}")
+    if network.description:
+        print(
+            textwrap.fill(
+                network.description, 88, initial_indent=" " * 12, subsequent_indent=" " * 12
+            )
+        )
+    print(
+        f"components  {len(network.components)}: {dissolved} dissolved, {particulate} particulate"
+    )
+    print(f"  {'name':<24} {'phase':<12} {'formula':<16} {'C':>6} {'N':>6} {'e-':>6} {'g/mol':>9}")
+    for c in network.components:
+        carbon, nitrogen, electrons = (f"{float(q):g}" for q in c.formula.composition)
+        print(
+            f"  {c.name:<24} {c.phase:<12} {c.formula.label():<16} {carbon:>6} {nitrogen:>6} "
+            f"{electrons:>6} {c.formula.molar_mass_g_per_mol:>9.3f}"
+        )
+    print(
+        f"\nprocesses   {len(network.processes)}, each conserving carbon, nitrogen and "
+        "electrons exactly"
+    )
+    for p in network.processes:
+        if p.growth is None:
+            what = "reaction, per unit of reaction"
+        else:
+            what = f"growth of {p.growth.biomass} on {p.growth.substrate}, per mol formed"
+        print(f"\n  {p.name} ({what})")
+        print(textwrap.fill(p.equation(), 88, initial_indent="    ", subsequent_indent="      "))
+        zero = [name for name in p.balanced_by if p.coefficient(name) == 0]
+        if zero:
+            print(f"    balanced to zero: {', '.join(zero)}")
+
+
+def _command_check(args: argparse.Namespace) -> int:
+    path = Path(args.network)
+    try:
+        network = load_network(path)
+    except ConfigError as error:
+        print(f"marse: {path.name} is not a valid network: {error}")
+        return 2
+    _report_network(network, path.name)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="marse",
@@ -303,6 +354,12 @@ def build_parser() -> argparse.ArgumentParser:
     batch_command.add_argument("-o", "--output", required=True, help="directory for catalog output")
     batch_command.add_argument("--workers", type=int, default=1, help="parallel worker processes")
     batch_command.set_defaults(handler=_command_ecosystem_batch)
+
+    check_command = commands.add_parser(
+        "check", help="check a reaction network and print its balanced processes"
+    )
+    check_command.add_argument("network", help="path to a network JSON file (schema version 2)")
+    check_command.set_defaults(handler=_command_check)
     return parser
 
 

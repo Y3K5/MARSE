@@ -158,5 +158,9 @@ To be settled in issues before Phase 1 starts:
 - Diffusion solver: explicit finite differences with a stability check, or an
   implicit scheme from the start?
 - Configuration format, and versioning of the experiment and manifest schemas.
+  **Partly answered:** manifests carry a format version (2) and a run kind,
+  and configuration schema version 2 begins with reaction networks, whose
+  processes must conserve carbon, nitrogen and electrons exactly
+  ([networks.md](networks.md)).
 - Output formats (for example Parquet trajectories with JSON or YAML
   summaries) and the dependencies they bring.

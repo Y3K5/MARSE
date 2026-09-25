@@ -1,0 +1,45 @@
+{
+  "schema_version": 2,
+  "description": "Two bacteria share glucose. An aerobic heterotroph respires it; a lactic fermenter ferments it, and the heterotroph also grows on the fermenter's lactate. Apart from the yields, every coefficient is derived from the carbon, nitrogen and electron balances. The yields are illustrative (confidence C), not measurements.",
+  "components": [
+    {"name": "glucose", "phase": "dissolved", "formula": "C6H12O6"},
+    {"name": "oxygen", "phase": "dissolved", "formula": "O2"},
+    {"name": "ammonium", "phase": "dissolved", "formula": "NH4", "charge": 1},
+    {"name": "carbon_dioxide", "phase": "dissolved", "formula": "CO2"},
+    {"name": "lactate", "phase": "dissolved", "formula": "C3H5O3", "charge": -1},
+    {"name": "heterotroph", "phase": "particulate", "formula": "CH1.8O0.5N0.2"},
+    {"name": "fermenter", "phase": "particulate", "formula": "CH1.8O0.5N0.2"}
+  ],
+  "processes": [
+    {
+      "name": "heterotroph_growth_on_glucose",
+      "kind": "growth",
+      "biomass": "heterotroph",
+      "substrate": "glucose",
+      "yield_mol_per_mol": 3.6,
+      "balanced_by": ["oxygen", "carbon_dioxide", "ammonium"]
+    },
+    {
+      "name": "fermenter_growth_on_glucose",
+      "kind": "growth",
+      "biomass": "fermenter",
+      "substrate": "glucose",
+      "yield_mol_per_mol": 0.6,
+      "balanced_by": ["lactate", "carbon_dioxide", "ammonium"]
+    },
+    {
+      "name": "heterotroph_growth_on_lactate",
+      "kind": "growth",
+      "biomass": "heterotroph",
+      "substrate": "lactate",
+      "yield_mol_per_mol": 1.5,
+      "balanced_by": ["oxygen", "carbon_dioxide", "ammonium"]
+    },
+    {
+      "name": "heterotroph_endogenous_respiration",
+      "kind": "reaction",
+      "stoichiometry_mol_per_mol": {"heterotroph": -1},
+      "balanced_by": ["oxygen", "carbon_dioxide", "ammonium"]
+    }
+  ]
+}

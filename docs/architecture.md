@@ -35,7 +35,7 @@ flowchart LR
 ```text
 src/marse/
   core/            simulation.py (run loop, clocks, checkpoints), state.py, config.py, provenance.py
-  schemas/         organism.py, environment.py, resource.py, interaction.py, phenotype.py, perturbation.py
+  schemas/         configuration schema v2: formula.py, network.py (reaction networks), then the v2 experiment
   spatial/         domain.py, grid.py, neighborhoods.py, diffusion.py
   microbes/        growth.py, resource_use.py, adhesion.py, phenotype.py, interactions.py
   biofilm/         biomass.py, matrix.py, maturation.py
@@ -55,6 +55,7 @@ Implemented so far (the rest of the layout above is planned):
 | `core/` | `config`, `state`, `seeds`, `provenance`, `simulation` |
 | `spatial/` | `domain`, `diffusion`, `solutes` |
 | `microbes/` | `growth`, `cardinal`, `niche`, `genotype`, `additives` |
+| `schemas/` | `formula`, `network`: configuration schema v2, part one (reaction networks checked for continuity) |
 | `biofilm/` | `biomass` |
 | `ecosystem/` | `model`, `providers`, `framestore`, `viewer` (not yet verified: see validation.md) |
 | `analysis/` | `calibration`, `uncertainty`, `ensemble` |
@@ -62,7 +63,7 @@ Implemented so far (the rest of the layout above is planned):
 | `experimental/host/` | `immune`, `actions` |
 | `validation/` | `analytical`, `benchmarks` |
 
-`schemas/`, `adaptation/` and `interventions/` exist but are still empty.
+`adaptation/` and `interventions/` exist but are still empty.
 Modules that used to sit at the package root (`marse.niche`,
 `marse.ensemble` and so on) keep a deprecated alias there for one release.
 

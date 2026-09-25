@@ -91,6 +91,35 @@ results for the same manifest is always called out.
 
 ### Added
 
+- **Reaction networks: configuration schema version 2, part one**
+  (`marse.schemas`, `marse check`, [docs/networks.md](docs/networks.md)). A
+  network lists components, each with a chemical formula, and processes, each
+  a row of a stoichiometric matrix. Every process is proven, as it loads, to
+  conserve carbon, nitrogen and electrons exactly. The arithmetic is rational,
+  on the decimals as written, so there is no tolerance for a leak to hide in.
+  A process that would create or destroy matter is refused with an error
+  naming the process and the quantity, so known defect 2's "production from
+  nothing" cannot be configured in version 2.
+  - A growth process states its yield. The coefficients listed in
+    `balanced_by` are solved from the balances: typically the electron
+    acceptor, carbon dioxide and the nitrogen source, or a fermentation
+    product. Water and protons close the oxygen, hydrogen and charge balances
+    implicitly.
+  - Every key is checked. An unknown key is refused with the likely intended
+    one (`yeild_mol_per_mol` → `yield_mol_per_mol`), and a key in the wrong
+    unit with the right name (`yield_g_per_g` → `yield_mol_per_mol`).
+    Numeric fields carry their unit in their name, and a test enforces it.
+  - `marse check NETWORK.json` prints each component's composition and each
+    process as a balanced equation. `examples/networks/glucose_cross_feeding.json`
+    shows respiration, fermentation and lactate cross-feeding.
+  - Verified against textbook degrees of reduction and COD factors, textbook
+    reactions, the half-reaction method of Rittmann and McCarty (2001), and
+    random networks recounted atom by atom (docs/validation.md, "Stoichiometric
+    continuity"). The equations are in docs/theory.md §3.6.
+
+  No engine runs these networks yet: the well-mixed engine that integrates
+  them, checking the balance every step, is the next increment.
+
 - **Ecosystem runs are reproducible.** `marse ecosystem` writes a
   `manifest.json` beside its frames and viewer, and `marse replay` reproduces
   the run exactly, as it already did for batch and biofilm runs. The manifest

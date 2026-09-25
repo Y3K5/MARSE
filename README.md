@@ -39,6 +39,18 @@ reproduced, not that it is right: the ecosystem engine has known defects that
 are being fixed before anything is built on it
 ([validation.md](docs/validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified)).
 
+The fix starts with the configuration. In the new format every process must
+conserve carbon, nitrogen and electrons exactly, and MARSE derives what a
+yield leaves open, such as the oxygen used and the carbon dioxide released. A
+process that would make matter from nothing is refused as the file loads:
+
+```bash
+marse check examples/networks/glucose_cross_feeding.json
+```
+
+[docs/networks.md](docs/networks.md) describes the format. No engine runs
+these networks yet; the roadmap builds one next.
+
 The manifest records the configuration, its SHA-256 checksum, the random seed,
 the versioned models used and the software versions — and deliberately records
 no username, hostname or absolute path, so it is safe to attach to a paper or
@@ -94,7 +106,7 @@ predict clinical or vaccine outcomes, or produce experimental evidence; the
 ```text
 src/marse/         the Python package
   core/            run loop, state, configuration, seeds, provenance
-  schemas/         validated canonical objects
+  schemas/         configuration schema v2: formulas and balanced reaction networks
   spatial/         domains, grids, diffusion; solute properties
   microbes/        growth kinetics, cardinal models, niches, genotypes, dose responses
   biofilm/         biomass, matrix, maturation
@@ -107,6 +119,7 @@ src/marse/         the Python package
   validation/      analytical references, benchmark and regression cases
 examples/          runnable reference calculations
   experiments/     experiment configurations for `marse run` and `marse ecosystem`
+  networks/        reaction networks for `marse check` (configuration schema v2)
 tests/             test suite
 docs/              theory, parameters, specification, architecture, validation, roadmap
 tools/             repository tooling (privacy and repository guards)
@@ -142,6 +155,8 @@ Before your first commit, complete the one-time setup in
   and what it does not claim.
 - [docs/architecture.md](docs/architecture.md): core abstractions and
   extension contracts.
+- [docs/networks.md](docs/networks.md): reaction networks, the configuration
+  format in which every process must conserve carbon, nitrogen and electrons.
 - [docs/validation.md](docs/validation.md): benchmark definitions.
 - [docs/modeling-landscape.md](docs/modeling-landscape.md): how the field
   models microbial growth, how natural conditions differ from laboratory ones,

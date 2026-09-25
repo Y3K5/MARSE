@@ -90,7 +90,7 @@ flips its test, which must then become an ordinary regression test.
 | # | Defect | Measured | Consequence |
 |---|---|---|---|
 | 1 | The examples give oxygen a diffusivity of 10 µm²/h. The physical value in a biofilm is about 4×10⁶ µm²/h (`oxygen_diffusivity_um2_per_h` at 37 °C × 0.43). At 10 µm cells the explicit scheme could only run that value with 22 ms steps. | Oxygen spreads about 30 µm in 24 h instead of about 20 mm | Every oxygen gradient in the examples is set by the numerics, not the physics |
-| 2 | Uptake follows *potential* growth, not actual growth. Production adds material that no consumed substrate pays for. | With growth held at zero, 22% of the carbon is consumed in an hour. With a yield of 1, 1.3–1.6 units are consumed per unit of biomass formed. | Yield and mass balance are both broken |
+| 2 | Uptake follows *potential* growth, not actual growth. Production adds material that no consumed substrate pays for. | With growth held at zero, 22% of the carbon is consumed in an hour. With a yield of 1, 1.3–1.6 units are consumed per unit of biomass formed. | Yield and mass balance are both broken. Configuration schema version 2 already refuses such a process when it loads ([networks.md](networks.md)); the engine is fixed when it runs on version 2 |
 | 3 | The periodontal species need oxygen to grow (a Monod term), although all three are anaerobes ([Holt and Ebersole 2005](https://pubmed.ncbi.nlm.nih.gov/15853938/)) | With no oxygen, growth is exactly zero | The study's oxygen-limited control points the wrong way |
 | 4 | A species capability applies the substrate Monod term a second time | 50% of the intended rate at C = K, 13% at C = K/7 | Growth at low substrate is strongly understated |
 | 5 | Negative values are clipped instead of refused, and chemotaxis has no stability limit | One unstable chemotaxis step doubles total biomass | Mass is created silently |
@@ -163,6 +163,33 @@ Runge–Kutta for the growth problems, a Newton-solved nonlinear
 reaction–diffusion system for the penetration depth, finite differences for
 diffusion, and a full three-species ODE integration for the chemostat. These
 checks run as part of the ordinary test suite.
+
+## Stoichiometric continuity
+
+Reaction networks (configuration schema version 2) are checked when they load,
+before anything runs: every process must conserve carbon, nitrogen and
+electrons exactly ([theory.md §3.6](theory.md#36-composition-continuity-and-the-degree-of-reduction)).
+The checks of that check, in `tests/test_schema_network.py` and
+`tests/test_schema_formula.py`:
+
+- **Textbook values.** Degrees of reduction of fifteen compounds, and the COD
+  conversion factors 1.07 g g⁻¹ for glucose and 1.42 g g⁻¹ for cells.
+- **Textbook reactions, exactly.** Respiration of glucose, alcoholic and
+  homolactic fermentation, and nitrification, each derived from one given
+  coefficient, water and protons included.
+- **An independent method.** Growth rows equal the half-reaction method of
+  Rittmann and McCarty (2001, ch. 2) in every coefficient, for three
+  electron partitions. The transcribed half reactions are themselves checked
+  for balance.
+- **Atoms, not only the three quantities.** In forty random networks, every
+  derived row balances carbon and nitrogen when recounted from the formulas,
+  and oxygen, hydrogen and charge with the implicit water and protons.
+- **What the engine will see.** Rounded once to double precision, every row
+  still balances to within a few units in the last place. Reordering
+  components, processes or `balanced_by` changes no coefficient.
+- **Refusals.** Production from nothing (known defect 2's pattern), a row that
+  nearly balances, and every malformed network are refused with a message
+  naming the process, the field or the quantity.
 
 ## Running the suite
 
