@@ -384,7 +384,7 @@ def _command_check(args: argparse.Namespace) -> int:
         else:
             print(
                 f"\nrunnable    {config.duration_h:g} h in steps of at most "
-                f"{config.timestep_h:g} h: marse run {path.name}"
+                f"{config.timestep_h:g} h: marse run {args.network}"
             )
     return 0
 

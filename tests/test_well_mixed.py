@@ -316,4 +316,5 @@ def test_marse_check_says_whether_a_network_can_run(capsys):
     assert main(["check", str(EXAMPLE)]) == 0
     out = capsys.readouterr().out
     assert "rate: 0.4 /h x heterotroph x monod(glucose; K 0.05)" in out
-    assert "runnable    48 h in steps of at most 0.5 h" in out
+    # The suggested command uses the path as given, so it runs from where check ran.
+    assert f"runnable    48 h in steps of at most 0.5 h: marse run {EXAMPLE}" in out
