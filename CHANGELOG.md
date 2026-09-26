@@ -9,6 +9,49 @@ results for the same manifest is always called out.
 
 ### Changed
 
+- **The package follows its documented layout.** Modules that had been added
+  at the package root now live in subpackages:
+  - `niche`, `genotype` and `additives` are in `marse.microbes`;
+  - `science` is in `marse.evidence`;
+  - `calibration`, `uncertainty` and `ensemble` are in `marse.analysis`;
+  - `immune` and `actions` are in `marse.experimental.host`, which makes the
+    specification's "experimental, outside the v1.0 claims" visible in every
+    import.
+
+  `tools/repo_guard.py` now requires the new subpackages, and the module maps
+  in the README and `docs/architecture.md` match the tree.
+
+- **Frames are recorded on demand and streamed to disk.** `marse ecosystem`
+  writes its frames to a `frames/` store: one NumPy `.npy` file per field,
+  in single precision, plus an `index.json`. This replaces `frames.json`, and
+  memory stays flat however long the run. It stores about 200 evenly spaced
+  frames by default; `--frame-interval-h` sets the spacing. On the two-species
+  example the outputs fall from 314 MB to 43 MB, the run from 25 s to 3 s, and
+  peak memory from 952 MB to 235 MB. **Breaking:** `marse ecosystem` and
+  `write_viewer` no longer write `frames.json`. `EcosystemResult.write_frames`
+  remains for library use until configuration schema v2 replaces this engine.
+- `run()` takes `frame_every` (record every so many steps plus the last;
+  `None` for only the first and last) and `sink` (receive each frame as it is
+  made). Recording only observes: a test requires a bit-identical final state
+  for every setting. The niche maps a frame shows are computed only for frames
+  that are recorded. They had been computed every step, which was 37% of a
+  periodontal run's time.
+- The ensemble and both periodontal sweeps read only the final state, so they
+  now record no intermediate frames.
+- The viewer is self-contained. It embeds up to 100 evenly spaced frames,
+  always the first and last, with fields rounded to four significant digits
+  and totals from the unrounded values.
+
+- Manifest format version 2 adds `kind` (`batch`, `biofilm_profile` or
+  `ecosystem`), and replay rebuilds the configuration with the matching parser,
+  refusing a manifest whose configuration contradicts its kind. Version 1
+  manifests remain readable. Batch and biofilm results, and their `run_id`s,
+  are unchanged.
+- The roadmap's stages follow revision 2 of the plan: Stage 2 builds the
+  conserving material core (stoichiometric processes with a load-time
+  continuity check and an every-step ledger) and replaces configuration
+  schema v1.
+
 - **The two-dimensional ecosystem engine is documented as unverified.** A
   review that ran it found nine defects. Among them: uptake follows potential
   rather than actual growth, production has no source, the examples give oxygen
@@ -37,7 +80,79 @@ results for the same manifest is always called out.
   throughout (citation metadata, package metadata and CLI), matching the README
   and the acronym.
 
+### Deprecated
+
+- The old import paths (`marse.niche`, `marse.genotype`, `marse.additives`,
+  `marse.science`, `marse.calibration`, `marse.uncertainty`, `marse.ensemble`,
+  `marse.immune`, `marse.actions`) still work for one release. Each emits a
+  `DeprecationWarning` and exports the same objects as its new location. A
+  test holds every alias to that, and another imports all of MARSE with
+  warnings as errors, so nothing inside MARSE uses an alias.
+
 ### Added
+
+- **Reaction networks: configuration schema version 2, part one**
+  (`marse.schemas`, `marse check`, [docs/networks.md](docs/networks.md)). A
+  network lists components, each with a chemical formula, and processes, each
+  a row of a stoichiometric matrix. Every process is proven, as it loads, to
+  conserve carbon, nitrogen and electrons exactly. The arithmetic is rational,
+  on the decimals as written, so there is no tolerance for a leak to hide in.
+  A process that would create or destroy matter is refused with an error
+  naming the process and the quantity, so known defect 2's "production from
+  nothing" cannot be configured in version 2.
+  - A growth process states its yield. The coefficients listed in
+    `balanced_by` are solved from the balances: typically the electron
+    acceptor, carbon dioxide and the nitrogen source, or a fermentation
+    product. Water and protons close the oxygen, hydrogen and charge balances
+    implicitly.
+  - Every key is checked. An unknown key is refused with the likely intended
+    one (`yeild_mol_per_mol` → `yield_mol_per_mol`), and a key in the wrong
+    unit with the right name (`yield_g_per_g` → `yield_mol_per_mol`).
+    Numeric fields carry their unit in their name, and a test enforces it.
+  - `marse check NETWORK.json` prints each component's composition and each
+    process as a balanced equation. `examples/networks/glucose_cross_feeding.json`
+    shows respiration, fermentation and lactate cross-feeding.
+  - Verified against textbook degrees of reduction and COD factors, textbook
+    reactions, the half-reaction method of Rittmann and McCarty (2001), and
+    random networks recounted atom by atom (docs/validation.md, "Stoichiometric
+    continuity"). The equations are in docs/theory.md §3.6.
+
+- **Networks run: the version 2 well-mixed engine** (`marse run` on a version
+  2 file, `marse.core.well_mixed`). A process with a `rate` runs at
+  k × c[proportional_to] × its Monod, inhibition or Haldane factors. One rate
+  drives every component the process touches, so uptake is growth divided by
+  yield, exactly, and every process acts on the same state at once. These
+  are the requirements behind known defects 2 and 7. A second factor for one
+  component is refused (defect 4). So is a process consuming what its rate
+  does not depend on, unless the file declares the component
+  `assumed_in_excess`.
+  - Integration is Heun's method with per-process positivity limiting: exactly
+    conservative, never negative, with no clipping (the reaction half of
+    defect 5). Only the processes consuming a depleted species slow down.
+    Substeps adapt to `relative_tolerance` and
+    `absolute_tolerance_mol_per_m3`, deterministically.
+  - A ledger checks carbon, nitrogen and electrons after every step. A drift
+    beyond 1e-9 of the total stops the run with a `ConservationError`, and
+    the largest drift is recorded in the manifest (kind `well_mixed`). Runs
+    replay bit for bit.
+  - Verified against the analytical Monod batch solution (V2) at second order.
+    Also: ten thousand steps within 1e-12, a planted leak that is caught,
+    3,000 random cyclic networks at steps up to 10⁶ h that stay positive and
+    conserve to 5e-16, and order independence
+    (docs/validation.md, "The version 2 network engine").
+  - The example network now runs: oxygen runs out, and the fermenter turns
+    the remaining glucose into lactate.
+
+- **Ecosystem runs are reproducible.** `marse ecosystem` writes a
+  `manifest.json` beside its frames and viewer, and `marse replay` reproduces
+  the run exactly, as it already did for batch and biofilm runs. The manifest
+  records every effective configuration value (defaults included), the seed,
+  the provider versions and the engine, plus readable totals and a SHA-256
+  digest of the entire final state, so a replay compares every value rather
+  than only the totals. The engine is named `ecosystem_v1_unverified` in the
+  manifest, because its known defects (docs/validation.md) travel with any
+  result it produces. Known defect 9 is fixed, and its test is now an ordinary
+  regression test.
 
 - **Two-dimensional multispecies ecosystem engine** (`marse.ecosystem`,
   `marse ecosystem`). It provides nutrient, condition and additive fields with

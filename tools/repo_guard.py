@@ -111,6 +111,10 @@ REQUIRED_PACKAGE_DIRS = (
     "adaptation",
     "interventions",
     "validation",
+    "ecosystem",
+    "analysis",
+    "evidence",
+    "experimental",
 )
 """The architecture from docs/architecture.md. Removing one is a design change."""
 

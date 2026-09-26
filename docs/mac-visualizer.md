@@ -25,7 +25,17 @@ contains them, and draws short movement trails between adjacent frames. The
 current ecosystem engine exports continuous biomass fields by default, so these
 particles are visual representatives rather than individually simulated cells.
 
-For a year-long experiment, do not export every integration step as a browser
-frame. Use a larger numerical timestep where the stability and biological
-timescales permit it, then export daily or weekly snapshots. Checkpointed
-streaming execution is the next infrastructure step for very long runs.
+A run's frames are streamed to disk as it goes, into `frames/` beside the
+viewer: one NumPy `.npy` file per field, in single precision, plus an
+`index.json` with each frame's time and step. Memory therefore stays flat
+however long the run. By default about 200 evenly spaced frames are stored,
+whatever the run's length; `--frame-interval-h` sets the spacing instead (for
+example `--frame-interval-h 24` for daily frames). The viewer embeds up to 100
+of the stored frames, always including the first and the last, with values
+rounded to four significant digits of each field's largest value. The exact
+result of a run is its final state, recorded in `manifest.json` and reproduced
+by `marse replay`; the frames are for looking at how it got there.
+
+Frames no longer limit how long a run can be. The step size still does: the
+explicit transport scheme needs short steps, which is what the second stage of
+the [roadmap](roadmap.md#order-of-work-correctness-first) replaces.

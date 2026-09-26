@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from marse.niche import (
+from marse.microbes.niche import (
     Capability,
     NicheError,
     NicheScan,

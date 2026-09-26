@@ -9,21 +9,28 @@ lineage models later.
 
 from __future__ import annotations
 
+import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
 
-from marse.additives import AdditiveEffect, apply_effect
+from marse.core.provenance import Manifest
 from marse.core.seeds import SeedRegistry
 from marse.ecosystem.providers import EcosystemProviders, NoBoundary
-from marse.immune import ImmuneInteraction, MolecularNeutralizer, apply_immune_pressure
+from marse.experimental.host.immune import (
+    ImmuneInteraction,
+    MolecularNeutralizer,
+    apply_immune_pressure,
+)
+from marse.microbes.additives import AdditiveEffect, apply_effect
 from marse.microbes.cardinal import cardinal_ph, cardinal_temperature
 from marse.microbes.growth import monod
-from marse.niche import Capability
+from marse.microbes.niche import Capability
 
 __all__ = [
     "AdditiveConfig",
@@ -344,6 +351,24 @@ class EcosystemConfig:
     def steps(self) -> int:
         return int(np.ceil(round(self.duration_h / self.timestep_h, 9)))
 
+    @property
+    def kind(self) -> str:
+        """Recorded in the run manifest, so a replay knows which engine to use."""
+        return "ecosystem"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Every effective value, in the form :func:`ecosystem_from_dict` reads back.
+
+        The manifest records this, so defaults are written out rather than left
+        implied: a replay must not depend on what a later version happens to
+        default to. An empty production tuple, for example, is written as the
+        zeros it means.
+        """
+        data = asdict(self)
+        for raw, species in zip(data["species"], self.species, strict=True):
+            raw["production_per_nutrient"] = list(species.production_coefficients)
+        return data
+
 
 @dataclass(frozen=True, slots=True)
 class EcosystemState:
@@ -429,6 +454,7 @@ class EcosystemResult:
     frames: tuple[EcosystemFrame, ...]
     final_state: EcosystemState
     provider_versions: dict[str, str] | None = None
+    manifest: Manifest | None = None
 
     def write_frames(self, path: str | Path) -> Path:
         destination = Path(path)
@@ -1032,8 +1058,134 @@ def _adhesion_step(
     return np.maximum(updated, 0.0)
 
 
-def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) -> EcosystemResult:
-    """Run a deterministic ecosystem experiment and retain every frame."""
+ENGINE_VERSION = "ecosystem_v1_unverified"
+"""Recorded as the manifest's ``engine`` model. The engine has known defects
+(docs/validation.md), and saying so belongs in the record a result carries."""
+
+_STATE_FIELDS = (
+    ("biomass", "<f8"),
+    ("nutrients", "<f8"),
+    ("conditions", "<f8"),
+    ("additives", "<f8"),
+    ("mutations", "<i8"),
+    ("phenotype_indices", "<i8"),
+    ("phenotype_dwell_h", "<f8"),
+)
+
+
+def _state_digest(state: EcosystemState) -> str:
+    """SHA-256 over every final field, in a fixed byte order.
+
+    Replay compares this as well as the readable summaries, so a difference
+    anywhere in the final state is caught, not only in the totals. Explicit
+    little-endian types keep the digest independent of the machine.
+    """
+    digest = hashlib.sha256()
+    for name, dtype in _STATE_FIELDS:
+        values = np.ascontiguousarray(getattr(state, name), dtype=dtype)
+        digest.update(f"{name}:{values.shape}:{dtype};".encode())
+        digest.update(values.tobytes())
+    return digest.hexdigest()
+
+
+def _ecosystem_outputs(config: EcosystemConfig, state: EcosystemState) -> dict[str, Any]:
+    """The quantities recorded in an ecosystem manifest and compared on replay.
+
+    Fields carry no declared units in this engine, so totals are named for
+    what they are: plain sums over grid cells, not integrals.
+    """
+    species = [s.name for s in config.species]
+    nutrients = [n.name for n in config.nutrients]
+    return {
+        "final_time_h": float(state.time_h),
+        "biomass_summed_over_cells": {
+            name: float(state.biomass[i].sum()) for i, name in enumerate(species)
+        },
+        "nutrient_summed_over_cells": {
+            name: float(state.nutrients[i].sum()) for i, name in enumerate(nutrients)
+        },
+        "mutated_cells": {
+            name: int(np.count_nonzero(state.mutations[i])) for i, name in enumerate(species)
+        },
+        "final_state_sha256": _state_digest(state),
+    }
+
+
+class FrameSink(Protocol):
+    """Receives recorded frames as a run produces them, such as a frame store."""
+
+    def write(self, index: int, step: int, frame: EcosystemFrame) -> None: ...
+
+
+def _check_frame_every(frame_every: int | None) -> None:
+    if frame_every is not None and (
+        isinstance(frame_every, bool) or not isinstance(frame_every, int) or frame_every < 1
+    ):
+        raise EcosystemError(f"frame_every must be a positive integer or None, got {frame_every!r}")
+
+
+def _records(step: int, steps: int, frame_every: int | None) -> bool:
+    """Whether ``step`` is recorded. Arithmetic, so memory does not grow with run length."""
+    return step == steps or (frame_every is not None and step % frame_every == 0)
+
+
+def recorded_steps(steps: int, frame_every: int | None) -> tuple[int, ...]:
+    """The steps at which a run records a frame: every ``frame_every``-th, plus the last.
+
+    Counted in whole steps, not hours, so there is no rounding question about
+    which step an interval lands on. ``None`` records only the first and last.
+    """
+    _check_frame_every(frame_every)
+    chosen = [0] if frame_every is None else list(range(0, steps + 1, frame_every))
+    if chosen[-1] != steps:
+        chosen.append(steps)
+    return tuple(chosen)
+
+
+def _frame(
+    config: EcosystemConfig,
+    state: EcosystemState,
+    nutrient_names: tuple[str, ...],
+    condition_names: tuple[str, ...],
+) -> EcosystemFrame:
+    """A snapshot of ``state``. Frames only observe: building one changes nothing."""
+    niche = tuple(
+        _niche_maps(species, state.nutrients, state.conditions, nutrient_names, condition_names)
+        for species in config.species
+    )
+    return EcosystemFrame(
+        state.time_h,
+        state.biomass.copy(),
+        state.nutrients.copy(),
+        state.conditions.copy(),
+        state.additives.copy(),
+        state.mutations.copy(),
+        tuple(rates for rates, _ in niche),
+        tuple(limiting for _, limiting in niche),
+        state.phenotype_indices.copy(),
+    )
+
+
+def run(
+    config: EcosystemConfig,
+    providers: EcosystemProviders | None = None,
+    *,
+    frame_every: int | None = 1,
+    sink: FrameSink | None = None,
+) -> EcosystemResult:
+    """Run a deterministic ecosystem experiment.
+
+    Frames are recorded every ``frame_every`` steps and at the last step;
+    ``None`` records only the first and last. Recording is observation only,
+    so it never changes the result. With a ``sink``, each recorded frame is
+    handed to it as it is made and the result keeps only the first and last
+    in memory, so memory no longer grows with the length of the run.
+
+    The result carries a manifest, so the run can be replayed with
+    ``marse replay`` exactly as the core runs can.
+    """
+    _check_frame_every(frame_every)
+    started = datetime.now(UTC)
     providers = providers or EcosystemProviders()
     max_diffusivity = max(
         (field.diffusivity for field in (*config.nutrients, *config.conditions, *config.additives)),
@@ -1069,37 +1221,24 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
     )
     seed_registry = SeedRegistry(config.seed)
     mutation_rng = seed_registry.stream("ecosystem.mutations")
-    frames = [
-        EcosystemFrame(
-            0.0,
-            state.biomass.copy(),
-            state.nutrients.copy(),
-            state.conditions.copy(),
-            state.additives.copy(),
-            state.mutations.copy(),
-            tuple(
-                _niche_maps(
-                    species,
-                    state.nutrients,
-                    state.conditions,
-                    nutrient_names,
-                    condition_names,
-                )[0]
-                for species in config.species
-            ),
-            tuple(
-                _niche_maps(
-                    species,
-                    state.nutrients,
-                    state.conditions,
-                    nutrient_names,
-                    condition_names,
-                )[1]
-                for species in config.species
-            ),
-            phenotype_indices.copy(),
-        )
-    ]
+    frames: list[EcosystemFrame] = []
+    recorded = 0
+
+    def record(snapshot: EcosystemState) -> None:
+        nonlocal recorded
+        frame = _frame(config, snapshot, nutrient_names, condition_names)
+        if sink is None:
+            frames.append(frame)
+        else:
+            sink.write(recorded, snapshot.step, frame)
+            # Keep the first and the most recent only; the sink holds the rest.
+            if len(frames) < 2:
+                frames.append(frame)
+            else:
+                frames[-1] = frame
+        recorded += 1
+
+    record(state)
     mutation_interval = config.mutation_interval_h
     next_mutation = mutation_interval if mutation_interval is not None else np.inf
 
@@ -1279,26 +1418,21 @@ def run(config: EcosystemConfig, providers: EcosystemProviders | None = None) ->
             phenotype_indices.copy(),
             phenotype_dwell_h.copy(),
         )
-        niche_maps = tuple(
-            _niche_maps(species, nutrients, conditions, nutrient_names, condition_names)
-            for species in config.species
-        )
-        frames.append(
-            EcosystemFrame(
-                time_h,
-                biomass.copy(),
-                nutrients.copy(),
-                conditions.copy(),
-                additives.copy(),
-                mutations.copy(),
-                tuple(result[0] for result in niche_maps),
-                tuple(result[1] for result in niche_maps),
-                phenotype_indices.copy(),
-            )
-        )
+        # A step that cannot advance ends the run, so it is recorded as the last frame.
+        if _records(step, config.steps, frame_every) or dt <= 0:
+            record(state)
         while next_mutation <= time_h + 1e-12:
             next_mutation += mutation_interval if mutation_interval is not None else np.inf
         if dt <= 0:
             break
 
-    return EcosystemResult(config, tuple(frames), state, providers.versions)
+    manifest = Manifest.build(
+        config=config,
+        models={**providers.versions, "engine": ENGINE_VERSION},  # engine last: never overridden
+        random_streams=seed_registry.issued_names,
+        started=started,
+        finished=datetime.now(UTC),
+        steps=state.step,
+        outputs=_ecosystem_outputs(config, state),
+    )
+    return EcosystemResult(config, tuple(frames), state, providers.versions, manifest)

@@ -25,12 +25,35 @@ marse replay runs/batch/manifest.json
 # a biofilm, solved to the steady profile its oxygen gradient supports
 marse run examples/experiments/biofilm_oxygen_profile.json -o runs/biofilm
 marse replay runs/biofilm/manifest.json
+
+# a two-dimensional multispecies ecosystem, with a browser viewer
+marse ecosystem examples/experiments/two_species_ecosystem.json -o runs/ecosystem
+marse replay runs/ecosystem/manifest.json
 ```
 
 Adding a `biofilm` block to an experiment changes what it *is*: a batch run
 evolves a well-mixed culture over time, while a biofilm run holds the biomass
-fixed and solves the depth profile, which has no time axis. Both produce a
-manifest that replays them.
+fixed and solves the depth profile, which has no time axis. All three kinds
+produce a manifest that replays them. Replay proves a result can be
+reproduced, not that it is right: the ecosystem engine has known defects that
+are being fixed before anything is built on it
+([validation.md](docs/validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified)).
+
+The fix starts with the configuration. In the new format every process must
+conserve carbon, nitrogen and electrons exactly, and MARSE derives what a
+yield leaves open, such as the oxygen used and the carbon dioxide released. A
+process that would make matter from nothing is refused as the file loads. A
+network with rates runs in a closed, well-mixed box, and every run proves its
+own balance:
+
+```bash
+marse check examples/networks/glucose_cross_feeding.json
+marse run examples/networks/glucose_cross_feeding.json -o runs/network
+marse replay runs/network/manifest.json
+```
+
+[docs/networks.md](docs/networks.md) describes the format. Transport, and with
+it biofilms, comes next.
 
 The manifest records the configuration, its SHA-256 checksum, the random seed,
 the versioned models used and the software versions — and deliberately records
@@ -87,18 +110,23 @@ predict clinical or vaccine outcomes, or produce experimental evidence; the
 ```text
 src/marse/         the Python package
   core/            run loop, state, configuration, seeds, provenance
-  schemas/         validated canonical objects
+  schemas/         configuration schema v2: formulas and balanced reaction networks
   spatial/         domains, grids, diffusion; solute properties
-  microbes/        growth kinetics, cardinal models, interactions
+  microbes/        growth kinetics, cardinal models, niches, genotypes, dose responses
   biofilm/         biomass, matrix, maturation
+  ecosystem/       the 2-D multispecies engine, frame store and viewer
   adaptation/      state transitions and decision policies
   interventions/   perturbations
+  analysis/        calibration, uncertainty and sensitivity, ensembles
+  evidence/        culture conditions and measurements, with their sources
+  experimental/    outside the v1.0 claims (host/: host-pressure primitives)
   validation/      analytical references, benchmark and regression cases
 examples/          runnable reference calculations
-  experiments/     experiment configurations for `marse run`
+  experiments/     experiment configurations for `marse run` and `marse ecosystem`
+  networks/        reaction networks for `marse check` and `marse run` (configuration schema v2)
 tests/             test suite
 docs/              theory, parameters, specification, architecture, validation, roadmap
-tools/             repository tooling (privacy guard)
+tools/             repository tooling (privacy and repository guards)
 ```
 
 Planned: `paper/` for the software paper.
@@ -131,6 +159,8 @@ Before your first commit, complete the one-time setup in
   and what it does not claim.
 - [docs/architecture.md](docs/architecture.md): core abstractions and
   extension contracts.
+- [docs/networks.md](docs/networks.md): reaction networks, the configuration
+  format in which every process must conserve carbon, nitrogen and electrons.
 - [docs/validation.md](docs/validation.md): benchmark definitions.
 - [docs/modeling-landscape.md](docs/modeling-landscape.md): how the field
   models microbial growth, how natural conditions differ from laboratory ones,

@@ -8,7 +8,7 @@ has been verified, and the roadmap what comes next.
 
 __version__ = "0.1.0.dev0"
 
-from marse.genotype import (
+from marse.microbes.genotype import (
     CapabilityMapResult,
     GenotypeError,
     GenotypeRule,

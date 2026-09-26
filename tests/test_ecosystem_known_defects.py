@@ -36,7 +36,7 @@ from marse.ecosystem import (
     run,
 )
 from marse.ecosystem.model import ecosystem_from_dict
-from marse.niche import Capability
+from marse.microbes.niche import Capability
 from marse.spatial.solutes import oxygen_diffusivity_um2_per_h
 
 EXPERIMENTS = Path(__file__).resolve().parents[1] / "examples" / "experiments"
@@ -275,7 +275,8 @@ def test_example_oxygen_diffusivity_is_physical(experiment: str):
     )
 
 
-@known_defect(9, "ecosystem runs write no manifest and cannot be replayed", "Stage 1")
+# Fixed in Stage 1: ecosystem runs write a manifest and replay exactly. This is
+# now an ordinary regression test (tests/test_ecosystem_provenance.py goes further).
 def test_an_ecosystem_run_writes_a_replayable_manifest(tmp_path: Path):
     experiment = {
         "experiment_id": "manifest-check",

@@ -23,17 +23,37 @@ import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 
 from marse import __version__
-from marse.core.config import ExperimentConfig, experiment_from_dict
+from marse.core.config import experiment_from_dict
 
-__all__ = ["Manifest", "config_checksum"]
+__all__ = ["Manifest", "RunConfig", "config_checksum"]
 
-MANIFEST_VERSION = 1
-"""Schema version of the manifest itself, so old manifests stay readable."""
+MANIFEST_VERSION = 2
+"""Schema version of the manifest itself, so old manifests stay readable.
+
+Version 2 added ``kind``. Version 1 manifests predate the ecosystem engine, so
+their kind is recovered from the configuration when they are read.
+"""
+
+_READABLE_VERSIONS = (1, 2)
+
+_CORE_KINDS = ("batch", "biofilm_profile")
+
+
+class RunConfig(Protocol):
+    """What a configuration must offer to be recorded in, and rebuilt from, a manifest."""
+
+    experiment_id: str
+    seed: int
+
+    @property
+    def kind(self) -> str: ...
+
+    def to_dict(self) -> dict[str, Any]: ...
 
 
 def _canonical(data: Any) -> str:
@@ -41,9 +61,25 @@ def _canonical(data: Any) -> str:
     return json.dumps(data, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
-def config_checksum(config: ExperimentConfig) -> str:
+def config_checksum(config: RunConfig) -> str:
     """SHA-256 over the canonical form of the configuration."""
     return hashlib.sha256(_canonical(config.to_dict()).encode("utf-8")).hexdigest()
+
+
+def _load_config(kind: str, raw: dict[str, Any]) -> RunConfig:
+    if kind in _CORE_KINDS:
+        return experiment_from_dict(raw)
+    if kind == "ecosystem":
+        # Imported here rather than at module level: the core does not depend on
+        # the ecosystem engine, and only an ecosystem manifest needs it.
+        from marse.ecosystem.model import ecosystem_from_dict
+
+        return ecosystem_from_dict(raw)
+    if kind == "well_mixed":
+        from marse.schemas.experiment import experiment_from_dict as network_experiment
+
+        return network_experiment(raw)
+    raise ValueError(f"manifest kind {kind!r} is not supported by MARSE {__version__}")
 
 
 def _environment_record() -> dict[str, str]:
@@ -73,13 +109,14 @@ class Manifest:
     finished_utc: str
     steps: int
     outputs: dict[str, Any]
+    kind: str
     manifest_version: int = MANIFEST_VERSION
 
     @classmethod
     def build(
         cls,
         *,
-        config: ExperimentConfig,
+        config: RunConfig,
         models: dict[str, str],
         random_streams: tuple[str, ...],
         started: datetime,
@@ -103,11 +140,13 @@ class Manifest:
             finished_utc=finished.astimezone(UTC).isoformat(timespec="seconds"),
             steps=steps,
             outputs=outputs,
+            kind=config.kind,
         )
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "manifest_version": self.manifest_version,
+            "kind": self.kind,
             "run_id": self.run_id,
             "experiment_id": self.experiment_id,
             "seed": self.seed,
@@ -134,11 +173,16 @@ class Manifest:
     def read(cls, path: str | Path) -> Manifest:
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
         version = raw.get("manifest_version")
-        if version != MANIFEST_VERSION:
+        if version not in _READABLE_VERSIONS:
             raise ValueError(
                 f"manifest version {version!r} is not supported by MARSE {__version__} "
-                f"(expected {MANIFEST_VERSION})"
+                f"(readable: {', '.join(map(str, _READABLE_VERSIONS))})"
             )
+        if version == 1:
+            # Version 1 had no kind field and only the two core kinds existed.
+            kind = "biofilm_profile" if raw["config"].get("biofilm") is not None else "batch"
+        else:
+            kind = raw["kind"]
         return cls(
             run_id=raw["run_id"],
             experiment_id=raw["experiment_id"],
@@ -152,16 +196,23 @@ class Manifest:
             finished_utc=raw["finished_utc"],
             steps=raw["steps"],
             outputs=raw["outputs"],
+            kind=kind,
             manifest_version=version,
         )
 
-    def experiment(self) -> ExperimentConfig:
+    def experiment(self) -> RunConfig:
         """Rebuild the configuration, verifying it still matches its checksum.
 
         A mismatch means the manifest was edited after the run, so replaying it
-        would not reproduce the recorded results.
+        would not reproduce the recorded results. The rebuilt configuration must
+        also be of the kind the manifest declares.
         """
-        config = experiment_from_dict(self.config)
+        config = _load_config(self.kind, self.config)
+        if config.kind != self.kind:
+            raise ValueError(
+                f"manifest declares a {self.kind!r} run but its configuration "
+                f"describes a {config.kind!r} run"
+            )
         actual = config_checksum(config)
         if actual != self.config_sha256:
             raise ValueError(

@@ -75,7 +75,7 @@ def _variant(
 
 
 def _record(config: dict[str, Any]) -> dict[str, Any]:
-    result = run(ecosystem_from_dict(config))
+    result = run(ecosystem_from_dict(config), frame_every=None)  # final state only
     final = result.final_state
     record: dict[str, Any] = {
         "scenario_id": _checksum(config)[:16],

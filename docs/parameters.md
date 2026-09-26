@@ -60,6 +60,22 @@ oxygen solubility, so a culture medium holds less than pure water; a 5 % CO₂
 atmosphere displaces oxygen to roughly 0.95 × the tabulated value. Both must
 be stated in configuration.
 
+### Composition used by reaction networks
+
+Reaction networks ([`docs/networks.md`](networks.md)) balance carbon, nitrogen
+and electrons from each component's formula alone. The atomic weights only
+convert amounts to masses, for the molar masses `marse check` prints.
+
+| Quantity | Value | Unit | Source | Verified |
+|---|---|---|---|---|
+| Atomic weights of C, H, N, O | 12.011, 1.008, 14.007, 15.999 | g mol⁻¹ | definition: IUPAC abridged standard atomic weights (Prohaska et al. 2022) | **A** |
+| Average elemental composition of microbial biomass | CH₁.₈O₀.₅N₀.₂: 4.2 e⁻ and 24.63 g (ash-free) per C-mol | per C-mol | Heijnen & van Dijken (1992); Roels (1983) | **B** |
+
+The biomass composition is an average. Real biomass varies between organisms
+and with growth conditions, so a network states each organism's formula
+explicitly and MARSE supplies no default. The molar masses are checked in
+`tests/test_schema_formula.py`, glucose at 180.156 g mol⁻¹.
+
 ---
 
 ## 2. Effective diffusivity in biofilms
@@ -269,6 +285,7 @@ Full bibliographic details for the sources cited here are listed in
 in this file only:
 
 - Presser, K.A., Ratkowsky, D.A. & Ross, T. (1997) Modelling the growth rate of *Escherichia coli* as a function of pH and lactic acid concentration. *Applied and Environmental Microbiology* **63**:2355–2360. [doi:10.1128/aem.63.6.2355-2360.1997](https://doi.org/10.1128/aem.63.6.2355-2360.1997)
+- Prohaska, T., Irrgeher, J., Benefield, J. *et al.* (2022) Standard atomic weights of the elements 2021 (IUPAC Technical Report). *Pure and Applied Chemistry* **94**:573–600. [doi:10.1515/pac-2019-0603](https://doi.org/10.1515/pac-2019-0603)
 - Sezonov, G., Joseleau-Petit, D. & D'Ari, R. (2007) *Escherichia coli* physiology in Luria-Bertani broth. *Journal of Bacteriology* **189**:8746–8749. [doi:10.1128/JB.01368-07](https://doi.org/10.1128/JB.01368-07)
 - Soupene, E., van Heeswijk, W.C., Plumbridge, J. *et al.* (2003) Physiological studies of *Escherichia coli* strain MG1655: growth defects and apparent cross-regulation of gene expression. *Journal of Bacteriology* **185**:5611–5626. [doi:10.1128/JB.185.18.5611-5626.2003](https://doi.org/10.1128/JB.185.18.5611-5626.2003)
 - Van Derlinden, E., Bernaerts, K. & Van Impe, J.F. (2008) Accurate estimation of cardinal growth temperatures of *Escherichia coli* from optimal dynamic experiments. *International Journal of Food Microbiology* **128**:89–100. [doi:10.1016/j.ijfoodmicro.2008.07.014](https://doi.org/10.1016/j.ijfoodmicro.2008.07.014)

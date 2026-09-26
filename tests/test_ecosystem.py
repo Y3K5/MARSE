@@ -7,7 +7,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from marse.additives import AdditiveEffect, apply_effect, hill_response
 from marse.ecosystem import (
     AdditiveConfig,
     ConditionConfig,
@@ -23,8 +22,9 @@ from marse.ecosystem import (
     run,
     write_viewer,
 )
-from marse.immune import ImmuneInteraction
-from marse.niche import Capability
+from marse.experimental.host.immune import ImmuneInteraction
+from marse.microbes.additives import AdditiveEffect, apply_effect, hill_response
+from marse.microbes.niche import Capability
 
 
 def config(**overrides) -> EcosystemConfig:
@@ -218,7 +218,8 @@ def test_json_experiment_loader_and_viewer(tmp_path: Path):
     result = run(load_experiment(source))
     viewer = write_viewer(result, tmp_path / "viewer.html")
     assert viewer.is_file()
-    assert (tmp_path / "frames.json").is_file()
+    # The viewer is self-contained: it no longer drops a frames.json beside itself.
+    assert not (tmp_path / "frames.json").exists()
     assert "canvas" in viewer.read_text(encoding="utf-8")
 
 

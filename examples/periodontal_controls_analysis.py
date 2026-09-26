@@ -40,7 +40,7 @@ COMPETITION_MODES = ("reference", "none")
 
 
 def _record(config: dict, competition_mode: str, resource_perturbation: str) -> dict[str, object]:
-    result = run(ecosystem_from_dict(config))
+    result = run(ecosystem_from_dict(config), frame_every=None)  # final state only
     final = result.final_state
     occupied = final.biomass > 0.01 * config["carrying_capacity"]
     record: dict[str, object] = {
