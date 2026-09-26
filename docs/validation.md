@@ -89,7 +89,7 @@ flips its test, which must then become an ordinary regression test.
 
 | # | Defect | Measured | Consequence |
 |---|---|---|---|
-| 1 | The examples give oxygen a diffusivity of 10 µm²/h. The physical value in a biofilm is about 4×10⁶ µm²/h (`oxygen_diffusivity_um2_per_h` at 37 °C × 0.43). At 10 µm cells the explicit scheme could only run that value with 22 ms steps. | Oxygen spreads about 30 µm in 24 h instead of about 20 mm | Every oxygen gradient in the examples is set by the numerics, not the physics |
+| 1 | The examples give oxygen a diffusivity of 10 µm²/h. The physical value in a biofilm is about 4×10⁶ µm²/h (`oxygen_diffusivity_um2_per_h` at 37 °C × 0.43). At 10 µm cells the explicit scheme could only run that value with 22 ms steps. | Oxygen spreads about 30 µm in 24 h instead of about 20 mm | Every oxygen gradient in the examples is set by the numerics, not the physics. The version 2 spatial engine runs oxygen at its physical diffusivity: transport is implicit, so no step limit applies ([theory.md §9.8](theory.md#98-implicit-reactiontransport-integration)) |
 | 2 | Uptake follows *potential* growth, not actual growth. Production adds material that no consumed substrate pays for. | With growth held at zero, 22% of the carbon is consumed in an hour. With a yield of 1, 1.3–1.6 units are consumed per unit of biomass formed. | Yield and mass balance are both broken. Configuration schema version 2 refuses such a process when it loads ([networks.md](networks.md)), and the version 2 network engine meets the requirement: consumption is growth divided by yield, exactly, and nothing is consumed without growth |
 | 3 | The periodontal species need oxygen to grow (a Monod term), although all three are anaerobes ([Holt and Ebersole 2005](https://pubmed.ncbi.nlm.nih.gov/15853938/)) | With no oxygen, growth is exactly zero | The study's oxygen-limited control points the wrong way |
 | 4 | A species capability applies the substrate Monod term a second time | 50% of the intended rate at C = K, 13% at C = K/7 | Growth at low substrate is strongly understated. Version 2 refuses a second factor for one component, and a Monod factor gives exactly half the rate at C = K |
@@ -214,6 +214,83 @@ checks, in `tests/test_well_mixed.py` and `tests/test_integrators.py`:
   until version 1 is removed.
 - **Replay.** Runs replay bit for bit from their manifests. An edited manifest
   is refused.
+
+## Transport in one, two and three dimensions
+
+The spatial engine moves dissolved components between cubic voxels by
+finite-volume diffusion (`marse.spatial.transport`,
+[theory.md §4.7](theory.md#47-finite-volume-transport-on-voxels)). The checks,
+in `tests/test_transport.py`:
+
+- **Exact eigenvectors.** With lateral faces periodic, no flux through the
+  substratum and the bulk held at zero, a product of cosines is an exact
+  eigenvector of the discrete operator in 1-, 2- and 3-D. Its rate matches
+  `cosine_mode_rate` to rounding, and that rate converges to the continuum
+  rate at second order.
+- **The 3-D point release.** On a spreading Gaussian
+  (`point_source_diffusion_3d`), the operator's error against the exact time
+  derivative falls at second order: the measured orders are 1.93 and 1.98 as
+  the voxels shrink from 4 µm to 1 µm.
+- **Conservation.** The rate summed over the box equals the flux through the
+  top face to rounding, for random fields in every dimension. A component
+  without diffusivity does not move.
+- **Symmetry and dimension.** A laterally uniform 3-D field diffuses exactly,
+  bit for bit, as a single column. Swapping or reflecting the lateral axes
+  moves the result with them.
+- **The multigrid solver** (`marse.spatial.multigrid`).
+  - Each V-cycle reduces the error by less than 0.15, the same on grids from
+    8³ to 32×32×16 and in 1-D and 2-D. On 64×64×32 the measured factor is
+    0.06–0.09.
+  - GMRES with this preconditioner agrees with a direct solve.
+  - The same system gives the same answer, bit for bit.
+- **Output.** VTK frames read back exactly in double precision and to 1e-7 in
+  single precision.
+
+## Reactions and transport in space
+
+The version 2 spatial engine (`marse.core.reactive_transport`,
+[theory.md §9.8](theory.md#98-implicit-reactiontransport-integration)) runs a
+network in a box of voxels over a surface. It was prototyped first in one
+dimension against criteria set in advance, and it passed all of them:
+
+| Criterion | Measured |
+|---|---|
+| C, N and e⁻ conserved over 10⁴ steps, counting imports | to 2.4e-15 of the totals |
+| Nothing negative; the limiter rarely needed | never negative; the limiter was used in 1 of 10⁴ steps |
+| Second order in time | order 1.74 → 1.92 as the step falls from 90 s to 2.8 s (stiff order reduction) |
+| A sudden drop in bulk oxygen followed | 90 s steps within 3e-6 of air saturation |
+| Long steps reach the quasi-steady profile | within 7e-7, after six minutes, of the same grid's steady state |
+
+The tests, in `tests/test_reactive_transport.py`:
+
+- **The scheme's own algebra.** On a diffusion mode, each step multiplies the
+  mode by exactly the stability function of the method, to 1e-9, and the
+  result converges to the exact decay at second order.
+- **Agreement with the well-mixed engine.** Without diffusion, every voxel of
+  the box evolves as the well-mixed engine (2b) evolves the same contents, to
+  1e-5.
+- **Agreement across dimensions.** A laterally uniform 3-D box, taking the
+  same steps as a single column, evolves as that column to 1e-10 of each
+  component's peak (measured: 2e-13, rounding), and no lateral flux arises.
+- **The ledger in an open box.** Carbon, nitrogen and electrons equal their
+  imports through the top to 1e-12 of the totals. A planted leak in the
+  transport is caught at the first step, so the ledger is shown to be able to
+  fail.
+- **Positivity.** Hour-long steps over a biofilm with an anoxic base leave
+  every concentration non-negative. Nothing is clipped: a ledger held to
+  1e-12 balances after every step. A trace of four units in the last place,
+  sending one through each of six faces, cannot be scaled into balance,
+  because each scaled transfer rounds back up to one unit. It stays
+  non-negative with its total unchanged, both in the limiter's rounds and in
+  its fallback.
+- **The analytic Jacobian** of the rates matches finite differences of the
+  rates as the engine evaluates them, including below zero, where it has no
+  slope.
+- **Schema, replay and command line.**
+  - Every impossible domain is refused with a message that says why.
+  - Random colonies are placed by the seed and replaced by it.
+  - Runs replay bit for bit, and an edited manifest is refused.
+  - `marse run` writes the totals, the frames and the ParaView files.
 
 ## Running the suite
 

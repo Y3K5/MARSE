@@ -93,9 +93,10 @@ key is an error, not a silently ignored typo.
 | `duration_h` | number | to run | How long to run. |
 | `timestep_h` | number | to run | The longest substep, and the unit of recording. Accuracy comes from the tolerances, not from this. |
 | `record_interval_h` | number | no, default `timestep_h` | How often the trajectory records a row, rounded to a whole number of timesteps. The final state is always recorded. |
-| `relative_tolerance` | number | no, default `1e-6` | The accepted local error, as a fraction of each concentration or of the largest it has reached. |
+| `relative_tolerance` | number | no, default `1e-6`, or `1e-4` in space | The accepted local error, as a fraction of each component's largest value. In space that is its largest value anywhere in the box. |
 | `absolute_tolerance_mol_per_m3` | number | no, default `1e-9` | The accepted local error for traces (picomolar). |
-| `seed` | integer | no, default `0` | Recorded in the manifest; a closed box draws no random numbers. |
+| `seed` | integer | no, default `0` | Places `random_colonies`, and is recorded in the manifest. Nothing else draws random numbers. |
+| `domain` | domain | no | Runs the network in space instead of a closed box; see [Running a network in space](#running-a-network-in-space). |
 
 ### Component fields
 
@@ -245,6 +246,135 @@ Three guarantees hold for every run:
 
 The method is in [theory.md §9.6](theory.md#96-positive-conservative-integration).
 
+## Running a network in space
+
+With a `domain`, the same network runs in a box of cubic voxels over a flat
+surface, in one, two or three dimensions. The scene is the standard one for a
+biofilm:
+
+- **Colonies sit on the surface.** The surface might be a tooth, a pipe wall or
+  a slide.
+- **Liquid lies above them.** Its bulk concentrations are held at the top face
+  of the box.
+- **The box repeats sideways.** Its lateral faces are periodic, so it is one
+  tile of a larger surface.
+
+Dissolved components diffuse between voxels at the stated diffusivities. Every
+process runs in every voxel at once, at the rates described in [Rates](#rates). Biomass
+grows where it is. Colonies spreading, and sharing space as they do, come in the
+next stage.
+
+```bash
+marse check examples/networks/surface_biofilm_3d.json   # the space, and what an explicit step would cost
+marse run examples/networks/surface_biofilm_3d.json -o runs/surface
+marse replay runs/surface/manifest.json
+```
+
+`marse run` writes:
+
+- `totals.csv`: each component per m² of surface over time, and what has
+  entered through the top;
+- `manifest.json`;
+- `frames/`: every component's field at each recorded time, as NumPy files;
+- `vtk/`: the same frames for 3-D viewers. Open `vtk/run.pvd` in
+  [ParaView](https://www.paraview.org/) and step through time. A contour of
+  oxygen shows where colonies have made the liquid anoxic.
+
+### The example
+
+`surface_biofilm_3d.json` places a heterotroph colony and a fermenter colony,
+each 40 µm in radius, on a 160 µm square of surface. Their centres are 60 µm
+apart, so the two overlap near the surface. Six small heterotroph colonies are
+scattered from the seed. The liquid above holds a quarter
+of air-saturated oxygen. `marse run` prints:
+
+```text
+experiment  surface-biofilm-3d
+kind        reactive_transport
+space       3-D, 32 x 32 x 16 voxels of 5 um (160 x 160 x 80 um)
+steps       8 over 2 h: 343 implicit substeps, 1 retried, 78 limited to keep concentrations positive
+final                      mol per m2 of surface   entered through the top
+  glucose                   0.000364063       +0.01506
+  oxygen                    2.23469e-06      +0.004527
+  ammonium                  0.000399011      +0.002861
+  carbon_dioxide            8.21439e-05      -0.005242
+  lactate                   3.41743e-05       -0.02363
+  heterotroph                 0.0173451             +0
+  fermenter                   0.0190625             +0
+balance     carbon, nitrogen and electrons, counting what crossed the top, conserved to 1.8e-16
+```
+
+After two hours:
+
+- **The heterotroph colony has an anoxic core.** Oxygen at its base is 0.03%
+  of the liquid's, and 375 voxels hold less than 1%.
+- **The fermenter makes lactate**: up to 1.5 mol m⁻³ at its base. Its biomass
+  has grown 1.8-fold in place, the heterotrophs' 1.45-fold.
+- **Lactate feeds the heterotrophs.** It diffuses to them from the fermenter,
+  and 39% of their growth now runs on it. Most still escapes to the liquid,
+  0.024 mol m⁻² over the two hours. At the end the heterotrophs take up
+  lactate at about a twentieth of the rate it leaves.
+
+The run takes about four and a half minutes on one core. Most of that is the
+first quarter hour, in 302 of the 343 steps. The colonies start in fresh
+liquid, use up the oxygen within seconds, and lactate appears from nothing: a
+transient spread over five decades of time ([theory.md
+§9.8](theory.md#98-implicit-reactiontransport-integration)). After it, steps
+grow to about three minutes. `surface_biofilm_1d.json` runs the same
+chemistry in a single column in three seconds.
+
+### Domain fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `voxels` | list of 1 to 3 whole numbers | yes | Voxels along each axis. The last axis is height above the surface. `[64]` is a column, `[32, 64]` a vertical slice, `[32, 32, 16]` a box. Counts divisible by 2 several times make the solver fastest. |
+| `voxel_um` | number | yes | The edge of a cubic voxel, in µm. |
+| `bulk_mol_per_m3` | object of numbers | no, default `0` each | What the liquid above holds, held at the top face. Dissolved components only. |
+| `diffusivity_m2_per_s` | object of numbers | yes | One value for every dissolved component, in m² per s, as tables give them. Particulate components (biomass) do not diffuse. |
+| `colonies` | list of colonies | no | Hemispheres of biomass on the surface, placed where stated. |
+| `random_colonies` | list of random colonies | no | Hemispheres of biomass scattered over the surface from the run's `seed`. |
+
+`initial_mol_per_m3` fills every voxel. Each colony then sets its component to
+its concentration in the voxels whose centres lie inside it. A colony that
+covers no voxel is refused.
+
+### Colony fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `component` | component name | yes | A particulate component, such as a species' biomass. |
+| `center_um` | list of numbers | yes | Where it stands on the surface, one coordinate per lateral axis, in µm: two in 3-D, one in 2-D, none in 1-D, where a colony is a layer. |
+| `radius_um` | number | yes | Its radius, which is also its height. |
+| `concentration_mol_per_m3` | number | yes | The biomass density inside it, in C-mol per m³ for biomass written per carbon atom. |
+
+### Random colony fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `component` | component name | yes | A particulate component. |
+| `count` | integer | yes | How many to scatter. |
+| `radius_um` | number | yes | Each one's radius. It must be large enough to always cover a voxel. |
+| `concentration_mol_per_m3` | number | yes | The density inside each. |
+
+The positions are drawn from the random stream `colonies`, derived from `seed`
+and recorded in the manifest. So a replay puts every colony back in the same
+voxels, and another seed scatters them anew.
+
+Every run in space keeps the three guarantees of a closed box:
+
+- **Matter is conserved, counting what crosses the top.** After every step, a
+  ledger compares the carbon, nitrogen and electrons in the box with what has
+  entered or left through the top face. That exchange is computed from the face
+  fluxes themselves, not inferred from the difference. A drift beyond 1e-9
+  stops the run.
+- **Concentrations stay non-negative, without clipping.**
+- **The run replays bit for bit.**
+
+The method is implicit, so a step can be minutes long even though diffusion
+across a voxel takes milliseconds. It follows fast changes, such as a sudden
+drop in the oxygen above, and settles onto the quasi-steady profile when
+nothing is changing fast ([theory.md §9.8](theory.md#98-implicit-reactiontransport-integration)).
+
 ## Balancing: `balanced_by`
 
 Each component in `balanced_by` gets the coefficient that makes the process
@@ -305,12 +435,14 @@ the field that exists.
 |---|---|
 | `_mol_per_mol` | mol of one component per mol of another |
 | `_mol_per_m3` | mol per cubic metre, which is mmol per litre |
+| `_m2_per_s` | square metres per second, as diffusivities are tabulated |
 | `_per_h` | per hour |
+| `_um` | micrometres |
 | `_h` | hours |
 
-Four numeric fields have no unit: `schema_version`, a version number;
-`charge`, in elementary charges; `seed`, an identifier; and
-`relative_tolerance`, a fraction. The test suite checks that every numeric
+Six numeric fields have no unit: `schema_version`, a version number;
+`charge`, in elementary charges; `seed`, an identifier; `relative_tolerance`,
+a fraction; and `voxels` and `count`, which are counts. The test suite checks that every numeric
 field follows this rule, and that the tables on this page list exactly the
 fields MARSE reads.
 
@@ -335,9 +467,9 @@ schema will carry these grades itself once the examples are rebuilt on it.
 The next increments, in the order of
 [the roadmap](roadmap.md#order-of-work-correctness-first):
 
-- transport between grid cells at physical diffusivities, with the boundary
-  fluxes entered in the ledger;
-- oxygen roles for species, heritable lineages, and space shared between
-  species;
+- biomass that spreads as it grows and shares space between species, with
+  oxygen roles for species and heritable lineages;
 - the examples and the periodontal study rebuilt on version 2, after which
-  version 1 is removed.
+  version 1 is removed;
+- dead biomass, the extracellular matrix, and a diffusivity that depends on
+  them.

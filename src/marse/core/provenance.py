@@ -75,7 +75,7 @@ def _load_config(kind: str, raw: dict[str, Any]) -> RunConfig:
         from marse.ecosystem.model import ecosystem_from_dict
 
         return ecosystem_from_dict(raw)
-    if kind == "well_mixed":
+    if kind in ("well_mixed", "reactive_transport"):
         from marse.schemas.experiment import experiment_from_dict as network_experiment
 
         return network_experiment(raw)
@@ -112,6 +112,11 @@ class Manifest:
     kind: str
     manifest_version: int = MANIFEST_VERSION
 
+    @staticmethod
+    def run_id_for(config: RunConfig) -> str:
+        """The run_id a configuration's manifest will carry, known before the run."""
+        return f"MARSE-{config_checksum(config)[:12]}"
+
     @classmethod
     def build(
         cls,
@@ -128,7 +133,7 @@ class Manifest:
         return cls(
             # Derived from the configuration, so the same experiment yields the
             # same run_id: identifying, but not a record of when or where.
-            run_id=f"MARSE-{checksum[:12]}",
+            run_id=cls.run_id_for(config),
             experiment_id=config.experiment_id,
             config=config.to_dict(),
             config_sha256=checksum,

@@ -15,12 +15,14 @@ from marse._numeric import FloatOrArray, as_array, require, unwrap
 __all__ = [
     "batch_final_biomass",
     "chemostat_break_even",
+    "cosine_mode_rate",
     "exponential_growth",
     "first_order_profile",
     "first_order_surface_flux",
     "logistic_growth",
     "monod_batch_time",
     "point_source_diffusion_2d",
+    "point_source_diffusion_3d",
     "zero_order_penetration_depth",
 ]
 
@@ -155,6 +157,44 @@ def point_source_diffusion_2d(
     require(t > 0 and diffusivity > 0, "t and diffusivity must be positive")
     spread = 4.0 * diffusivity * t
     return unwrap(amount / (np.pi * spread) * np.exp(-(as_array(r) ** 2) / spread))
+
+
+def point_source_diffusion_3d(
+    r: ArrayLike, t: float, amount: float, diffusivity: float
+) -> FloatOrArray:
+    """Concentration a distance r from a point release in unbounded space after time t > 0.
+
+    c(r, t) = M / (4 pi D t)^(3/2) exp(-r^2 / (4 D t)). Around a point, three
+    dimensions dilute a release as 1/r^3 of its spread where two dimensions
+    dilute it as 1/r^2, which is why a two-dimensional model overstates how far
+    a metabolite reaches. The reference for the three-dimensional transport
+    solver (docs/validation.md).
+    """
+    require(t > 0 and diffusivity > 0, "t and diffusivity must be positive")
+    spread = 4.0 * diffusivity * t
+    return unwrap(amount / (np.pi * spread) ** 1.5 * np.exp(-(as_array(r) ** 2) / spread))
+
+
+def cosine_mode_rate(
+    wavenumbers: ArrayLike, diffusivity: float, spacing: float | None = None
+) -> float:
+    """Decay rate of a product of cosines under diffusion, per hour if D is per hour.
+
+    A field cos(k_x x) cos(k_y y) cos(k_z z) decays as exp(rate t). In the
+    continuum the rate is -D (k_x^2 + k_y^2 + k_z^2). On a grid of spacing h,
+    with the field sampled at voxel centres, the finite-volume operator of
+    :mod:`marse.spatial.transport` has the same field as an exact eigenvector,
+    with rate -D sum (4 / h^2) sin^2(k h / 2). That holds for periodic lateral
+    axes (k = 2 pi m / L), and in height, with no flux through the substratum
+    and zero at the top face, for k = (2 n + 1) pi / (2 L). The two rates differ
+    at second order in h.
+    """
+    k = as_array(wavenumbers)
+    require(diffusivity >= 0, "diffusivity must not be negative")
+    if spacing is None:
+        return float(-diffusivity * np.sum(k**2))
+    require(spacing > 0, "spacing must be positive")
+    return float(-diffusivity * np.sum(4.0 / spacing**2 * np.sin(k * spacing / 2.0) ** 2))
 
 
 def chemostat_break_even(dilution_rate: float, mu_max: float, k_s: float) -> float:

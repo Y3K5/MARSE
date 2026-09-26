@@ -3,12 +3,16 @@
 A version 2 document becomes runnable when every process has a rate and the
 document states what to run: an ``experiment_id``, how long to run
 (``duration_h``) in what steps (``timestep_h``), and the initial amounts
-(``initial_mol_per_m3``). ``marse run`` then integrates it in a closed,
-well-mixed box (:mod:`marse.core.well_mixed`), and the run's manifest records
-this configuration so that ``marse replay`` can reproduce it.
+(``initial_mol_per_m3``). ``marse run`` then integrates it:
 
-Every component starts at the amount given, or at zero if none is given, and
-the zeros are written out, so a manifest shows the whole initial state.
+- in a closed, well-mixed box (:mod:`marse.core.well_mixed`), or
+- in space, when the document also has a ``domain``
+  (:mod:`marse.schemas.domain`, :mod:`marse.core.reactive_transport`).
+
+The run's manifest records this configuration so that ``marse replay`` can
+reproduce it. Every component starts at the amount given, or at zero if none is
+given, and the zeros are written out, so a manifest shows the whole initial
+state.
 """
 
 from __future__ import annotations
@@ -20,11 +24,23 @@ from typing import Any
 
 from marse.core.config import ConfigError
 from marse.schemas._reading import load_json, plain
+from marse.schemas.domain import Domain, read_domain
 from marse.schemas.network import Network, _known, read_document
 
-__all__ = ["WellMixedConfig", "experiment_from_dict", "load_experiment"]
+__all__ = [
+    "ReactiveTransportConfig",
+    "WellMixedConfig",
+    "experiment_from_dict",
+    "load_experiment",
+]
 
 DEFAULT_RELATIVE_TOLERANCE = 1e-6
+DEFAULT_RELATIVE_TOLERANCE_IN_SPACE = 1e-4
+"""Measured to give an error near 5e-6 of each component's peak (docs/theory.md, section 9.8).
+
+The error estimate is conservative by a factor of 20 to 50, and in space each
+step costs a multigrid solve, so the looser default buys the same accuracy the
+well-mixed default gives, at a practical cost."""
 DEFAULT_ABSOLUTE_TOLERANCE_MOL_PER_M3 = 1e-9
 """Picomolar: far below any concentration that matters, so traces cost no accuracy.
 
@@ -83,8 +99,58 @@ class WellMixedConfig:
         }
 
 
-def experiment_from_dict(raw: Any) -> WellMixedConfig:
-    """Read a runnable version 2 document; see :mod:`marse.schemas.network` for the rest."""
+@dataclass(frozen=True, slots=True)
+class ReactiveTransportConfig:
+    """A reaction network in a box of voxels over a surface, with its initial state and clock."""
+
+    experiment_id: str
+    network: Network
+    domain: Domain
+    initial_mol_per_m3: dict[str, float]
+    duration_h: float
+    timestep_h: float
+    record_interval_h: float
+    seed: int = 0
+    relative_tolerance: float = DEFAULT_RELATIVE_TOLERANCE_IN_SPACE
+    absolute_tolerance_mol_per_m3: float = DEFAULT_ABSOLUTE_TOLERANCE_MOL_PER_M3
+
+    @property
+    def kind(self) -> str:
+        return "reactive_transport"
+
+    @property
+    def steps(self) -> int:
+        """Number of timesteps; the last is shortened to land on ``duration_h``."""
+        return math.ceil(round(self.duration_h / self.timestep_h, 9))
+
+    @property
+    def record_every(self) -> int:
+        """Steps between recorded frames and rows."""
+        return max(1, round(self.record_interval_h / self.timestep_h))
+
+    def to_dict(self) -> dict[str, Any]:
+        """The whole configuration, the domain included, defaults and zeros written out."""
+        return self.network.to_dict() | {
+            "experiment_id": self.experiment_id,
+            "initial_mol_per_m3": dict(self.initial_mol_per_m3),
+            "duration_h": self.duration_h,
+            "timestep_h": self.timestep_h,
+            "record_interval_h": self.record_interval_h,
+            "relative_tolerance": self.relative_tolerance,
+            "absolute_tolerance_mol_per_m3": self.absolute_tolerance_mol_per_m3,
+            "seed": self.seed,
+            "domain": self.domain.to_dict(),
+        }
+
+
+type RunConfig = WellMixedConfig | ReactiveTransportConfig
+
+
+def experiment_from_dict(raw: Any) -> RunConfig:
+    """Read a runnable version 2 document; see :mod:`marse.schemas.network` for the rest.
+
+    A document with a ``domain`` runs in space; one without runs well mixed.
+    """
     network, values = read_document(raw)
     missing = [k for k in ("experiment_id", "duration_h", "timestep_h") if k not in values]
     if missing:
@@ -117,7 +183,11 @@ def experiment_from_dict(raw: Any) -> WellMixedConfig:
     seed = values.get("seed", 0)
     if seed < 0:
         raise ConfigError("experiment.seed: must not be negative")
-    relative = float(values.get("relative_tolerance", DEFAULT_RELATIVE_TOLERANCE))
+    in_space = "domain" in values
+    default_relative = (
+        DEFAULT_RELATIVE_TOLERANCE_IN_SPACE if in_space else DEFAULT_RELATIVE_TOLERANCE
+    )
+    relative = float(values.get("relative_tolerance", default_relative))
     if not 0 < relative < 1:
         raise ConfigError("experiment.relative_tolerance: must lie between 0 and 1")
     absolute = float(
@@ -125,22 +195,25 @@ def experiment_from_dict(raw: Any) -> WellMixedConfig:
     )
     if not absolute > 0:
         raise ConfigError("experiment.absolute_tolerance_mol_per_m3: must be positive")
-    return WellMixedConfig(
-        experiment_id=experiment_id,
-        network=network,
-        initial_mol_per_m3={
-            c.name: float(plain(given[c.name])) if c.name in given else 0.0
-            for c in network.components
-        },
-        duration_h=duration,
-        timestep_h=timestep,
-        record_interval_h=record,
-        seed=seed,
-        relative_tolerance=relative,
-        absolute_tolerance_mol_per_m3=absolute,
-    )
+    initial = {
+        c.name: float(plain(given[c.name])) if c.name in given else 0.0 for c in network.components
+    }
+    settings = {
+        "experiment_id": experiment_id,
+        "network": network,
+        "initial_mol_per_m3": initial,
+        "duration_h": duration,
+        "timestep_h": timestep,
+        "record_interval_h": record,
+        "seed": seed,
+        "relative_tolerance": relative,
+        "absolute_tolerance_mol_per_m3": absolute,
+    }
+    if in_space:
+        return ReactiveTransportConfig(domain=read_domain(values["domain"], network), **settings)
+    return WellMixedConfig(**settings)
 
 
-def load_experiment(path: str | Path) -> WellMixedConfig:
+def load_experiment(path: str | Path) -> RunConfig:
     """Read a runnable version 2 document from a JSON file."""
     return experiment_from_dict(load_json(path))

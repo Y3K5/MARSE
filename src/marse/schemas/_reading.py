@@ -29,7 +29,9 @@ from marse.core.config import ConfigError
 UNIT_SUFFIXES = {
     "_mol_per_mol": "mol of one component per mol of another",
     "_mol_per_m3": "mol per cubic metre, which is mmol per litre",
+    "_m2_per_s": "square metres per second, as diffusivities are tabulated",
     "_per_h": "per hour",
+    "_um": "micrometres",
     "_h": "hours",
 }
 """Every numeric field name ends in one of these suffixes, which names its unit.
@@ -43,13 +45,25 @@ DIMENSIONLESS = {
     "charge": "the electric charge of one formula unit, in elementary charges",
     "seed": "the seed of the random streams, an identifier rather than a quantity",
     "relative_tolerance": "a fraction: the accepted local error relative to each concentration",
+    "voxels": "how many voxels along each axis, a count",
+    "count": "how many colonies, a count",
 }
 """Numeric fields that are labels or pure numbers, so they carry no unit suffix."""
 
 Kind = Literal[
-    "text", "name", "names", "choice", "integer", "number", "numbers", "object", "objects"
+    "text",
+    "name",
+    "names",
+    "choice",
+    "integer",
+    "integers",
+    "number",
+    "numbers",
+    "vector",
+    "object",
+    "objects",
 ]
-NUMERIC_KINDS = frozenset({"integer", "number", "numbers"})
+NUMERIC_KINDS = frozenset({"integer", "integers", "number", "numbers", "vector"})
 
 _NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}")
 
@@ -60,9 +74,10 @@ class Field:
 
     ``text`` is any string, ``name`` an identifier, ``names`` a list of
     distinct identifiers, ``choice`` one of ``choices``, ``integer`` a whole
-    number, ``number`` an exact decimal, ``numbers`` an object from names to
-    exact decimals, ``object`` an object read by the caller, and ``objects``
-    a list of objects read by the caller.
+    number, ``integers`` a list of whole numbers, ``number`` an exact decimal,
+    ``numbers`` an object from names to exact decimals, ``vector`` a list of
+    exact decimals, ``object`` an object read by the caller, and ``objects`` a
+    list of objects read by the caller.
     """
 
     kind: Kind
@@ -140,8 +155,23 @@ def _convert(value: Any, where: str, field: Field) -> Any:
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ConfigError(f"{where}: expected a whole number, got {_describe(value)}")
             return value
+        case "integers":
+            if not isinstance(value, list):
+                raise ConfigError(
+                    f"{where}: expected a list of whole numbers, got {_describe(value)}"
+                )
+            for i, item in enumerate(value):
+                if isinstance(item, bool) or not isinstance(item, int):
+                    raise ConfigError(
+                        f"{where}[{i}]: expected a whole number, got {_describe(item)}"
+                    )
+            return tuple(value)
         case "number":
             return exact(value, where)
+        case "vector":
+            if not isinstance(value, list):
+                raise ConfigError(f"{where}: expected a list of numbers, got {_describe(value)}")
+            return tuple(exact(item, f"{where}[{i}]") for i, item in enumerate(value))
         case "numbers":
             if not isinstance(value, dict):
                 raise ConfigError(f"{where}: expected an object of numbers, got {_describe(value)}")

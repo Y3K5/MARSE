@@ -3,7 +3,8 @@
 Four commands matter at this stage:
 
     marse run experiment.json        run a batch or biofilm simulation, or a
-                                     version 2 reaction network in a closed box
+                                     version 2 reaction network, in a closed
+                                     box or, with a domain, in space
     marse ecosystem experiment.json  run a 2-D multispecies ecosystem
     marse replay manifest.json       re-run any of them from its manifest and compare
     marse check network.json         check a reaction network (schema version 2)
@@ -27,7 +28,10 @@ import numpy as np
 from marse import __version__
 from marse.analysis.ensemble import ScenarioBatch, run_batch
 from marse.core.config import ConfigError, load_experiment
+from marse.core.framestore import FrameStore as FieldStore
 from marse.core.provenance import Manifest
+from marse.core.reactive_transport import ReactiveTransportResult
+from marse.core.reactive_transport import run as run_reactive_transport
 from marse.core.simulation import BiofilmProfileResult, SimulationResult, run
 from marse.core.well_mixed import WellMixedResult
 from marse.core.well_mixed import run as run_well_mixed
@@ -39,10 +43,13 @@ from marse.ecosystem.model import recorded_steps
 from marse.microbes.niche import NicheError, load_niche_scan, run_niche_scan
 from marse.schemas import Network, experiment_from_dict
 from marse.schemas._reading import load_json
+from marse.schemas.experiment import ReactiveTransportConfig
 from marse.schemas.experiment import load_experiment as load_network_experiment
 from marse.schemas.network import RUN_FIELDS, SCHEMA_VERSION, read_document
+from marse.spatial.multigrid import hierarchy
+from marse.spatial.vtk import write_pvd, write_vti
 
-Result = SimulationResult | BiofilmProfileResult | WellMixedResult
+Result = SimulationResult | BiofilmProfileResult | WellMixedResult | ReactiveTransportResult
 
 
 def _write_outputs(result: Result, output_dir: Path) -> tuple[Path, Path]:
@@ -50,6 +57,8 @@ def _write_outputs(result: Result, output_dir: Path) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     if isinstance(result, BiofilmProfileResult):
         data = result.write_profile(output_dir / "profile.csv")
+    elif isinstance(result, ReactiveTransportResult):
+        data = result.write_totals(output_dir / "totals.csv")
     else:
         data = result.write_trajectory(output_dir / "trajectory.csv")
     manifest = result.manifest.write(output_dir / "manifest.json")
@@ -104,10 +113,44 @@ def _summarise_well_mixed(result: WellMixedResult) -> None:
     print(f"balance     carbon, nitrogen and electrons conserved to {worst:.1e} of their totals")
 
 
+def _summarise_in_space(result: ReactiveTransportResult) -> None:
+    outputs = result.manifest.outputs
+    substeps = outputs["substeps"]
+    grid = result.config.domain.grid
+    size = " x ".join(f"{s:g}" for s in grid.size_um)
+    voxels = " x ".join(str(n) for n in grid.shape)
+    print(f"run_id      {result.manifest.run_id}")
+    print(f"experiment  {result.config.experiment_id}")
+    print(f"kind        {result.config.kind}")
+    print(f"space       {grid.dimensions}-D, {voxels} voxels of {grid.voxel_um:g} um ({size} um)")
+    print(
+        f"steps       {result.config.steps} over {outputs['final_time_h']:g} h: "
+        f"{substeps['accepted']} implicit substeps, {substeps['rejected']} retried, "
+        f"{substeps['limited']} limited to keep concentrations positive"
+    )
+    print(f"{'final':<24}   mol per m2 of surface   entered through the top")
+    for name, value in outputs["totals_mol_per_m2"].items():
+        entered = outputs["imported_mol_per_m2"][name]
+        print(f"  {name:<24} {value:>12.6g}   {entered:>+12.4g}")
+    worst = max(q["largest_relative_residual"] for q in outputs["balance"].values())
+    print(
+        f"balance     carbon, nitrogen and electrons, counting what crossed the top, "
+        f"conserved to {worst:.1e}"
+    )
+
+
 def _comparable(outputs: dict) -> dict[str, float | str]:
     """The values a replay must reproduce, flattened so every kind compares alike."""
-    if "final_mol_per_m3" in outputs:  # a reaction network in a closed box
+    if "totals_mol_per_m2" in outputs:  # a reaction network in space
         values: dict[str, float | str] = {
+            "final_time_h": float(outputs["final_time_h"]),
+            "final state digest": str(outputs["final_state_sha256"]),
+        }
+        for group in ("totals_mol_per_m2", "imported_mol_per_m2"):
+            values.update({f"{group}[{n}]": float(v) for n, v in outputs[group].items()})
+        return values
+    if "final_mol_per_m3" in outputs:  # a reaction network in a closed box
+        values = {
             "final_time_h": float(outputs["final_time_h"]),
             "final state digest": str(outputs["final_state_sha256"]),
         }
@@ -145,8 +188,61 @@ def _is_version_2(path: str) -> bool:
     return isinstance(raw, dict) and "schema_version" in raw
 
 
+def _run_in_space(
+    config: ReactiveTransportConfig, output_dir: Path
+) -> tuple[ReactiveTransportResult, tuple[Path, ...]]:
+    """Run in space, streaming every recorded frame to a frame store and to VTK files."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    grid = config.domain.grid
+    names = config.network.component_names
+    records = 1 + sum(
+        1
+        for step in range(1, config.steps + 1)
+        if step % config.record_every == 0 or step == config.steps
+    )
+    store = FieldStore.create(
+        output_dir / "frames",
+        capacity=records,
+        fields={f"{n}_mol_per_m3": (grid.shape, "<f4") for n in names},
+        metadata={"voxel_um": grid.voxel_um, "axes": ["x", "y", "z"][-grid.dimensions :]},
+        overwrite=True,
+    )
+    vtk = output_dir / "vtk"
+    vtk.mkdir(exist_ok=True)
+    series: list[tuple[float, str]] = []
+
+    def record(index: int, time_h: float, state: np.ndarray) -> None:
+        fields = {f"{n}_mol_per_m3": state[j] for j, n in enumerate(names)}
+        store.append(time_h=time_h, step=index, arrays=fields)
+        name = f"frame_{index:04d}.vti"
+        write_vti(vtk / name, grid, fields)
+        series.append((time_h, name))
+
+    try:
+        result = run_reactive_transport(config, frames=record)
+    finally:
+        index = store.close()
+    pvd = write_pvd(vtk / "run.pvd", series)
+    totals, manifest = _write_outputs(result, output_dir)
+    return result, (totals, index, pvd, manifest)
+
+
 def _run_network(args: argparse.Namespace) -> int:
     config = load_network_experiment(args.experiment)
+    if isinstance(config, ReactiveTransportConfig):
+        output_dir = (
+            Path(args.output)
+            if args.output
+            else Path(args.experiment).parent / "runs" / Manifest.run_id_for(config)
+        )
+        result_in_space, written = _run_in_space(config, output_dir)
+        _summarise_in_space(result_in_space)
+        print()
+        for path in written:
+            print(f"wrote {path}")
+        print(f"\nopen {written[2]} in ParaView to explore the run in 3-D")
+        print(f"replay it with:  marse replay {written[-1]}")
+        return 0
     result = run_well_mixed(config)
     output_dir = (
         Path(args.output)
@@ -223,6 +319,11 @@ def _command_replay(args: argparse.Namespace) -> int:
     written: tuple[Path, ...] = ()
     if original.kind == "well_mixed":
         result = run_well_mixed(config)
+    elif original.kind == "reactive_transport":
+        if args.output:
+            result, written = _run_in_space(config, Path(args.output))
+        else:
+            result = run_reactive_transport(config)
     elif original.kind != "ecosystem":
         result = run(config)
     elif args.output:
@@ -259,7 +360,7 @@ def _command_replay(args: argparse.Namespace) -> int:
             print(f"\nthe outputs written to {args.output} come from this differing replay")
         return 1
     print("\nreplay reproduced the recorded results exactly")
-    if args.output and not isinstance(result, EcosystemResult):
+    if args.output and not isinstance(result, EcosystemResult | ReactiveTransportResult):
         written = _write_outputs(result, Path(args.output))
     for path in written:
         print(f"wrote {path}")
@@ -367,6 +468,48 @@ def _report_network(network: Network, source: str) -> None:
                 print(f"    assumed in excess: {', '.join(p.rate.assumed_in_excess)}")
 
 
+def _report_domain(config: ReactiveTransportConfig) -> None:
+    from marse.core.reactive_transport import build_model, time_scales
+
+    domain = config.domain
+    grid = domain.grid
+    names = config.network.component_names
+    size = " x ".join(f"{s:g}" for s in grid.size_um)
+    voxels = " x ".join(str(n) for n in grid.shape)
+    megabytes = grid.voxels * len(names) * 8 / 1e6
+    print(
+        f"\nspace       {grid.dimensions}-D, {voxels} voxels of {grid.voxel_um:g} um "
+        f"({size} um), {grid.voxels:,} voxels, {megabytes:.3g} MB per state"
+    )
+    bulk = ", ".join(f"{n} {v:g}" for n, v in domain.bulk_mol_per_m3.items() if v)
+    print(f"  bulk liquid above, mol per m3: {bulk or 'nothing'}")
+    moving = ", ".join(f"{n} {v * 1e12:g}" for n, v in domain.diffusivity_m2_per_s.items())
+    print(f"  diffusivities, um2 per s: {moving}")
+    placed = len(domain.colonies) + sum(g.count for g in domain.random_colonies)
+    kinds = sorted(
+        {c.component for c in domain.colonies} | {g.component for g in domain.random_colonies}
+    )
+    if placed:
+        print(f"  colonies: {placed} ({', '.join(kinds)})")
+    limit = build_model(config).diffusion.explicit_step_limit_h()
+    levels = hierarchy(grid.shape, len(names))
+    print(
+        f"  an explicit step would have to be at most {limit * 3600 * 1000:.3g} ms; the implicit "
+        f"solver uses {len(levels)} grid levels, down to {' x '.join(map(str, levels[-1][0]))}"
+    )
+    if math.prod(levels[-1][0]) > 64:
+        print(
+            "  note: the coarsest level is large, which slows every solve; voxel counts "
+            "divisible by 2 several times (such as 32, 48 or 64) are faster"
+        )
+    scales = time_scales(config)
+    if scales["ratio"] is not None:
+        print(
+            f"time scales diffusion across the box {scales['diffusion_h'] * 3600:.3g} s, "
+            f"fastest growth {scales['growth_h']:.3g} h (ratio {scales['ratio']:.2g})"
+        )
+
+
 def _command_check(args: argparse.Namespace) -> int:
     path = Path(args.network)
     try:
@@ -382,6 +525,8 @@ def _command_check(args: argparse.Namespace) -> int:
         except ConfigError as error:
             print(f"\nnot yet runnable: {error}")
         else:
+            if isinstance(config, ReactiveTransportConfig):
+                _report_domain(config)
             print(
                 f"\nrunnable    {config.duration_h:g} h in steps of at most "
                 f"{config.timestep_h:g} h: marse run {args.network}"
@@ -450,6 +595,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not getattr(args, "command", None):
         parser.print_help()
         return 0
+    errors = np.geterr()
     try:
         return int(args.handler(args))
     except ConfigError as error:
@@ -462,4 +608,4 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"marse: {type(error).__name__}: {error}")
         return 2
     finally:
-        np.seterr(all="warn")
+        np.seterr(**errors)  # NumPy's error handling as the caller had it

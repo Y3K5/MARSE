@@ -52,8 +52,20 @@ marse run examples/networks/glucose_cross_feeding.json -o runs/network
 marse replay runs/network/manifest.json
 ```
 
-[docs/networks.md](docs/networks.md) describes the format. Transport, and with
-it biofilms, comes next.
+The same network runs in space: in a box of voxels over a surface, in one,
+two or three dimensions, with the liquid above it supplying what diffuses in.
+Oxygen and sugar diffuse at their physical diffusivities; colonies consume them,
+go anoxic inside, ferment, and feed their neighbours. The ledger then also
+counts what crosses the top of the box:
+
+```bash
+marse run examples/networks/surface_biofilm_1d.json -o runs/column     # seconds
+marse run examples/networks/surface_biofilm_3d.json -o runs/surface    # minutes; open runs/surface/vtk/run.pvd in ParaView
+marse replay runs/surface/manifest.json
+```
+
+[docs/networks.md](docs/networks.md) describes the format. Colonies that spread
+and share space come next.
 
 The manifest records the configuration, its SHA-256 checksum, the random seed,
 the versioned models used and the software versions — and deliberately records
@@ -109,12 +121,12 @@ predict clinical or vaccine outcomes, or produce experimental evidence; the
 
 ```text
 src/marse/         the Python package
-  core/            run loop, state, configuration, seeds, provenance
+  core/            run loop, state, configuration, seeds, provenance, frame store
   schemas/         configuration schema v2: formulas and balanced reaction networks
-  spatial/         domains, grids, diffusion; solute properties
+  spatial/         voxel grids in 1, 2 or 3 dimensions, diffusion, multigrid, ParaView output
   microbes/        growth kinetics, cardinal models, niches, genotypes, dose responses
   biofilm/         biomass, matrix, maturation
-  ecosystem/       the 2-D multispecies engine, frame store and viewer
+  ecosystem/       the 2-D multispecies engine and its viewer
   adaptation/      state transitions and decision policies
   interventions/   perturbations
   analysis/        calibration, uncertainty and sensitivity, ensembles
