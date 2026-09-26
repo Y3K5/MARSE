@@ -92,7 +92,7 @@ key is an error, not a silently ignored typo.
 | `initial_mol_per_m3` | object of numbers | no, default `0` each | The starting concentration of each component, in mol per m³ (mmol per litre). Components left out start at zero. |
 | `duration_h` | number | to run | How long to run. |
 | `timestep_h` | number | to run | The longest substep, and the unit of recording. Accuracy comes from the tolerances, not from this. |
-| `record_interval_h` | number | no, default `timestep_h` | How often the trajectory records a row. |
+| `record_interval_h` | number | no, default `timestep_h` | How often the trajectory records a row, rounded to a whole number of timesteps. The final state is always recorded. |
 | `relative_tolerance` | number | no, default `1e-6` | The accepted local error, as a fraction of each concentration or of the largest it has reached. |
 | `absolute_tolerance_mol_per_m3` | number | no, default `1e-9` | The accepted local error for traces (picomolar). |
 | `seed` | integer | no, default `0` | Recorded in the manifest; a closed box draws no random numbers. |
@@ -226,7 +226,7 @@ final       mol per m3
 balance     carbon, nitrogen and electrons conserved to 8.3e-15 of their totals
 ```
 
-In the closed box, the heterotroph uses up the oxygen within about half a day.
+In the closed box, the heterotroph uses up the oxygen within eight hours.
 The fermenter then turns the remaining glucose into lactate. Cross-feeding on
 that lactate needs a continuing oxygen supply, which transport will bring.
 

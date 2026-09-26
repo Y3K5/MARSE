@@ -1078,7 +1078,7 @@ order. The Euler result and $y^{n+1}$ form an embedded pair. The substep is
 adapted so that, for every species,
 
 $$
-|y^{n+1}_j - y^{(1)}_j| \le \text{atol} + \text{rtol}\,\max\left(|y_j|, \hat y_j\right),
+|y^{n+1}_j - y^{(1)}_j| \le \text{atol} + \text{rtol}\,\max\left(|y^n_j|, |y^{n+1}_j|, \hat y_j\right),
 $$
 
 where $\hat y_j$ is the largest value species $j$ has reached. A species that
