@@ -117,8 +117,31 @@ results for the same manifest is always called out.
     random networks recounted atom by atom (docs/validation.md, "Stoichiometric
     continuity"). The equations are in docs/theory.md §3.6.
 
-  No engine runs these networks yet: the well-mixed engine that integrates
-  them, checking the balance every step, is the next increment.
+- **Networks run: the version 2 well-mixed engine** (`marse run` on a version
+  2 file, `marse.core.well_mixed`). A process with a `rate` runs at
+  k × c[proportional_to] × its Monod, inhibition or Haldane factors. One rate
+  drives every component the process touches, so uptake is growth divided by
+  yield, exactly, and every process acts on the same state at once. These
+  are the requirements behind known defects 2 and 7. A second factor for one
+  component is refused (defect 4). So is a process consuming what its rate
+  does not depend on, unless the file declares the component
+  `assumed_in_excess`.
+  - Integration is Heun's method with per-process positivity limiting: exactly
+    conservative, never negative, with no clipping (the reaction half of
+    defect 5). Only the processes consuming a depleted species slow down.
+    Substeps adapt to `relative_tolerance` and
+    `absolute_tolerance_mol_per_m3`, deterministically.
+  - A ledger checks carbon, nitrogen and electrons after every step. A drift
+    beyond 1e-9 of the total stops the run with a `ConservationError`, and
+    the largest drift is recorded in the manifest (kind `well_mixed`). Runs
+    replay bit for bit.
+  - Verified against the analytical Monod batch solution (V2) at second order.
+    Also: ten thousand steps within 1e-12, a planted leak that is caught,
+    3,000 random cyclic networks at steps up to 10⁶ h that stay positive and
+    conserve to 5e-16, and order independence
+    (docs/validation.md, "The version 2 network engine").
+  - The example network now runs: oxygen runs out, and the fermenter turns
+    the remaining glucose into lactate.
 
 - **Ecosystem runs are reproducible.** `marse ecosystem` writes a
   `manifest.json` beside its frames and viewer, and `marse replay` reproduces

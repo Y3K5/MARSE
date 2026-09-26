@@ -2,9 +2,10 @@
 
 Four commands matter at this stage:
 
-    marse run experiment.json        run a batch or biofilm simulation
+    marse run experiment.json        run a batch or biofilm simulation, or a
+                                     version 2 reaction network in a closed box
     marse ecosystem experiment.json  run a 2-D multispecies ecosystem
-    marse replay manifest.json       re-run either from its manifest and compare
+    marse replay manifest.json       re-run any of them from its manifest and compare
     marse check network.json         check a reaction network (schema version 2)
 
 ``replay`` is the reproducibility claim made executable: it rebuilds the
@@ -28,16 +29,20 @@ from marse.analysis.ensemble import ScenarioBatch, run_batch
 from marse.core.config import ConfigError, load_experiment
 from marse.core.provenance import Manifest
 from marse.core.simulation import BiofilmProfileResult, SimulationResult, run
+from marse.core.well_mixed import WellMixedResult
+from marse.core.well_mixed import run as run_well_mixed
 from marse.ecosystem import EcosystemConfig, EcosystemResult, write_viewer
 from marse.ecosystem import load_experiment as load_ecosystem_experiment
 from marse.ecosystem import run as run_ecosystem
 from marse.ecosystem.framestore import EcosystemFrameSink, FrameStore, StoredFrames
 from marse.ecosystem.model import recorded_steps
 from marse.microbes.niche import NicheError, load_niche_scan, run_niche_scan
-from marse.schemas import Network, load_network
-from marse.schemas.network import SCHEMA_VERSION
+from marse.schemas import Network, experiment_from_dict
+from marse.schemas._reading import load_json
+from marse.schemas.experiment import load_experiment as load_network_experiment
+from marse.schemas.network import RUN_FIELDS, SCHEMA_VERSION, read_document
 
-Result = SimulationResult | BiofilmProfileResult
+Result = SimulationResult | BiofilmProfileResult | WellMixedResult
 
 
 def _write_outputs(result: Result, output_dir: Path) -> tuple[Path, Path]:
@@ -81,10 +86,35 @@ def _summarise(result: Result) -> None:
 _BIOFILM_KEYS = ("penetration_depth_um", "active_zone_um", "base_concentration_mm")
 
 
+def _summarise_well_mixed(result: WellMixedResult) -> None:
+    outputs = result.manifest.outputs
+    substeps = outputs["substeps"]
+    print(f"run_id      {result.manifest.run_id}")
+    print(f"experiment  {result.config.experiment_id}")
+    print(f"kind        {result.config.kind}")
+    print(
+        f"steps       {result.config.steps} over {outputs['final_time_h']:g} h: "
+        f"{substeps['accepted']} adaptive substeps, {substeps['rejected']} retried, "
+        f"{substeps['limited']} limited to keep concentrations positive"
+    )
+    print("final       mol per m3")
+    for name, value in outputs["final_mol_per_m3"].items():
+        print(f"  {name:<24} {value:.6g}")
+    worst = max(q["largest_relative_residual"] for q in outputs["balance"].values())
+    print(f"balance     carbon, nitrogen and electrons conserved to {worst:.1e} of their totals")
+
+
 def _comparable(outputs: dict) -> dict[str, float | str]:
     """The values a replay must reproduce, flattened so every kind compares alike."""
-    if "final_state_sha256" in outputs:  # an ecosystem run
+    if "final_mol_per_m3" in outputs:  # a reaction network in a closed box
         values: dict[str, float | str] = {
+            "final_time_h": float(outputs["final_time_h"]),
+            "final state digest": str(outputs["final_state_sha256"]),
+        }
+        values.update({f"final[{n}]": float(v) for n, v in outputs["final_mol_per_m3"].items()})
+        return values
+    if "final_state_sha256" in outputs:  # an ecosystem run
+        values = {
             "final_time_h": float(outputs["final_time_h"]),
             "final state digest": str(outputs["final_state_sha256"]),
         }
@@ -106,7 +136,34 @@ def _comparable(outputs: dict) -> dict[str, float | str]:
     return values
 
 
+def _is_version_2(path: str) -> bool:
+    """Whether a configuration file declares a schema version (only version 2 does)."""
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False  # the regular loader reports the problem
+    return isinstance(raw, dict) and "schema_version" in raw
+
+
+def _run_network(args: argparse.Namespace) -> int:
+    config = load_network_experiment(args.experiment)
+    result = run_well_mixed(config)
+    output_dir = (
+        Path(args.output)
+        if args.output
+        else Path(args.experiment).parent / "runs" / result.manifest.run_id
+    )
+    trajectory, manifest = _write_outputs(result, output_dir)
+    _summarise_well_mixed(result)
+    print(f"\nwrote {trajectory}")
+    print(f"wrote {manifest}")
+    print(f"\nreplay it with:  marse replay {manifest}")
+    return 0
+
+
 def _command_run(args: argparse.Namespace) -> int:
+    if _is_version_2(args.experiment):
+        return _run_network(args)
     config = load_experiment(args.experiment)
     result = run(config)
     output_dir = (
@@ -164,7 +221,9 @@ def _command_replay(args: argparse.Namespace) -> int:
     original = Manifest.read(args.manifest)
     config = original.experiment()  # raises if the manifest was edited after the run
     written: tuple[Path, ...] = ()
-    if original.kind != "ecosystem":
+    if original.kind == "well_mixed":
+        result = run_well_mixed(config)
+    elif original.kind != "ecosystem":
         result = run(config)
     elif args.output:
         # The replay's own outputs, streamed as it runs.
@@ -295,16 +354,38 @@ def _report_network(network: Network, source: str) -> None:
         zero = [name for name in p.balanced_by if p.coefficient(name) == 0]
         if zero:
             print(f"    balanced to zero: {', '.join(zero)}")
+        if p.rate is not None:
+            print(
+                textwrap.fill(
+                    f"rate: {p.rate.describe()}",
+                    88,
+                    initial_indent="    ",
+                    subsequent_indent="      ",
+                )
+            )
+            if p.rate.assumed_in_excess:
+                print(f"    assumed in excess: {', '.join(p.rate.assumed_in_excess)}")
 
 
 def _command_check(args: argparse.Namespace) -> int:
     path = Path(args.network)
     try:
-        network = load_network(path)
+        raw = load_json(path)
+        network, values = read_document(raw)
     except ConfigError as error:
         print(f"marse: {path.name} is not a valid network: {error}")
         return 2
     _report_network(network, path.name)
+    if any(key in values for key in RUN_FIELDS) or any(p.rate for p in network.processes):
+        try:
+            config = experiment_from_dict(raw)
+        except ConfigError as error:
+            print(f"\nnot yet runnable: {error}")
+        else:
+            print(
+                f"\nrunnable    {config.duration_h:g} h in steps of at most "
+                f"{config.timestep_h:g} h: marse run {path.name}"
+            )
     return 0
 
 

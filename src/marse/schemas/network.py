@@ -17,12 +17,16 @@ in ``balanced_by`` the components whose coefficients the balances determine,
 typically the electron acceptor, carbon dioxide and the nitrogen source, and
 MARSE solves for them exactly. Water and protons are never listed: they close
 the oxygen, hydrogen and charge balances implicitly.
+
+A process may also carry a :class:`RateLaw`, which makes the network runnable
+(docs/theory.md, section 3.7). A rate is refused if it lets a process consume a
+component its rate does not depend on, unless the configuration states that the
+component is assumed to be in excess.
 """
 
 from __future__ import annotations
 
 import difflib
-import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
@@ -33,7 +37,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from marse.core.config import ConfigError
-from marse.schemas._reading import Field, plain, read_object
+from marse.schemas._reading import Field, load_json, plain, read_object
 from marse.schemas.formula import QUANTITIES, QUANTITY_UNITS, Formula, parse_formula
 
 __all__ = [
@@ -41,9 +45,11 @@ __all__ = [
     "SCHEMA_VERSION",
     "Component",
     "ContinuityError",
+    "Factor",
     "Growth",
     "Network",
     "Process",
+    "RateLaw",
     "load_network",
     "network_from_dict",
 ]
@@ -51,12 +57,26 @@ __all__ = [
 SCHEMA_VERSION = 2
 PHASES = ("dissolved", "particulate")
 KINDS = ("growth", "reaction")
+FORMS = ("monod", "inhibition", "haldane")
+
+RUN_FIELDS = {
+    "experiment_id": Field("text", required=False),
+    "initial_mol_per_m3": Field("numbers", required=False),
+    "duration_h": Field("number", required=False),
+    "timestep_h": Field("number", required=False),
+    "record_interval_h": Field("number", required=False),
+    "relative_tolerance": Field("number", required=False),
+    "absolute_tolerance_mol_per_m3": Field("number", required=False),
+    "seed": Field("integer", required=False),
+}
+"""What turns a network into an experiment; read by :mod:`marse.schemas.experiment`."""
 
 NETWORK_FIELDS = {
     "schema_version": Field("integer"),
     "description": Field("text", required=False),
     "components": Field("objects"),
     "processes": Field("objects"),
+    **RUN_FIELDS,
 }
 COMPONENT_FIELDS = {
     "name": Field("name"),
@@ -72,18 +92,34 @@ GROWTH_FIELDS = {
     "yield_mol_per_mol": Field("number"),
     "products_mol_per_mol": Field("numbers", required=False),
     "balanced_by": Field("names", required=False),
+    "rate": Field("object", required=False),
 }
 REACTION_FIELDS = {
     "name": Field("name"),
     "kind": Field("choice", choices=KINDS),
     "stoichiometry_mol_per_mol": Field("numbers"),
     "balanced_by": Field("names", required=False),
+    "rate": Field("object", required=False),
+}
+RATE_FIELDS = {
+    "maximum_per_h": Field("number"),
+    "proportional_to": Field("name", required=False),
+    "factors": Field("objects", required=False),
+    "assumed_in_excess": Field("names", required=False),
+}
+FACTOR_FIELDS = {
+    "component": Field("name"),
+    "form": Field("choice", choices=FORMS),
+    "half_saturation_mol_per_m3": Field("number", required=False),
+    "inhibition_mol_per_m3": Field("number", required=False),
 }
 SCHEMA = {
     "network": NETWORK_FIELDS,
     "component": COMPONENT_FIELDS,
     "growth process": GROWTH_FIELDS,
     "reaction process": REACTION_FIELDS,
+    "rate": RATE_FIELDS,
+    "factor": FACTOR_FIELDS,
 }
 """Every object of the network format and its fields, as docs/networks.md lists them."""
 
@@ -129,6 +165,67 @@ class Component:
 
 
 @dataclass(frozen=True, slots=True)
+class Factor:
+    """One dimensionless term of a rate: how a component speeds a process or slows it.
+
+    ``monod`` is S/(K+S), ``inhibition`` K_I/(K_I+S) and ``haldane``
+    S/(K+S+S^2/K_I), with S the concentration of ``component``.
+    """
+
+    component: str
+    form: Literal["monod", "inhibition", "haldane"]
+    half_saturation_mol_per_m3: Fraction | None = None
+    inhibition_mol_per_m3: Fraction | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        written: dict[str, Any] = {"component": self.component, "form": self.form}
+        if self.half_saturation_mol_per_m3 is not None:
+            written["half_saturation_mol_per_m3"] = plain(self.half_saturation_mol_per_m3)
+        if self.inhibition_mol_per_m3 is not None:
+            written["inhibition_mol_per_m3"] = plain(self.inhibition_mol_per_m3)
+        return written
+
+    def describe(self) -> str:
+        constants = [
+            f"{label} {_decimal(value)}"
+            for label, value in (
+                ("K", self.half_saturation_mol_per_m3),
+                ("K_I", self.inhibition_mol_per_m3),
+            )
+            if value is not None
+        ]
+        return f"{self.form}({self.component}; {', '.join(constants)})"
+
+
+@dataclass(frozen=True, slots=True)
+class RateLaw:
+    """How fast a process runs: maximum_per_h x c[proportional_to] x the factors.
+
+    The rate is in mol of the process's reference per m3 per hour: for growth,
+    mol of biomass formed. ``assumed_in_excess`` lists components the process
+    consumes although its rate does not depend on them, a modelling assumption
+    that is recorded rather than implied.
+    """
+
+    maximum_per_h: Fraction
+    proportional_to: str
+    factors: tuple[Factor, ...] = ()
+    assumed_in_excess: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "maximum_per_h": plain(self.maximum_per_h),
+            "proportional_to": self.proportional_to,
+            "factors": [f.to_dict() for f in self.factors],
+            "assumed_in_excess": list(self.assumed_in_excess),
+        }
+
+    def describe(self) -> str:
+        terms = [f"{_decimal(self.maximum_per_h)} /h", self.proportional_to]
+        return " x ".join(terms + [f.describe() for f in self.factors])
+
+
+@dataclass(frozen=True, slots=True)
 class Growth:
     """What a growth process states: who grows on what, with which yields."""
 
@@ -161,6 +258,7 @@ class Process:
     water: Fraction
     protons: Fraction
     growth: Growth | None = None
+    rate: RateLaw | None = None
 
     @property
     def kind(self) -> str:
@@ -179,22 +277,28 @@ class Process:
     def to_dict(self) -> dict[str, Any]:
         """The process as it was configured, every default written out."""
         if self.growth is None:
-            return {
+            written: dict[str, Any] = {
                 "name": self.name,
                 "kind": "reaction",
                 "stoichiometry_mol_per_mol": {n: plain(c) for n, c in self.given.items()},
                 "balanced_by": list(self.balanced_by),
             }
-        growth = self.growth
-        return {
-            "name": self.name,
-            "kind": "growth",
-            "biomass": growth.biomass,
-            "substrate": growth.substrate,
-            "yield_mol_per_mol": plain(growth.yield_mol_per_mol),
-            "products_mol_per_mol": {n: plain(a) for n, a in growth.products_mol_per_mol.items()},
-            "balanced_by": list(self.balanced_by),
-        }
+        else:
+            growth = self.growth
+            written = {
+                "name": self.name,
+                "kind": "growth",
+                "biomass": growth.biomass,
+                "substrate": growth.substrate,
+                "yield_mol_per_mol": plain(growth.yield_mol_per_mol),
+                "products_mol_per_mol": {
+                    n: plain(a) for n, a in growth.products_mol_per_mol.items()
+                },
+                "balanced_by": list(self.balanced_by),
+            }
+        if self.rate is not None:
+            written["rate"] = self.rate.to_dict()
+        return written
 
 
 @dataclass(frozen=True, slots=True)
@@ -443,6 +547,84 @@ def _reaction_row(
     return dict(given)
 
 
+def _factor(raw: Any, where: str, components: Mapping[str, Component]) -> Factor:
+    values = read_object(raw, where, FACTOR_FIELDS)
+    _known([values["component"]], components, f"{where}.component")
+    form = values["form"]
+    needs = {
+        "monod": ("half_saturation_mol_per_m3",),
+        "inhibition": ("inhibition_mol_per_m3",),
+        "haldane": ("half_saturation_mol_per_m3", "inhibition_mol_per_m3"),
+    }[form]
+    article = "an" if form[0] in "aeiou" else "a"
+    for constant in ("half_saturation_mol_per_m3", "inhibition_mol_per_m3"):
+        if constant in needs and constant not in values:
+            raise ConfigError(f"{where}: {article} {form} factor needs {constant}")
+        if constant not in needs and constant in values:
+            raise ConfigError(f"{where}: {constant} does not apply to {article} {form} factor")
+        if constant in values and values[constant] <= 0:
+            raise ConfigError(f"{where}.{constant}: must be positive")
+    return Factor(
+        component=values["component"],
+        form=form,
+        half_saturation_mol_per_m3=values.get("half_saturation_mol_per_m3"),
+        inhibition_mol_per_m3=values.get("inhibition_mol_per_m3"),
+    )
+
+
+def _rate(
+    raw: Any,
+    where: str,
+    growth: Growth | None,
+    coefficients: Mapping[str, Fraction],
+    components: Mapping[str, Component],
+) -> RateLaw:
+    values = read_object(raw, where, RATE_FIELDS)
+    maximum = values["maximum_per_h"]
+    if maximum < 0:
+        raise ConfigError(f"{where}.maximum_per_h: must not be negative")
+    proportional_to = values.get("proportional_to", growth.biomass if growth else None)
+    if proportional_to is None:
+        raise ConfigError(
+            f"{where}: a reaction's rate needs proportional_to, the component whose "
+            "concentration the rate is proportional to"
+        )
+    _known([proportional_to], components, f"{where}.proportional_to")
+    factors = tuple(
+        _factor(item, f"{where}.factors[{i}]", components)
+        for i, item in enumerate(values.get("factors", []))
+    )
+    named = [f.component for f in factors]
+    twice = sorted({n for n in named if named.count(n) > 1})
+    if twice:
+        raise ConfigError(
+            f"{where}.factors: '{twice[0]}' appears more than once; each component limits a "
+            "process at most once (a substrate that also inhibits takes one haldane factor)"
+        )
+    in_excess: tuple[str, ...] = values.get("assumed_in_excess", ())
+    _known(in_excess, components, f"{where}.assumed_in_excess")
+    limiting = {proportional_to} | {f.component for f in factors if f.form != "inhibition"}
+    for name in in_excess:
+        if coefficients.get(name, 0) >= 0:
+            raise ConfigError(
+                f"{where}.assumed_in_excess: this process does not consume '{name}', "
+                "so it cannot be assumed to be in excess"
+            )
+        if name in limiting:
+            raise ConfigError(
+                f"{where}.assumed_in_excess: '{name}' already limits this rate, so it "
+                "cannot also be assumed to be in excess"
+            )
+    for name, coefficient in coefficients.items():
+        if coefficient < 0 and name not in limiting and name not in in_excess:
+            raise ConfigError(
+                f"{where}: the process consumes '{name}', but its rate does not depend on "
+                f"it, so it could run on '{name}' that is not there. Give it a monod factor, "
+                "or list it in assumed_in_excess if it never runs short"
+            )
+    return RateLaw(maximum, proportional_to, factors, in_excess)
+
+
 def _process(raw: Any, index: int, components: Mapping[str, Component]) -> Process:
     where = _label("processes", index, raw)
     if not isinstance(raw, dict):
@@ -480,6 +662,11 @@ def _process(raw: Any, index: int, components: Mapping[str, Component]) -> Proce
     hydrogen = sum((c * formulas[n].hydrogen for n, c in coefficients.items()), Fraction(0))
     if hydrogen + 2 * water + protons != 0:  # implied by the three balances (theory.md 3.6)
         raise ArithmeticError(f"{where}: hydrogen does not close; this is a bug in MARSE")
+    rate = (
+        _rate(values["rate"], f"{where}.rate", growth, coefficients, components)
+        if "rate" in values
+        else None
+    )
     return Process(
         name=values["name"],
         given=given,
@@ -488,6 +675,7 @@ def _process(raw: Any, index: int, components: Mapping[str, Component]) -> Proce
         water=water,
         protons=protons,
         growth=growth,
+        rate=rate,
     )
 
 
@@ -496,8 +684,15 @@ def network_from_dict(raw: Any) -> Network:
 
     Raises :class:`~marse.core.config.ConfigError` for a malformed network and
     :class:`ContinuityError`, a subclass, for a process that creates or
-    destroys carbon, nitrogen or electrons.
+    destroys carbon, nitrogen or electrons. The settings that make a network
+    runnable are checked for type here and for meaning by
+    :func:`marse.schemas.experiment.experiment_from_dict`.
     """
+    return read_document(raw)[0]
+
+
+def read_document(raw: Any) -> tuple[Network, dict[str, Any]]:
+    """The network in a version 2 document, and every top-level value, converted."""
     if isinstance(raw, dict) and "schema_version" not in raw:
         raise ConfigError(
             "network: no schema_version, so this is not a version 2 configuration. Version 1 "
@@ -516,28 +711,9 @@ def network_from_dict(raw: Any) -> Network:
     by_name = {c.name: c for c in components}
     processes = tuple(_process(item, i, by_name) for i, item in enumerate(values["processes"]))
     _require_unique([p.name for p in processes], "network.processes")
-    return Network(components, processes, values.get("description", ""))
-
-
-def _refuse_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    keys = [key for key, _ in pairs]
-    repeated = sorted({key for key in keys if keys.count(key) > 1})
-    if repeated:
-        raise ConfigError(
-            f"key {_join([f"'{k}'" for k in repeated])} appears twice in one object; "
-            "JSON would keep only the last, silently dropping the first"
-        )
-    return dict(pairs)
+    return Network(components, processes, values.get("description", "")), values
 
 
 def load_network(path: str | Path) -> Network:
     """Read a network from a JSON file; see :func:`network_from_dict`."""
-    path = Path(path)
-    text = path.read_text(encoding="utf-8")
-    try:
-        raw = json.loads(text, object_pairs_hook=_refuse_duplicate_keys)
-    except json.JSONDecodeError as error:
-        raise ConfigError(
-            f"{path.name}: invalid JSON ({error.msg} at line {error.lineno})"
-        ) from error
-    return network_from_dict(raw)
+    return network_from_dict(load_json(path))

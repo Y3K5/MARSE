@@ -34,8 +34,9 @@ flowchart LR
 
 ```text
 src/marse/
-  core/            simulation.py (run loop, clocks, checkpoints), state.py, config.py, provenance.py
-  schemas/         configuration schema v2: formula.py, network.py (reaction networks), then the v2 experiment
+  core/            simulation.py (run loop, clocks, checkpoints), state.py, config.py, provenance.py,
+                   integrators.py, ledger.py, well_mixed.py (the version 2 network engine)
+  schemas/         configuration schema v2: formula.py, network.py (reaction networks), experiment.py
   spatial/         domain.py, grid.py, neighborhoods.py, diffusion.py
   microbes/        growth.py, resource_use.py, adhesion.py, phenotype.py, interactions.py
   biofilm/         biomass.py, matrix.py, maturation.py
@@ -52,10 +53,10 @@ Implemented so far (the rest of the layout above is planned):
 
 | Package | Modules |
 |---|---|
-| `core/` | `config`, `state`, `seeds`, `provenance`, `simulation` |
+| `core/` | `config`, `state`, `seeds`, `provenance`, `simulation`, `integrators`, `ledger`, `well_mixed` |
 | `spatial/` | `domain`, `diffusion`, `solutes` |
-| `microbes/` | `growth`, `cardinal`, `niche`, `genotype`, `additives` |
-| `schemas/` | `formula`, `network`: configuration schema v2, part one (reaction networks checked for continuity) |
+| `microbes/` | `growth`, `cardinal`, `kinetics`, `niche`, `genotype`, `additives` |
+| `schemas/` | `formula`, `network`, `experiment`: configuration schema v2 (reaction networks checked for continuity, with rates and run settings) |
 | `biofilm/` | `biomass` |
 | `ecosystem/` | `model`, `providers`, `framestore`, `viewer` (not yet verified: see validation.md) |
 | `analysis/` | `calibration`, `uncertainty`, `ensemble` |

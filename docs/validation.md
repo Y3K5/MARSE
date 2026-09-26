@@ -33,7 +33,7 @@ Every `ValidationCase` records:
 | ID | Case | What it demonstrates | Phase | Status |
 |---|---|---|---|---|
 | V1 | Single-species unrestricted growth | The chosen growth law and carrying-capacity behaviour | 3 | **Passing, well mixed** |
-| V2 | Resource-limited growth | Expected saturation or starvation behaviour | 3 | **Passing, well mixed** |
+| V2 | Resource-limited growth | Expected saturation or starvation behaviour | 3 | **Passing, well mixed**, in the batch engine and the version 2 network engine |
 | V3 | Diffusion only | The numerical diffusion method, separately from microbial rules | 2 | **Passing, 1-D steady state** |
 | V4 | Attachment and biofilm initiation | Transition from planktonic or seeded biomass to attached growth | 4 | Planned |
 | V5 | Two-species competition | Expected dominance and coexistence regimes | 3 | **Passing, well mixed** |
@@ -90,13 +90,13 @@ flips its test, which must then become an ordinary regression test.
 | # | Defect | Measured | Consequence |
 |---|---|---|---|
 | 1 | The examples give oxygen a diffusivity of 10 µm²/h. The physical value in a biofilm is about 4×10⁶ µm²/h (`oxygen_diffusivity_um2_per_h` at 37 °C × 0.43). At 10 µm cells the explicit scheme could only run that value with 22 ms steps. | Oxygen spreads about 30 µm in 24 h instead of about 20 mm | Every oxygen gradient in the examples is set by the numerics, not the physics |
-| 2 | Uptake follows *potential* growth, not actual growth. Production adds material that no consumed substrate pays for. | With growth held at zero, 22% of the carbon is consumed in an hour. With a yield of 1, 1.3–1.6 units are consumed per unit of biomass formed. | Yield and mass balance are both broken. Configuration schema version 2 already refuses such a process when it loads ([networks.md](networks.md)); the engine is fixed when it runs on version 2 |
+| 2 | Uptake follows *potential* growth, not actual growth. Production adds material that no consumed substrate pays for. | With growth held at zero, 22% of the carbon is consumed in an hour. With a yield of 1, 1.3–1.6 units are consumed per unit of biomass formed. | Yield and mass balance are both broken. Configuration schema version 2 already refuses such a process when it loads ([networks.md](networks.md)); the engine is fixed when it runs on version 2 The version 2 network engine meets the requirement: consumption is growth divided by yield, exactly, and nothing is consumed without growth |
 | 3 | The periodontal species need oxygen to grow (a Monod term), although all three are anaerobes ([Holt and Ebersole 2005](https://pubmed.ncbi.nlm.nih.gov/15853938/)) | With no oxygen, growth is exactly zero | The study's oxygen-limited control points the wrong way |
-| 4 | A species capability applies the substrate Monod term a second time | 50% of the intended rate at C = K, 13% at C = K/7 | Growth at low substrate is strongly understated |
-| 5 | Negative values are clipped instead of refused, and chemotaxis has no stability limit | One unstable chemotaxis step doubles total biomass | Mass is created silently |
+| 4 | A species capability applies the substrate Monod term a second time | 50% of the intended rate at C = K, 13% at C = K/7 | Growth at low substrate is strongly understated. Version 2 refuses a second factor for one component, and a Monod factor gives exactly half the rate at C = K |
+| 5 | Negative values are clipped instead of refused, and chemotaxis has no stability limit | One unstable chemotaxis step doubles total biomass | Mass is created silently. For reactions, the version 2 engine is positive without clipping at any step size; chemotaxis waits for the spatial engine |
 | 6 | Mutation marks grid cells, including empty ones, not lineages, and every species draws from one shared random stream | At probability 1, every empty cell becomes "mutant" | Resistance does not move with the cells that carry it |
-| 7 | Species are updated one after another within a step | Swapping two competitors in the file changes their final biomass by 0.9% | Results depend on how the file is written |
-| 8 | Each species has its own carrying capacity | Two species fill a cell to twice its capacity | Space is not shared |
+| 7 | Species are updated one after another within a step | Swapping two competitors in the file changes their final biomass by 0.9% | Results depend on how the file is written. In the version 2 engine every process acts on the same state: reordering changes fixed-step results only at rounding level |
+| 8 | Each species has its own carrying capacity | Two species fill a cell to twice its capacity | Space is not shared. Shared space needs the spatial engine; a closed well-mixed box has none |
 | 9 | ~~Ecosystem runs write no manifest and cannot be replayed~~ **Fixed:** they write a manifest (kind `ecosystem`) and replay exactly | — | The reproducibility claim now covers this engine; its manifests name the engine `ecosystem_v1_unverified` |
 
 Until these are fixed, results from `marse ecosystem`, including the
@@ -190,6 +190,30 @@ The checks of that check, in `tests/test_schema_network.py` and
 - **Refusals.** Production from nothing (known defect 2's pattern), a row that
   nearly balances, and every malformed network are refused with a message
   naming the process, the field or the quantity.
+
+## The version 2 network engine
+
+A runnable network is integrated in a closed, well-mixed box
+(`marse.core.well_mixed`; [theory.md §3.7 and §9.6](theory.md#37-rates)). The
+checks, in `tests/test_well_mixed.py` and `tests/test_integrators.py`:
+
+- **V2, against the analytical solution.** Monod batch growth reproduces
+  `monod_batch_time` to a relative 1e-6. It ends at `batch_final_biomass`, and
+  the integrator converges at second order, with the measured order above 1.9.
+- **Balance over a long run.** Carbon, nitrogen and electrons stay within
+  1e-12 of their totals over ten thousand steps. A planted leak of 1e-6 is
+  caught at the first step, so the ledger is shown to be able to fail.
+- **Positivity without clipping.** Steps a thousand times too long leave every
+  concentration non-negative and every balance exact. The same holds for
+  3,000 random networks with cycles, at steps up to 10⁶ h, with a worst drift of
+  5e-16.
+- **Selectivity.** A process that consumes nothing scarce runs at exactly the
+  rate it would have alone.
+- **The requirements behind known defects 2, 4, 5 and 7** hold on this engine,
+  as the defect table above notes. The version 1 expected-failure tests stay
+  until version 1 is removed.
+- **Replay.** Runs replay bit for bit from their manifests. An edited manifest
+  is refused.
 
 ## Running the suite
 

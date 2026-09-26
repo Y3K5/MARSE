@@ -42,14 +42,18 @@ are being fixed before anything is built on it
 The fix starts with the configuration. In the new format every process must
 conserve carbon, nitrogen and electrons exactly, and MARSE derives what a
 yield leaves open, such as the oxygen used and the carbon dioxide released. A
-process that would make matter from nothing is refused as the file loads:
+process that would make matter from nothing is refused as the file loads. A
+network with rates runs in a closed, well-mixed box, and every run proves its
+own balance:
 
 ```bash
 marse check examples/networks/glucose_cross_feeding.json
+marse run examples/networks/glucose_cross_feeding.json -o runs/network
+marse replay runs/network/manifest.json
 ```
 
-[docs/networks.md](docs/networks.md) describes the format. No engine runs
-these networks yet; the roadmap builds one next.
+[docs/networks.md](docs/networks.md) describes the format. Transport, and with
+it biofilms, comes next.
 
 The manifest records the configuration, its SHA-256 checksum, the random seed,
 the versioned models used and the software versions — and deliberately records
@@ -119,7 +123,7 @@ src/marse/         the Python package
   validation/      analytical references, benchmark and regression cases
 examples/          runnable reference calculations
   experiments/     experiment configurations for `marse run` and `marse ecosystem`
-  networks/        reaction networks for `marse check` (configuration schema v2)
+  networks/        reaction networks for `marse check` and `marse run` (configuration schema v2)
 tests/             test suite
 docs/              theory, parameters, specification, architecture, validation, roadmap
 tools/             repository tooling (privacy and repository guards)

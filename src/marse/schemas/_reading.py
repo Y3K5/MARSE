@@ -15,27 +15,40 @@ fields.
 from __future__ import annotations
 
 import difflib
+import json
 import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from fractions import Fraction
+from pathlib import Path
 from typing import Any, Literal
 
 from marse.core.config import ConfigError
 
 UNIT_SUFFIXES = {
     "_mol_per_mol": "mol of one component per mol of another",
+    "_mol_per_m3": "mol per cubic metre, which is mmol per litre",
+    "_per_h": "per hour",
+    "_h": "hours",
 }
-"""Every numeric field name ends in one of these suffixes, which names its unit."""
+"""Every numeric field name ends in one of these suffixes, which names its unit.
+
+A name is matched against the longest suffix first, so ``maximum_per_h`` is
+per hour, not hours.
+"""
 
 DIMENSIONLESS = {
     "schema_version": "the version number of the configuration format",
     "charge": "the electric charge of one formula unit, in elementary charges",
+    "seed": "the seed of the random streams, an identifier rather than a quantity",
+    "relative_tolerance": "a fraction: the accepted local error relative to each concentration",
 }
 """Numeric fields that are labels or pure numbers, so they carry no unit suffix."""
 
-Kind = Literal["text", "name", "names", "choice", "integer", "number", "numbers", "objects"]
+Kind = Literal[
+    "text", "name", "names", "choice", "integer", "number", "numbers", "object", "objects"
+]
 NUMERIC_KINDS = frozenset({"integer", "number", "numbers"})
 
 _NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}")
@@ -48,7 +61,8 @@ class Field:
     ``text`` is any string, ``name`` an identifier, ``names`` a list of
     distinct identifiers, ``choice`` one of ``choices``, ``integer`` a whole
     number, ``number`` an exact decimal, ``numbers`` an object from names to
-    exact decimals, and ``objects`` a list of objects read by the caller.
+    exact decimals, ``object`` an object read by the caller, and ``objects``
+    a list of objects read by the caller.
     """
 
     kind: Kind
@@ -70,19 +84,17 @@ def _describe(value: Any) -> str:
     return type(value).__name__
 
 
-def _base(name: str) -> str | None:
-    """A numeric field name without its unit suffix, or None if it has none."""
-    for suffix in UNIT_SUFFIXES:
-        if name.endswith(suffix):
-            return name[: -len(suffix)]
-    return None
+def unit_suffix(name: str) -> str | None:
+    """The unit suffix a field name ends in, longest first, or None."""
+    return next((s for s in sorted(UNIT_SUFFIXES, key=len, reverse=True) if name.endswith(s)), None)
 
 
 def _hint(key: str, known: Mapping[str, Field]) -> str:
     for name in known:
-        base = _base(name)
+        suffix = unit_suffix(name)
+        base = name[: -len(suffix)] if suffix else None
         if base and (key == base or key.startswith(base + "_")):
-            unit = UNIT_SUFFIXES[name[len(base) :]]
+            unit = UNIT_SUFFIXES[suffix]
             return f"; the unit is part of the name, and this field is '{name}', in {unit}"
     close = difflib.get_close_matches(key, list(known), n=1, cutoff=0.75)
     return f"; did you mean '{close[0]}'?" if close else ""
@@ -134,6 +146,10 @@ def _convert(value: Any, where: str, field: Field) -> Any:
             if not isinstance(value, dict):
                 raise ConfigError(f"{where}: expected an object of numbers, got {_describe(value)}")
             return {name(k, f"{where} key"): exact(v, f"{where}.{k}") for k, v in value.items()}
+        case "object":
+            if not isinstance(value, dict):
+                raise ConfigError(f"{where}: expected an object, got {_describe(value)}")
+            return value
         case "objects":
             if not isinstance(value, list):
                 raise ConfigError(f"{where}: expected a list of objects, got {_describe(value)}")
@@ -174,3 +190,27 @@ def plain(value: Fraction) -> int | float:
     output again gives back exactly ``value``.
     """
     return value.numerator if value.denominator == 1 else float(value)
+
+
+def _refuse_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    keys = [key for key, _ in pairs]
+    repeated = sorted({key for key in keys if keys.count(key) > 1})
+    if repeated:
+        listed = ", ".join(f"'{k}'" for k in repeated)
+        raise ConfigError(
+            f"key {listed} appears twice in one object; JSON would keep only the last, "
+            "silently dropping the first"
+        )
+    return dict(pairs)
+
+
+def load_json(path: str | Path) -> Any:
+    """A configuration file's JSON, refusing duplicate keys and naming the file on error."""
+    path = Path(path)
+    text = path.read_text(encoding="utf-8")
+    try:
+        return json.loads(text, object_pairs_hook=_refuse_duplicate_keys)
+    except json.JSONDecodeError as error:
+        raise ConfigError(
+            f"{path.name}: invalid JSON ({error.msg} at line {error.lineno})"
+        ) from error
