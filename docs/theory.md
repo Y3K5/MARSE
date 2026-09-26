@@ -875,11 +875,20 @@ makes multi-day biofilm simulations tractable, and it is the approach taken by
 established biofilm models (Wanner & Gujer 1986; Picioreanu et al. 1998;
 Kreft et al. 2001; Lardon et al. 2011).
 
-MARSE will make the separation **checkable rather than assumed**: the ratio
-$\tau_D/\tau_{\text{growth}}$ is computed and recorded, and a run whose ratio
-exceeds a configured threshold is flagged in its manifest. The approximation
-fails during fast transients — precisely the perturbation experiments MARSE is
-built for — so it cannot be silently trusted.
+The approximation fails during fast transients, which are precisely the
+perturbation experiments MARSE is built for, so it cannot be silently trusted.
+MARSE's spatial engine for configuration schema version 2 therefore does not
+make it. Solutes and biomass are integrated together in time by an L-stable
+implicit method (§9.8):
+
+- with long steps it lands on the quasi-steady profile;
+- with short steps it follows a transient;
+- no switch between the two regimes is needed.
+
+The ratio $\tau_D/\tau_{\text{growth}}$ is still computed, from the box height
+and the fastest diffusivity and rate, and recorded in every manifest
+(`time_scales`). It tells a reader how stiff the run was, not whether its
+results can be trusted.
 
 ---
 
@@ -1034,14 +1043,12 @@ $$
 \Delta t \le \frac{5^2}{4 \times 2624} \approx 2.4\ \text{ms}.
 $$
 
-Milliseconds, for a process to be simulated over days. Explicit stepping of
-the full coupled system is therefore not viable, which is exactly why the
-quasi-steady-state approach of §5.3 is used: the solute field is solved to
-steady state directly, and only biomass is marched in time.
-
-MARSE computes this bound from the run's own parameters and refuses a
-configuration that violates it, rather than producing plausible-looking
-oscillating garbage.
+Milliseconds, for a process to be simulated over days. In three dimensions on
+2 µm voxels the limit is a quarter of a millisecond. Explicit stepping of the
+full coupled system is therefore not viable. The version 1 engines avoid it by
+solving the solute field to steady state (§9.2). The version 2 spatial engine
+instead integrates transport implicitly (§9.8), and `marse check` prints the
+explicit limit it avoids.
 
 ### 9.2 Steady-state solution
 
@@ -1083,9 +1090,12 @@ $$
 \qquad M_k = \sum_j I_{jk} c_j .
 $$
 
-A closed box has no imports or exports. A residual beyond $10^{-9}$ of the
-total content $\sum_j |I_{jk}| c_j(0)$ stops the run with a
-`ConservationError`. That threshold sits far above rounding, which is about
+A closed box has no imports or exports. In space, what crosses the top face
+is booked from the face transfers the integrator applied (§9.8), independently
+of the amounts in the box, so the check compares two separately computed
+quantities. A residual beyond $10^{-9}$ of the total content
+$\sum_j |I_{jk}| c_j(0)$, plus everything that has crossed, stops the run
+with a `ConservationError`. That threshold sits far above rounding, which is about
 $10^{-15}$ per step, and far below any real leak. The largest residual of every
 run is recorded in its manifest. Implemented as `marse.core.ledger`.
 
@@ -1185,6 +1195,154 @@ $10^{-1}$ must be solved to the same relative accuracy. Every operation runs
 in a fixed order, so the same system gives the same answer, bit for bit.
 Implemented as `marse.spatial.multigrid`.
 
+### 9.8 Implicit reaction–transport integration
+
+In space, every voxel changes by diffusion (§4.7) and by reaction (§3.7) at
+once:
+
+$$
+\frac{dc}{dt} = \nabla_h\!\cdot F(c) + N^{\mathsf T} r(c).
+$$
+
+Three ways of stepping this fail:
+
+- **Explicit steps** must stay below the limit of §9.1, a quarter of a
+  millisecond on 2 µm voxels.
+- **Splitting reaction from transport** at practical steps starves the
+  biofilm. Each step refills the box once, where a real biofilm is fed by a
+  continuous flux.
+- **A quasi-steady solute field** (§5.3) is wrong during transients, which
+  are what MARSE is built to study.
+
+MARSE therefore integrates everything together, with the two-stage, L-stable,
+stiffly accurate diagonally implicit Runge–Kutta method of Alexander (1977),
+$\gamma = 1 - 1/\sqrt 2$:
+
+$$
+Y_1 = y^n + \gamma h\, f(Y_1), \qquad
+Y_2 = y^n + h\left((1-\gamma) f(Y_1) + \gamma f(Y_2)\right).
+$$
+
+Its stability function $R(z) = (1 + (1-2\gamma)z)/(1-\gamma z)^2$ tends to zero
+as $z \to -\infty$. Stiff modes are therefore damped within one long step, and
+a long step lands on the quasi-steady profile, while a short step follows a
+transient at second order.
+
+**Conservation for any solver tolerance.** The new state is not taken from
+$Y_2$. It is rebuilt from what the stages imply: the face transfers
+$T = h\sum_i b_i F(Y_i)$ and the process extents
+$\xi = h\sum_i b_i r(Y_i)$,
+
+$$
+y^{n+1} = y^n + \nabla_h\!\cdot T + N^{\mathsf T}\xi .
+$$
+
+Each transfer leaves one voxel and enters its neighbour, and each process row
+conserves carbon, nitrogen and electrons (§3.6). So the balance holds to
+rounding however loosely the linear systems are solved. The transfers through
+the top face are what the ledger (§9.5) books as the box's exchange with the
+bulk liquid.
+
+**Positivity.** Positivity for every step size and second order cannot be had
+together: a scheme that keeps the heat equation positive at every step size is
+at most first order (Bolley and Crouzeix 1978). Here $R(z)$ turns negative below
+$z = -1/(1-2\gamma) \approx -2.4$, so a nearly exhausted species can undershoot.
+Where $y^{n+1}$ would be negative, the limiter scales down what leaves that
+voxel: its outgoing transfers and the processes consuming there, each as a
+whole. It counts what arrives within the same step, and repeats until nothing
+is negative. The stock-only limiter of §9.6 is the guaranteed fallback. Nothing
+is clipped, and every balance survives the scaling. The update itself is
+summed from what arrives in each voxel and what leaves it, kept apart, so a
+voxel that loses nothing can only gain, even in rounding. Summed as a
+divergence instead, it left traces of lactate of $10^{-323}$ mol m⁻³ negative
+on the first steps of the 3-D example, with nothing leaving them to scale.
+Below the smallest normal number, $2.2\times10^{-308}$, no relative margin
+survives rounding. Scaled by 4/6, a transfer of one unit in the last place
+rounds back up to one, so a voxel holding four such units and sending one
+through each of its six faces cannot be scaled into balance. On a 64 × 64 × 32
+box the limiter stalled on such traces and its fallback failed. A voxel holding
+less than the smallest normal number therefore stops giving, instead of being
+scaled. A last pass after the fallback does the same for any voxel that rounding
+still leaves below zero. A voxel that gives nothing can only gain, so the
+guarantee holds in floating point, not only in exact arithmetic.
+
+**Newton's method.** Both stages are solved by Newton's method with the
+analytic Jacobian of the rates (`rate_jacobian`). The rate laws have a kink at
+zero, where a Monod term switches off. So Newton is projected:
+
+- a value well above the absolute tolerance may fall at most to a tenth of
+  itself per iteration, which keeps Newton on the smooth side while a large
+  transient is resolved;
+- a value already below the tolerance may go negative, because the stage
+  solution itself can undershoot there.
+
+Two alternatives were built and measured first:
+
+- damping every value to stay positive fails when the stage solution is
+  truly negative;
+- a line search alone crawls through an oxygen front, one voxel per
+  iteration.
+
+The Jacobian is that of the rates as they are evaluated, at concentrations
+clamped at zero, so a negative value has no slope. Given the slope at zero
+instead, Newton's method is told that consumption still responds below zero.
+On a ten-minute step from air-saturated biomass it then crept towards a
+negative stage value by 4% per iteration and had not converged after 40
+iterations. With the true slope it converged in 18.
+
+A Newton solve that has not converged after 20 iterations rejects the step,
+which is retried at a quarter of its length. One matrix, with the Jacobian at
+the start of the step, serves both stages, because they share $\gamma h$. It is
+rebuilt only when Newton converges slowly, and its systems are solved by
+multigrid (§9.7).
+
+**Error control.** The first-order result $y^n + h f(Y_1)$ differs from
+$y^{n+1}$ by $h\gamma\,(f(Y_2) - f(Y_1))$. That difference is filtered through
+$(I - \gamma h J)^{-1}$, so that the stiff components the method damps do not
+dominate it (Hairer and Wanner 1996, §IV.8), and the filtered difference sets
+the step. Errors are measured against each component's largest value
+anywhere in the box. A trace of lactate seeping into the liquid far from the
+colonies is then held to the accuracy lactate needs where it matters.
+Measured per voxel, the first three minutes of the column below took 1,292
+steps; measured per component, the first fifteen minutes take 388, with an
+error of $1.0\times10^{-6}$ of each component's peak. What remains of the
+start-up is real: lactate appearing from nothing, then oxygen running out at
+the base within seconds, a transient spread over five decades of time. A
+second-order method needs about 60 steps per decade to resolve it at a
+relative tolerance of $10^{-4}$, and about 20 at $10^{-3}$. Filtering the
+estimate a second time was measured too. It saved 1% of the steps and cost
+50% more time, so MARSE filters once.
+
+**The first step.** Colonies placed in fresh liquid start far from their
+quasi-steady state, and a first step as long as the recording interval only
+fails. The first step of a run therefore comes from the starting-step
+algorithm of Hairer, Nørsett and Wanner (1993, §II.4), for order 2 and in the
+error norm above. It uses the rates and their change over a trial Euler step,
+so that the increment is a hundredth of the state and the local error a
+hundredth of the tolerance. On the column below it proposes 0.1 ms, and the
+first fifteen minutes see two rejected steps. Starting with the
+fifteen-minute recording interval instead cost ten, four of them failed
+Newton solves.
+
+**Measured.** On a column of 100 voxels of 2 µm, with the example chemistry
+and 800 and 400 C-mol m⁻³ of heterotroph and fermenter in the lower 100 µm:
+
+- carbon, nitrogen and electrons are conserved to $2.4\times10^{-15}$ of their
+  totals over $10^4$ steps, counting imports;
+- the observed order rises from 1.74 to 1.92 as the step falls from 90 s to
+  2.8 s. Below 2 at long steps is the order reduction expected of a method of
+  stage order 1 on a stiff problem (Prothero and Robinson 1974);
+- the actual error is 20 to 50 times smaller than the relative tolerance. At
+  the default in space, $10^{-4}$, it is about $5\times10^{-6}$ of each
+  component's peak, at 25 steps per simulated hour once the start is past;
+- after the bulk oxygen falls from 0.21 to 0.05 mol m⁻³, 90 s steps follow
+  the change to $3\times10^{-6}$ of air saturation. Six minutes later the
+  oxygen profile lies within $7\times10^{-7}$ of the quasi-steady profile on
+  the same grid.
+
+Implemented as `marse.core.implicit`, and run by
+`marse.core.reactive_transport`.
+
 ---
 
 ## 10. Assumptions and limitations
@@ -1248,39 +1406,44 @@ Full definitions in [`docs/validation.md`](validation.md).
 Numerical values taken from these sources, with confidence notes, are
 tabulated in [`docs/parameters.md`](parameters.md).
 
-1. Andrews, J.F. (1968) A mathematical model for the continuous culture of microorganisms utilizing inhibitory substrates. *Biotechnology and Bioengineering* **10**:707–723. [doi:10.1002/bit.260100602](https://doi.org/10.1002/bit.260100602)
-2. Baka, M., Van Derlinden, E., Boons, K., Mertens, L. & Van Impe, J.F. (2013) Impact of pH on the cardinal temperatures of *E. coli* K12: evaluation of the gamma hypothesis. *Food Control* **29**:328–335. [doi:10.1016/j.foodcont.2012.04.022](https://doi.org/10.1016/j.foodcont.2012.04.022)
-3. Balaban, N.Q., Merrin, J., Chait, R., Kowalik, L. & Leibler, S. (2004) Bacterial persistence as a phenotypic switch. *Science* **305**:1622–1625. [doi:10.1126/science.1099390](https://doi.org/10.1126/science.1099390)
-4. Baranyi, J. & Roberts, T.A. (1994) A dynamic approach to predicting bacterial growth in food. *International Journal of Food Microbiology* **23**:277–294. [doi:10.1016/0168-1605(94)90157-0](https://doi.org/10.1016/0168-1605(94)90157-0)
-5. Benson, B.B. & Krause, D. (1984) The concentration and isotopic fractionation of oxygen dissolved in freshwater and seawater in equilibrium with the atmosphere. *Limnology and Oceanography* **29**:620–632. [doi:10.4319/lo.1984.29.3.0620](https://doi.org/10.4319/lo.1984.29.3.0620)
-6. Briggs, W.L., Henson, V.E. & McCormick, S.F. (2000) *A Multigrid Tutorial*, 2nd edition. SIAM, Philadelphia. [doi:10.1137/1.9780898719505](https://doi.org/10.1137/1.9780898719505)
-7. Bruggeman, J., Burchard, H., Kooi, B.W. & Sommeijer, B. (2007) A second-order, unconditionally positive, mass-conserving integration scheme for biochemical systems. *Applied Numerical Mathematics* **57**:36–58. [sciencedirect.com](https://www.sciencedirect.com/science/article/abs/pii/S0168927405002242)
-8. Gottlieb, S., Shu, C.-W. & Tadmor, E. (2001) Strong stability-preserving high-order time discretization methods. *SIAM Review* **43**:89–112. [doi:10.1137/S003614450036757X](https://doi.org/10.1137/S003614450036757X)
-9. Han, P. & Bartels, D.M. (1996) Temperature dependence of oxygen diffusion in H₂O and D₂O. *Journal of Physical Chemistry* **100**:5597–5602. [doi:10.1021/jp952903y](https://doi.org/10.1021/jp952903y)
-10. Heijnen, J.J. & van Dijken, J.P. (1992) In search of a thermodynamic description of biomass yields for the chemotrophic growth of microorganisms. *Biotechnology and Bioengineering* **39**:833–858. [doi:10.1002/bit.260390806](https://doi.org/10.1002/bit.260390806)
-11. Henze, M., Gujer, W., Mino, T. & van Loosdrecht, M.C.M. (2000) *Activated Sludge Models ASM1, ASM2, ASM2d and ASM3.* IWA Scientific and Technical Report No. 9. IWA Publishing, London.
-12. Hsu, S.-B., Hubbell, S.P. & Waltman, P. (1977) A mathematical theory for single-nutrient competition in continuous cultures of micro-organisms. *SIAM Journal on Applied Mathematics* **32**:366–383. [doi:10.1137/0132030](https://doi.org/10.1137/0132030)
-13. Huber, M.L., Perkins, R.A., Laesecke, A. *et al.* (2009) New international formulation for the viscosity of H₂O. *Journal of Physical and Chemical Reference Data* **38**:101–125. [doi:10.1063/1.3088050](https://doi.org/10.1063/1.3088050)
-14. Kovárová-Kovar, K. & Egli, T. (1998) Growth kinetics of suspended microbial cells: from single-substrate-controlled growth to mixed-substrate kinetics. *Microbiology and Molecular Biology Reviews* **62**:646–666. [doi:10.1128/mmbr.62.3.646-666.1998](https://doi.org/10.1128/mmbr.62.3.646-666.1998)
-15. Kreft, J.-U., Picioreanu, C., Wimpenny, J.W.T. & van Loosdrecht, M.C.M. (2001) Individual-based modelling of biofilms. *Microbiology* **147**:2897–2912. [doi:10.1099/00221287-147-11-2897](https://doi.org/10.1099/00221287-147-11-2897)
-16. Lardon, L.A., Merkey, B.V., Martins, S. *et al.* (2011) iDynoMiCS: next-generation individual-based modelling of biofilms. *Environmental Microbiology* **13**:2416–2434. [doi:10.1111/j.1462-2920.2011.02414.x](https://doi.org/10.1111/j.1462-2920.2011.02414.x)
-17. Luedeking, R. & Piret, E.L. (1959) A kinetic study of the lactic acid fermentation. Batch process at controlled pH. *Journal of Biochemical and Microbiological Technology and Engineering* **1**:393–412. [doi:10.1002/jbmte.390010406](https://doi.org/10.1002/jbmte.390010406)
-18. Monod, J. (1949) The growth of bacterial cultures. *Annual Review of Microbiology* **3**:371–394. [doi:10.1146/annurev.mi.03.100149.002103](https://doi.org/10.1146/annurev.mi.03.100149.002103)
-19. Picioreanu, C., van Loosdrecht, M.C.M. & Heijnen, J.J. (1998) Mathematical modeling of biofilm structure with a hybrid differential-discrete cellular automaton approach. *Biotechnology and Bioengineering* **58**:101–116. [doi:10.1002/(SICI)1097-0290(19980405)58:1<101::AID-BIT11>3.0.CO;2-M](https://doi.org/10.1002/(SICI)1097-0290(19980405)58:1%3C101::AID-BIT11%3E3.0.CO;2-M)
-20. Pirt, S.J. (1965) The maintenance energy of bacteria in growing cultures. *Proceedings of the Royal Society B* **163**:224–231. [doi:10.1098/rspb.1965.0069](https://doi.org/10.1098/rspb.1965.0069)
-21. Pirt, S.J. (1967) A kinetic study of the mode of growth of surface colonies of bacteria and fungi. *Journal of General Microbiology* **47**:181–197. [doi:10.1099/00221287-47-2-181](https://doi.org/10.1099/00221287-47-2-181)
-22. Ratkowsky, D.A., Lowry, R.K., McMeekin, T.A., Stokes, A.N. & Chandler, R.E. (1983) Model for bacterial culture growth rate throughout the entire biokinetic temperature range. *Journal of Bacteriology* **154**:1222–1226. [doi:10.1128/jb.154.3.1222-1226.1983](https://doi.org/10.1128/jb.154.3.1222-1226.1983)
-23. Ratkowsky, D.A., Olley, J., McMeekin, T.A. & Ball, A. (1982) Relationship between temperature and growth rate of bacterial cultures. *Journal of Bacteriology* **149**:1–5. [doi:10.1128/jb.149.1.1-5.1982](https://doi.org/10.1128/jb.149.1.1-5.1982)
-24. Rittmann, B.E. & McCarty, P.L. (2001) *Environmental Biotechnology: Principles and Applications.* McGraw-Hill, New York.
-25. Roels, J.A. (1983) *Energetics and Kinetics in Biotechnology.* Elsevier Biomedical Press, Amsterdam.
-26. Rosso, L., Lobry, J.R. & Flandrois, J.P. (1993) An unexpected correlation between cardinal temperatures of microbial growth highlighted by a new model. *Journal of Theoretical Biology* **162**:447–463. [doi:10.1006/jtbi.1993.1099](https://doi.org/10.1006/jtbi.1993.1099)
-27. Rosso, L., Lobry, J.R., Bajard, S. & Flandrois, J.P. (1995) Convenient model to describe the combined effects of temperature and pH on microbial growth. *Applied and Environmental Microbiology* **61**:610–616. [doi:10.1128/aem.61.2.610-616.1995](https://doi.org/10.1128/aem.61.2.610-616.1995)
-28. Saad, Y. & Schultz, M.H. (1986) GMRES: a generalized minimal residual algorithm for solving nonsymmetric linear systems. *SIAM Journal on Scientific and Statistical Computing* **7**:856–869. [doi:10.1137/0907058](https://doi.org/10.1137/0907058)
-29. Shu, C.-W. & Osher, S. (1988) Efficient implementation of essentially non-oscillatory shock-capturing schemes. *Journal of Computational Physics* **77**:439–471. [doi:10.1016/0021-9991(88)90177-5](https://doi.org/10.1016/0021-9991(88)90177-5)
-30. Stewart, P.S. (1998) A review of experimental measurements of effective diffusive permeabilities and effective diffusion coefficients in biofilms. *Biotechnology and Bioengineering* **59**:261–272. [doi:10.1002/(SICI)1097-0290(19980805)59:3<261::AID-BIT1>3.0.CO;2-9](https://doi.org/10.1002/(SICI)1097-0290(19980805)59:3%3C261::AID-BIT1%3E3.0.CO;2-9)
-31. Stewart, P.S. (2003) Diffusion in biofilms. *Journal of Bacteriology* **185**:1485–1491. [doi:10.1128/jb.185.5.1485-1491.2003](https://doi.org/10.1128/jb.185.5.1485-1491.2003)
-32. Walters, M.C., Roe, F., Bugnicourt, A., Franklin, M.J. & Stewart, P.S. (2003) Contributions of antibiotic penetration, oxygen limitation, and low metabolic activity to tolerance of *Pseudomonas aeruginosa* biofilms. *Antimicrobial Agents and Chemotherapy* **47**:317–323. [doi:10.1128/aac.47.1.317-323.2003](https://doi.org/10.1128/aac.47.1.317-323.2003)
-33. Wanner, O. & Gujer, W. (1986) A multispecies biofilm model. *Biotechnology and Bioengineering* **28**:314–328. [doi:10.1002/bit.260280304](https://doi.org/10.1002/bit.260280304)
-34. Werner, E., Roe, F., Bugnicourt, A. *et al.* (2004) Stratified growth in *Pseudomonas aeruginosa* biofilms. *Applied and Environmental Microbiology* **70**:6188–6196. [doi:10.1128/aem.70.10.6188-6196.2004](https://doi.org/10.1128/aem.70.10.6188-6196.2004)
-35. Zwietering, M.H., Jongenburger, I., Rombouts, F.M. & van 't Riet, K. (1990) Modeling of the bacterial growth curve. *Applied and Environmental Microbiology* **56**:1875–1881. [doi:10.1128/aem.56.6.1875-1881.1990](https://doi.org/10.1128/aem.56.6.1875-1881.1990)
-36. Zwietering, M.H., Wijtzes, T., de Wit, J.C. & van 't Riet, K. (1992) A decision support system for prediction of the microbial spoilage in foods. *Journal of Food Protection* **55**:973–979. [doi:10.4315/0362-028X-55.12.973](https://doi.org/10.4315/0362-028X-55.12.973)
+1. Alexander, R. (1977) Diagonally implicit Runge–Kutta methods for stiff O.D.E.'s. *SIAM Journal on Numerical Analysis* **14**:1006–1021. [doi:10.1137/0714068](https://doi.org/10.1137/0714068)
+2. Andrews, J.F. (1968) A mathematical model for the continuous culture of microorganisms utilizing inhibitory substrates. *Biotechnology and Bioengineering* **10**:707–723. [doi:10.1002/bit.260100602](https://doi.org/10.1002/bit.260100602)
+3. Baka, M., Van Derlinden, E., Boons, K., Mertens, L. & Van Impe, J.F. (2013) Impact of pH on the cardinal temperatures of *E. coli* K12: evaluation of the gamma hypothesis. *Food Control* **29**:328–335. [doi:10.1016/j.foodcont.2012.04.022](https://doi.org/10.1016/j.foodcont.2012.04.022)
+4. Balaban, N.Q., Merrin, J., Chait, R., Kowalik, L. & Leibler, S. (2004) Bacterial persistence as a phenotypic switch. *Science* **305**:1622–1625. [doi:10.1126/science.1099390](https://doi.org/10.1126/science.1099390)
+5. Baranyi, J. & Roberts, T.A. (1994) A dynamic approach to predicting bacterial growth in food. *International Journal of Food Microbiology* **23**:277–294. [doi:10.1016/0168-1605(94)90157-0](https://doi.org/10.1016/0168-1605(94)90157-0)
+6. Benson, B.B. & Krause, D. (1984) The concentration and isotopic fractionation of oxygen dissolved in freshwater and seawater in equilibrium with the atmosphere. *Limnology and Oceanography* **29**:620–632. [doi:10.4319/lo.1984.29.3.0620](https://doi.org/10.4319/lo.1984.29.3.0620)
+7. Bolley, C. & Crouzeix, M. (1978) Conservation de la positivité lors de la discrétisation des problèmes d'évolution paraboliques. *RAIRO Analyse numérique* **12**:237–245. [doi:10.1051/m2an/1978120302371](https://doi.org/10.1051/m2an/1978120302371)
+8. Briggs, W.L., Henson, V.E. & McCormick, S.F. (2000) *A Multigrid Tutorial*, 2nd edition. SIAM, Philadelphia. [doi:10.1137/1.9780898719505](https://doi.org/10.1137/1.9780898719505)
+9. Bruggeman, J., Burchard, H., Kooi, B.W. & Sommeijer, B. (2007) A second-order, unconditionally positive, mass-conserving integration scheme for biochemical systems. *Applied Numerical Mathematics* **57**:36–58. [sciencedirect.com](https://www.sciencedirect.com/science/article/abs/pii/S0168927405002242)
+10. Gottlieb, S., Shu, C.-W. & Tadmor, E. (2001) Strong stability-preserving high-order time discretization methods. *SIAM Review* **43**:89–112. [doi:10.1137/S003614450036757X](https://doi.org/10.1137/S003614450036757X)
+11. Hairer, E., Nørsett, S.P. & Wanner, G. (1993) *Solving Ordinary Differential Equations I: Nonstiff Problems*, 2nd edition. Springer, Berlin. [doi:10.1007/978-3-540-78862-1](https://doi.org/10.1007/978-3-540-78862-1)
+12. Hairer, E. & Wanner, G. (1996) *Solving Ordinary Differential Equations II: Stiff and Differential-Algebraic Problems*, 2nd edition. Springer, Berlin. [doi:10.1007/978-3-642-05221-7](https://doi.org/10.1007/978-3-642-05221-7)
+13. Han, P. & Bartels, D.M. (1996) Temperature dependence of oxygen diffusion in H₂O and D₂O. *Journal of Physical Chemistry* **100**:5597–5602. [doi:10.1021/jp952903y](https://doi.org/10.1021/jp952903y)
+14. Heijnen, J.J. & van Dijken, J.P. (1992) In search of a thermodynamic description of biomass yields for the chemotrophic growth of microorganisms. *Biotechnology and Bioengineering* **39**:833–858. [doi:10.1002/bit.260390806](https://doi.org/10.1002/bit.260390806)
+15. Henze, M., Gujer, W., Mino, T. & van Loosdrecht, M.C.M. (2000) *Activated Sludge Models ASM1, ASM2, ASM2d and ASM3.* IWA Scientific and Technical Report No. 9. IWA Publishing, London.
+16. Hsu, S.-B., Hubbell, S.P. & Waltman, P. (1977) A mathematical theory for single-nutrient competition in continuous cultures of micro-organisms. *SIAM Journal on Applied Mathematics* **32**:366–383. [doi:10.1137/0132030](https://doi.org/10.1137/0132030)
+17. Huber, M.L., Perkins, R.A., Laesecke, A. *et al.* (2009) New international formulation for the viscosity of H₂O. *Journal of Physical and Chemical Reference Data* **38**:101–125. [doi:10.1063/1.3088050](https://doi.org/10.1063/1.3088050)
+18. Kovárová-Kovar, K. & Egli, T. (1998) Growth kinetics of suspended microbial cells: from single-substrate-controlled growth to mixed-substrate kinetics. *Microbiology and Molecular Biology Reviews* **62**:646–666. [doi:10.1128/mmbr.62.3.646-666.1998](https://doi.org/10.1128/mmbr.62.3.646-666.1998)
+19. Kreft, J.-U., Picioreanu, C., Wimpenny, J.W.T. & van Loosdrecht, M.C.M. (2001) Individual-based modelling of biofilms. *Microbiology* **147**:2897–2912. [doi:10.1099/00221287-147-11-2897](https://doi.org/10.1099/00221287-147-11-2897)
+20. Lardon, L.A., Merkey, B.V., Martins, S. *et al.* (2011) iDynoMiCS: next-generation individual-based modelling of biofilms. *Environmental Microbiology* **13**:2416–2434. [doi:10.1111/j.1462-2920.2011.02414.x](https://doi.org/10.1111/j.1462-2920.2011.02414.x)
+21. Luedeking, R. & Piret, E.L. (1959) A kinetic study of the lactic acid fermentation. Batch process at controlled pH. *Journal of Biochemical and Microbiological Technology and Engineering* **1**:393–412. [doi:10.1002/jbmte.390010406](https://doi.org/10.1002/jbmte.390010406)
+22. Monod, J. (1949) The growth of bacterial cultures. *Annual Review of Microbiology* **3**:371–394. [doi:10.1146/annurev.mi.03.100149.002103](https://doi.org/10.1146/annurev.mi.03.100149.002103)
+23. Picioreanu, C., van Loosdrecht, M.C.M. & Heijnen, J.J. (1998) Mathematical modeling of biofilm structure with a hybrid differential-discrete cellular automaton approach. *Biotechnology and Bioengineering* **58**:101–116. [doi:10.1002/(SICI)1097-0290(19980405)58:1<101::AID-BIT11>3.0.CO;2-M](https://doi.org/10.1002/(SICI)1097-0290(19980405)58:1%3C101::AID-BIT11%3E3.0.CO;2-M)
+24. Pirt, S.J. (1965) The maintenance energy of bacteria in growing cultures. *Proceedings of the Royal Society B* **163**:224–231. [doi:10.1098/rspb.1965.0069](https://doi.org/10.1098/rspb.1965.0069)
+25. Pirt, S.J. (1967) A kinetic study of the mode of growth of surface colonies of bacteria and fungi. *Journal of General Microbiology* **47**:181–197. [doi:10.1099/00221287-47-2-181](https://doi.org/10.1099/00221287-47-2-181)
+26. Prothero, A. & Robinson, A. (1974) On the stability and accuracy of one-step methods for solving stiff systems of ordinary differential equations. *Mathematics of Computation* **28**:145–162. [doi:10.1090/S0025-5718-1974-0331793-2](https://doi.org/10.1090/S0025-5718-1974-0331793-2)
+27. Ratkowsky, D.A., Lowry, R.K., McMeekin, T.A., Stokes, A.N. & Chandler, R.E. (1983) Model for bacterial culture growth rate throughout the entire biokinetic temperature range. *Journal of Bacteriology* **154**:1222–1226. [doi:10.1128/jb.154.3.1222-1226.1983](https://doi.org/10.1128/jb.154.3.1222-1226.1983)
+28. Ratkowsky, D.A., Olley, J., McMeekin, T.A. & Ball, A. (1982) Relationship between temperature and growth rate of bacterial cultures. *Journal of Bacteriology* **149**:1–5. [doi:10.1128/jb.149.1.1-5.1982](https://doi.org/10.1128/jb.149.1.1-5.1982)
+29. Rittmann, B.E. & McCarty, P.L. (2001) *Environmental Biotechnology: Principles and Applications.* McGraw-Hill, New York.
+30. Roels, J.A. (1983) *Energetics and Kinetics in Biotechnology.* Elsevier Biomedical Press, Amsterdam.
+31. Rosso, L., Lobry, J.R. & Flandrois, J.P. (1993) An unexpected correlation between cardinal temperatures of microbial growth highlighted by a new model. *Journal of Theoretical Biology* **162**:447–463. [doi:10.1006/jtbi.1993.1099](https://doi.org/10.1006/jtbi.1993.1099)
+32. Rosso, L., Lobry, J.R., Bajard, S. & Flandrois, J.P. (1995) Convenient model to describe the combined effects of temperature and pH on microbial growth. *Applied and Environmental Microbiology* **61**:610–616. [doi:10.1128/aem.61.2.610-616.1995](https://doi.org/10.1128/aem.61.2.610-616.1995)
+33. Saad, Y. & Schultz, M.H. (1986) GMRES: a generalized minimal residual algorithm for solving nonsymmetric linear systems. *SIAM Journal on Scientific and Statistical Computing* **7**:856–869. [doi:10.1137/0907058](https://doi.org/10.1137/0907058)
+34. Shu, C.-W. & Osher, S. (1988) Efficient implementation of essentially non-oscillatory shock-capturing schemes. *Journal of Computational Physics* **77**:439–471. [doi:10.1016/0021-9991(88)90177-5](https://doi.org/10.1016/0021-9991(88)90177-5)
+35. Stewart, P.S. (1998) A review of experimental measurements of effective diffusive permeabilities and effective diffusion coefficients in biofilms. *Biotechnology and Bioengineering* **59**:261–272. [doi:10.1002/(SICI)1097-0290(19980805)59:3<261::AID-BIT1>3.0.CO;2-9](https://doi.org/10.1002/(SICI)1097-0290(19980805)59:3%3C261::AID-BIT1%3E3.0.CO;2-9)
+36. Stewart, P.S. (2003) Diffusion in biofilms. *Journal of Bacteriology* **185**:1485–1491. [doi:10.1128/jb.185.5.1485-1491.2003](https://doi.org/10.1128/jb.185.5.1485-1491.2003)
+37. Walters, M.C., Roe, F., Bugnicourt, A., Franklin, M.J. & Stewart, P.S. (2003) Contributions of antibiotic penetration, oxygen limitation, and low metabolic activity to tolerance of *Pseudomonas aeruginosa* biofilms. *Antimicrobial Agents and Chemotherapy* **47**:317–323. [doi:10.1128/aac.47.1.317-323.2003](https://doi.org/10.1128/aac.47.1.317-323.2003)
+38. Wanner, O. & Gujer, W. (1986) A multispecies biofilm model. *Biotechnology and Bioengineering* **28**:314–328. [doi:10.1002/bit.260280304](https://doi.org/10.1002/bit.260280304)
+39. Werner, E., Roe, F., Bugnicourt, A. *et al.* (2004) Stratified growth in *Pseudomonas aeruginosa* biofilms. *Applied and Environmental Microbiology* **70**:6188–6196. [doi:10.1128/aem.70.10.6188-6196.2004](https://doi.org/10.1128/aem.70.10.6188-6196.2004)
+40. Zwietering, M.H., Jongenburger, I., Rombouts, F.M. & van 't Riet, K. (1990) Modeling of the bacterial growth curve. *Applied and Environmental Microbiology* **56**:1875–1881. [doi:10.1128/aem.56.6.1875-1881.1990](https://doi.org/10.1128/aem.56.6.1875-1881.1990)
+41. Zwietering, M.H., Wijtzes, T., de Wit, J.C. & van 't Riet, K. (1992) A decision support system for prediction of the microbial spoilage in foods. *Journal of Food Protection* **55**:973–979. [doi:10.4315/0362-028X-55.12.973](https://doi.org/10.4315/0362-028X-55.12.973)

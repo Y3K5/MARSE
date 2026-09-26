@@ -68,8 +68,32 @@ RUN_FIELDS = {
     "relative_tolerance": Field("number", required=False),
     "absolute_tolerance_mol_per_m3": Field("number", required=False),
     "seed": Field("integer", required=False),
+    "domain": Field("object", required=False),
 }
 """What turns a network into an experiment; read by :mod:`marse.schemas.experiment`."""
+
+DOMAIN_FIELDS = {
+    "voxels": Field("integers"),
+    "voxel_um": Field("number"),
+    "bulk_mol_per_m3": Field("numbers", required=False),
+    "diffusivity_m2_per_s": Field("numbers"),
+    "colonies": Field("objects", required=False),
+    "random_colonies": Field("objects", required=False),
+}
+"""The box of voxels a network runs in; read by :mod:`marse.schemas.domain`."""
+
+COLONY_FIELDS = {
+    "component": Field("name"),
+    "center_um": Field("vector"),
+    "radius_um": Field("number"),
+    "concentration_mol_per_m3": Field("number"),
+}
+RANDOM_COLONY_FIELDS = {
+    "component": Field("name"),
+    "count": Field("integer"),
+    "radius_um": Field("number"),
+    "concentration_mol_per_m3": Field("number"),
+}
 
 NETWORK_FIELDS = {
     "schema_version": Field("integer"),
@@ -120,6 +144,9 @@ SCHEMA = {
     "reaction process": REACTION_FIELDS,
     "rate": RATE_FIELDS,
     "factor": FACTOR_FIELDS,
+    "domain": DOMAIN_FIELDS,
+    "colony": COLONY_FIELDS,
+    "random colony": RANDOM_COLONY_FIELDS,
 }
 """Every object of the network format and its fields, as docs/networks.md lists them."""
 

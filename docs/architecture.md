@@ -36,8 +36,10 @@ flowchart LR
 src/marse/
   core/            simulation.py (run loop, clocks, checkpoints), state.py, config.py, provenance.py,
                    integrators.py, ledger.py, well_mixed.py (the version 2 network engine),
-                   framestore.py (frames streamed to disk, for every engine)
-  schemas/         configuration schema v2: formula.py, network.py (reaction networks), experiment.py
+                   framestore.py (frames streamed to disk, for every engine), implicit.py and
+                   reactive_transport.py (the version 2 engine in space)
+  schemas/         configuration schema v2: formula.py, network.py (reaction networks), experiment.py,
+                   domain.py (space)
   spatial/         grid.py (voxels in 1, 2 or 3 dimensions over a surface), transport.py
                    (finite-volume diffusion), multigrid.py (the implicit solver), vtk.py
                    (ParaView output); domain.py and diffusion.py (the 1-D steady solver)
@@ -56,10 +58,10 @@ Implemented so far (the rest of the layout above is planned):
 
 | Package | Modules |
 |---|---|
-| `core/` | `config`, `state`, `seeds`, `provenance`, `simulation`, `integrators`, `ledger`, `well_mixed`, `framestore` |
+| `core/` | `config`, `state`, `seeds`, `provenance`, `simulation`, `integrators`, `ledger`, `well_mixed`, `framestore`, `implicit`, `reactive_transport` |
 | `spatial/` | `grid`, `transport`, `multigrid`, `vtk`, `domain`, `diffusion`, `solutes` |
 | `microbes/` | `growth`, `cardinal`, `kinetics`, `niche`, `genotype`, `additives` |
-| `schemas/` | `formula`, `network`, `experiment`: configuration schema v2 (reaction networks checked for continuity, with rates and run settings) |
+| `schemas/` | `formula`, `network`, `experiment`, `domain`: configuration schema v2 (reaction networks checked for continuity, with rates, run settings and space) |
 | `biofilm/` | `biomass` |
 | `ecosystem/` | `model`, `providers`, `framestore`, `viewer` (not yet verified: see validation.md) |
 | `analysis/` | `calibration`, `uncertainty`, `ensemble` |

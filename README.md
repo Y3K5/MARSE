@@ -52,8 +52,20 @@ marse run examples/networks/glucose_cross_feeding.json -o runs/network
 marse replay runs/network/manifest.json
 ```
 
-[docs/networks.md](docs/networks.md) describes the format. Transport, and with
-it biofilms, comes next.
+The same network runs in space: in a box of voxels over a surface, in one,
+two or three dimensions, with the liquid above it supplying what diffuses in.
+Oxygen and sugar diffuse at their physical diffusivities; colonies consume them,
+go anoxic inside, ferment, and feed their neighbours. The ledger then also
+counts what crosses the top of the box:
+
+```bash
+marse run examples/networks/surface_biofilm_1d.json -o runs/column     # seconds
+marse run examples/networks/surface_biofilm_3d.json -o runs/surface    # minutes; open runs/surface/vtk/run.pvd in ParaView
+marse replay runs/surface/manifest.json
+```
+
+[docs/networks.md](docs/networks.md) describes the format. Colonies that spread
+and share space come next.
 
 The manifest records the configuration, its SHA-256 checksum, the random seed,
 the versioned models used and the software versions — and deliberately records

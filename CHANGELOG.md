@@ -143,6 +143,48 @@ results for the same manifest is always called out.
   - The example network now runs: oxygen runs out, and the fermenter turns
     the remaining glucose into lactate.
 
+- **Networks run in space: the version 2 spatial engine** (`marse run` on a
+  version 2 file with a `domain`; `marse.core.reactive_transport`).
+  - A box of voxels over a surface, in one, two or three dimensions, with the
+    bulk liquid held above it.
+  - Colonies are placed as hemispheres, either where stated or scattered from
+    the run's seed.
+  - Dissolved components diffuse at physical diffusivities, the requirement
+    behind known defect 1, and every process runs in every voxel. Biomass grows
+    in place until Stage 2d lets colonies spread.
+  - **Integration** (`marse.core.implicit`) is implicit and coupled, with no
+    splitting and no quasi-steady assumption. It uses the two-stage L-stable
+    SDIRK method of Alexander (1977): long steps land on the quasi-steady
+    profile, and short steps follow transients.
+    - The new state is rebuilt from face transfers and process extents, so
+      every balance holds to rounding whatever the solver tolerance.
+    - A limiter that counts same-step production keeps concentrations
+      non-negative without clipping. The update sums what arrives in each
+      voxel and what leaves it separately, so a voxel that loses nothing can
+      only gain, even in rounding. Traces below the smallest normal number,
+      where no relative margin survives rounding, stop giving instead of being
+      scaled, so the guarantee holds in floating point.
+    - Newton's method is projected, and stays away from the kink of the rate
+      laws at zero. Its Jacobian (`rate_jacobian`, analytic) is the slope of the
+      rates as evaluated, so a negative value has none.
+    - Errors are measured against each component's largest value in the box,
+      and a run's first step is estimated from the rates (Hairer, Nørsett and
+      Wanner 1993).
+  - The ledger books what crosses the top face, computed from the face
+    transfers, and checks the box against it after every step. The largest
+    residual and the imports are in the manifest (kind `reactive_transport`).
+    Runs replay bit for bit.
+  - `marse run` writes `totals.csv` (per m² of surface), `frames/`, and `vtk/`
+    for ParaView. `marse check` prints the grid, the memory it needs, the
+    explicit step it avoids, the multigrid depth, and the diffusion and growth
+    time scales.
+  - `relative_tolerance` defaults to 1e-4 in space, where the measured error
+    is about 5e-6 of each component's peak.
+  - Prototyped first in one dimension against criteria set in advance
+    (docs/validation.md, "Reactions and transport in space").
+  - Examples: `examples/networks/surface_biofilm_3d.json`, which runs in about
+    five minutes on one core, and a 1-D twin that runs in three seconds.
+
 - **Transport in one, two and three dimensions** (`marse.spatial`), the kernel
   of the spatial engine.
   - `Grid` is a box of cubic voxels over a flat substratum, with height as its
@@ -317,3 +359,10 @@ results for the same manifest is always called out.
 - CI running the pre-commit hooks and the tests on Linux (Python 3.12 to 3.14)
   and Windows.
 - Apache-2.0 license and citation metadata.
+
+### Fixed
+
+- `marse` no longer switches every NumPy floating-point error to "warn" when a
+  command ends. It now restores the caller's settings, where before it turned
+  underflow into a warning, or into an error under `pytest`, for the rest of the
+  process.

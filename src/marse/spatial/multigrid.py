@@ -45,9 +45,30 @@ from numpy.typing import NDArray
 
 from marse.spatial.transport import diagonal, divergence, face_fluxes
 
-__all__ = ["ImplicitSystem", "gmres"]
+__all__ = ["ImplicitSystem", "gmres", "hierarchy"]
 
 _DIRECT_LIMIT = 512  # coarsest levels up to this many unknowns are solved exactly
+
+
+def hierarchy(
+    shape: tuple[int, ...], components: int
+) -> list[tuple[tuple[int, ...], tuple[int, ...]]]:
+    """The grid levels multigrid uses: each shape, with the axes halved to reach the next.
+
+    Every axis with an even number of voxels is halved, until no axis can be
+    or the level is small enough to solve exactly. Voxel counts divisible by 2
+    several times (32, 48, 64) give a deep hierarchy and the fastest solves; an
+    odd count stops the halving on that axis.
+    """
+    levels = []
+    current = tuple(shape)
+    while True:
+        axes = tuple(axis for axis, n in enumerate(current) if n % 2 == 0 and n >= 2)
+        if not axes or math.prod(current) * components <= _DIRECT_LIMIT:
+            levels.append((current, ()))
+            return levels
+        levels.append((current, axes))
+        current = tuple(n // 2 if axis in axes else n for axis, n in enumerate(current))
 
 
 @dataclass(slots=True)
@@ -85,18 +106,14 @@ class ImplicitSystem:
         self.a = float(a)
         voxel_blocks = np.moveaxis(blocks.reshape(self.components, self.components, -1), -1, 0)
         self.levels: list[_Level] = []
-        level = self._make_level(tuple(shape), tuple(spacing), voxel_blocks)
-        while True:
-            self.levels.append(level)
-            axes = tuple(axis for axis, n in enumerate(level.shape) if n % 2 == 0 and n >= 2)
-            voxels = math.prod(level.shape)
-            if not axes or voxels * self.components <= _DIRECT_LIMIT:
-                break
+        spacing = tuple(spacing)
+        for level_shape, axes in hierarchy(tuple(shape), self.components):
+            level = self._make_level(level_shape, spacing, voxel_blocks)
             level.coarsened = axes
-            shape_c = tuple(n // 2 if axis in axes else n for axis, n in enumerate(level.shape))
-            spacing_c = tuple(h * 2 if axis in axes else h for axis, h in enumerate(level.spacing))
-            blocks_c = _restrict_blocks(level.blocks, level.shape, axes)
-            level = self._make_level(shape_c, spacing_c, blocks_c)
+            self.levels.append(level)
+            if axes:
+                voxel_blocks = _restrict_blocks(voxel_blocks, level_shape, axes)
+                spacing = tuple(h * 2 if axis in axes else h for axis, h in enumerate(spacing))
         coarsest = self.levels[-1]
         unknowns = math.prod(coarsest.shape) * self.components
         if unknowns <= _DIRECT_LIMIT:

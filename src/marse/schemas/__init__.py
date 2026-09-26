@@ -5,10 +5,12 @@ Configuration schema version 2 is built here, one part at a time
 (docs/networks.md): components with a chemical composition, and processes that
 are proven, as they are read, to conserve carbon, nitrogen and electrons
 exactly. Rates, initial amounts and a clock make a network runnable
-(:mod:`marse.schemas.experiment`); transport follows with the spatial engine.
+(:mod:`marse.schemas.experiment`), in a closed box or, with a domain
+(:mod:`marse.schemas.domain`), in space.
 """
 
-from marse.schemas.experiment import WellMixedConfig, experiment_from_dict
+from marse.schemas.domain import Colony, Domain, RandomColonies
+from marse.schemas.experiment import ReactiveTransportConfig, WellMixedConfig, experiment_from_dict
 from marse.schemas.formula import QUANTITIES, Formula, parse_formula
 from marse.schemas.network import (
     Component,
@@ -24,14 +26,18 @@ from marse.schemas.network import (
 
 __all__ = [
     "QUANTITIES",
+    "Colony",
     "Component",
     "ContinuityError",
+    "Domain",
     "Factor",
     "Formula",
     "Growth",
     "Network",
     "Process",
+    "RandomColonies",
     "RateLaw",
+    "ReactiveTransportConfig",
     "WellMixedConfig",
     "experiment_from_dict",
     "load_network",

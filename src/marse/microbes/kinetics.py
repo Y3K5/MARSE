@@ -24,7 +24,7 @@ from numpy.typing import NDArray
 from marse.microbes.growth import haldane, monod, noncompetitive_inhibition
 from marse.schemas.network import Network
 
-__all__ = ["RateTerms", "compile_rates", "process_rates"]
+__all__ = ["RateTerms", "compile_rates", "process_rates", "rate_jacobian"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,3 +89,49 @@ def process_rates(terms: RateTerms, concentrations: NDArray[np.float64]) -> NDAr
         else:
             rates[f.process] *= haldane(c, 1.0, f.half_saturation, f.inhibition)
     return rates
+
+
+def _factor(form: str, c: NDArray[np.float64], k: float, ki: float) -> tuple[NDArray, NDArray]:
+    """A switching function and its derivative, at concentrations already clamped at zero."""
+    if form == "monod":
+        return c / (k + c), k / (k + c) ** 2
+    if form == "inhibition":
+        return ki / (ki + c), -ki / (ki + c) ** 2
+    denominator = k + c + c * c / ki
+    return c / denominator, (k - c * c / ki) / denominator**2
+
+
+def rate_jacobian(terms: RateTerms, concentrations: NDArray[np.float64]) -> NDArray[np.float64]:
+    """How every rate responds to every component: shape (processes, components, *cells).
+
+    The derivative of k c_a prod f_i(c_j) by the product rule, of the rates as
+    the engines evaluate them: at concentrations clamped at zero. A negative
+    value, which the rates see as zero, therefore has no slope. Taking the slope
+    at zero instead would tell Newton's method that consumption still responds
+    there, and it would creep towards a negative stage value by a few percent
+    per iteration. An implicit step (docs/theory.md, section 9.8) linearises the
+    reactions with it.
+    """
+    c = np.maximum(concentrations, 0.0)
+    live = concentrations >= 0  # slopes of the clamp: one above zero, none below
+    processes = terms.maximum_per_h.size
+    cells = c.shape[1:]
+    jacobian = np.zeros((processes, c.shape[0], *cells))
+    by_process: list[list[tuple[int, NDArray, NDArray]]] = [[] for _ in range(processes)]
+    for f in terms.factors:
+        value, slope = _factor(f.form, c[f.component], f.half_saturation, f.inhibition)
+        by_process[f.process].append((f.component, value, slope))
+    for p in range(processes):
+        k, a = terms.maximum_per_h[p], terms.proportional_to[p]
+        factors = by_process[p]
+        product = np.ones(cells)
+        for _, value, _ in factors:
+            product = product * value
+        jacobian[p, a] += k * product * live[a]
+        for i, (component, _, slope) in enumerate(factors):
+            others = np.ones(cells)
+            for m, (_, value, _) in enumerate(factors):
+                if m != i:
+                    others = others * value
+            jacobian[p, component] += k * c[a] * slope * others * live[component]
+    return jacobian

@@ -50,6 +50,29 @@ These are computed by MARSE from published correlations and verified in
 | Water viscosity, 25 °C / 37 °C | 0.890 / 0.692 | mPa s | Huber et al. (2009), IAPWS 2008 | **B** |
 | Glucose diffusivity in water, 25 °C | ≈ 600 | µm² s⁻¹ | compiled value; see note | **B** |
 | Glucose diffusivity, 37 °C (Stokes–Einstein scaled) | ≈ 800 | µm² s⁻¹ | derived, theory.md §4.6 | **C** |
+| CO₂ diffusivity in water, 25 °C | ≈ 1.9 × 10⁻⁹ | m² s⁻¹ | commonly tabulated; primary source not yet checked | **C** |
+| NH₄⁺ diffusivity in water, 25 °C | ≈ 2.0 × 10⁻⁹ | m² s⁻¹ | commonly tabulated limiting ionic value; primary source not yet checked | **C** |
+| Lactate diffusivity in water, 25 °C | ≈ 1.0 × 10⁻⁹ | m² s⁻¹ | order of magnitude; primary source not yet checked | **C** |
+
+**Diffusivities in the spatial example.** `examples/networks/surface_biofilm_3d.json`
+starts from these values. It scales them to 37 °C by Stokes–Einstein (theory.md
+§4.6; a factor of about 1.34 from 25 °C) and multiplies them by the class means
+of §2 below, giving effective values inside a biofilm, in m² s⁻¹:
+
+| Solute | Value |
+|---|---|
+| oxygen | 1.13 × 10⁻⁹ |
+| glucose | 2.3 × 10⁻¹⁰ |
+| ammonium | 1.47 × 10⁻⁹ |
+| carbon dioxide | 1.10 × 10⁻⁹ |
+| lactate | 3.9 × 10⁻¹⁰ |
+
+Configuration schema version 2 gives each component one diffusivity for the
+whole box. Until diffusivity depends on the biofilm (Stage 3), the liquid above
+the colonies diffuses at these effective values too, which understates
+transport there by a factor of 2 to 3. The CO₂, ammonium and lactate values
+are graded C and must be checked against a primary source before any published
+analysis.
 
 Implemented in `marse.spatial.solutes`. Both oxygen correlations refuse to
 extrapolate outside their stated validity ranges (0–40 °C and 0–95 °C
