@@ -109,12 +109,12 @@ predict clinical or vaccine outcomes, or produce experimental evidence; the
 
 ```text
 src/marse/         the Python package
-  core/            run loop, state, configuration, seeds, provenance
+  core/            run loop, state, configuration, seeds, provenance, frame store
   schemas/         configuration schema v2: formulas and balanced reaction networks
-  spatial/         domains, grids, diffusion; solute properties
+  spatial/         voxel grids in 1, 2 or 3 dimensions, diffusion, multigrid, ParaView output
   microbes/        growth kinetics, cardinal models, niches, genotypes, dose responses
   biofilm/         biomass, matrix, maturation
-  ecosystem/       the 2-D multispecies engine, frame store and viewer
+  ecosystem/       the 2-D multispecies engine and its viewer
   adaptation/      state transitions and decision policies
   interventions/   perturbations
   analysis/        calibration, uncertainty and sensitivity, ensembles

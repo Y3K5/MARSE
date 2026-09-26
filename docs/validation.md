@@ -215,6 +215,37 @@ checks, in `tests/test_well_mixed.py` and `tests/test_integrators.py`:
 - **Replay.** Runs replay bit for bit from their manifests. An edited manifest
   is refused.
 
+## Transport in one, two and three dimensions
+
+The spatial engine moves dissolved components between cubic voxels by
+finite-volume diffusion (`marse.spatial.transport`,
+[theory.md §4.7](theory.md#47-finite-volume-transport-on-voxels)). The checks,
+in `tests/test_transport.py`:
+
+- **Exact eigenvectors.** With lateral faces periodic, no flux through the
+  substratum and the bulk held at zero, a product of cosines is an exact
+  eigenvector of the discrete operator in 1-, 2- and 3-D. Its rate matches
+  `cosine_mode_rate` to rounding, and that rate converges to the continuum
+  rate at second order.
+- **The 3-D point release.** On a spreading Gaussian
+  (`point_source_diffusion_3d`), the operator's error against the exact time
+  derivative falls at second order: the measured orders are 1.93 and 1.98 as
+  the voxels shrink from 4 µm to 1 µm.
+- **Conservation.** The rate summed over the box equals the flux through the
+  top face to rounding, for random fields in every dimension. A component
+  without diffusivity does not move.
+- **Symmetry and dimension.** A laterally uniform 3-D field diffuses exactly,
+  bit for bit, as a single column. Swapping or reflecting the lateral axes
+  moves the result with them.
+- **The multigrid solver** (`marse.spatial.multigrid`).
+  - Each V-cycle reduces the error by less than 0.15, the same on grids from
+    8³ to 32×32×16 and in 1-D and 2-D. On 64×64×32 the measured factor is
+    0.06–0.09.
+  - GMRES with this preconditioner agrees with a direct solve.
+  - The same system gives the same answer, bit for bit.
+- **Output.** VTK frames read back exactly in double precision and to 1e-7 in
+  single precision.
+
 ## Running the suite
 
 `python -m pytest` runs the pull-request suite, which leaves out tests marked

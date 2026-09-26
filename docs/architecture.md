@@ -35,9 +35,12 @@ flowchart LR
 ```text
 src/marse/
   core/            simulation.py (run loop, clocks, checkpoints), state.py, config.py, provenance.py,
-                   integrators.py, ledger.py, well_mixed.py (the version 2 network engine)
+                   integrators.py, ledger.py, well_mixed.py (the version 2 network engine),
+                   framestore.py (frames streamed to disk, for every engine)
   schemas/         configuration schema v2: formula.py, network.py (reaction networks), experiment.py
-  spatial/         domain.py, grid.py, neighborhoods.py, diffusion.py
+  spatial/         grid.py (voxels in 1, 2 or 3 dimensions over a surface), transport.py
+                   (finite-volume diffusion), multigrid.py (the implicit solver), vtk.py
+                   (ParaView output); domain.py and diffusion.py (the 1-D steady solver)
   microbes/        growth.py, resource_use.py, adhesion.py, phenotype.py, interactions.py
   biofilm/         biomass.py, matrix.py, maturation.py
   ecosystem/       the 2-D multispecies engine (model.py, providers.py, framestore.py, viewer.py)
@@ -53,8 +56,8 @@ Implemented so far (the rest of the layout above is planned):
 
 | Package | Modules |
 |---|---|
-| `core/` | `config`, `state`, `seeds`, `provenance`, `simulation`, `integrators`, `ledger`, `well_mixed` |
-| `spatial/` | `domain`, `diffusion`, `solutes` |
+| `core/` | `config`, `state`, `seeds`, `provenance`, `simulation`, `integrators`, `ledger`, `well_mixed`, `framestore` |
+| `spatial/` | `grid`, `transport`, `multigrid`, `vtk`, `domain`, `diffusion`, `solutes` |
 | `microbes/` | `growth`, `cardinal`, `kinetics`, `niche`, `genotype`, `additives` |
 | `schemas/` | `formula`, `network`, `experiment`: configuration schema v2 (reaction networks checked for continuity, with rates and run settings) |
 | `biofilm/` | `biomass` |

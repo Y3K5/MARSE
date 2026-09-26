@@ -143,6 +143,32 @@ results for the same manifest is always called out.
   - The example network now runs: oxygen runs out, and the fermenter turns
     the remaining glucose into lactate.
 
+- **Transport in one, two and three dimensions** (`marse.spatial`), the kernel
+  of the spatial engine.
+  - `Grid` is a box of cubic voxels over a flat substratum, with height as its
+    last axis; one code path serves 1-, 2- and 3-D.
+  - `Diffusion` is finite-volume diffusion. Each face flux is computed once and
+    applied to both voxels, so matter can only enter or leave through the top
+    face, where the bulk liquid is held. The lateral faces are periodic and the
+    substratum is impermeable.
+  - `ImplicitSystem` is a geometric multigrid solver for the systems an
+    implicit step needs, preconditioning GMRES. Each cycle reduces the error
+    by a factor of about 0.1 on every grid size tested (8³ to 64×64×32).
+  - `write_vti` and `write_pvd` write frames that ParaView opens as a time
+    series.
+  - The frame store moved to `marse.core.framestore`, so every engine can use
+    it; `marse.ecosystem.framestore` still exports it.
+  - Verified:
+    - a cosine mode is an exact eigenvector of the operator in 1-, 2- and 3-D,
+      to rounding;
+    - the operator is second order on a 3-D point release, against the new
+      reference `point_source_diffusion_3d`;
+    - matter is conserved to rounding;
+    - a laterally uniform 3-D field diffuses exactly as one column;
+    - the multigrid solver agrees with a direct solve.
+
+    See docs/validation.md, "Transport in one, two and three dimensions".
+
 - **Ecosystem runs are reproducible.** `marse ecosystem` writes a
   `manifest.json` beside its frames and viewer, and `marse replay` reproduces
   the run exactly, as it already did for batch and biofilm runs. The manifest
