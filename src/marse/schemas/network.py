@@ -79,6 +79,11 @@ DOMAIN_FIELDS = {
     "diffusivity_m2_per_s": Field("numbers"),
     "colonies": Field("objects", required=False),
     "random_colonies": Field("objects", required=False),
+    "substratum": Field("object", required=False),
+    "liquid": Field("object", required=False),
+    "flow": Field("object", required=False),
+    "suspension": Field("objects", required=False),
+    "adhesion": Field("objects", required=False),
 }
 """The box of voxels a network runs in; read by :mod:`marse.schemas.domain`."""
 
@@ -93,6 +98,37 @@ RANDOM_COLONY_FIELDS = {
     "count": Field("integer"),
     "radius_um": Field("number"),
     "concentration_mol_per_m3": Field("number"),
+}
+SUBSTRATUM_FIELDS = {
+    "conditioning_film": Field("text"),
+    "patches": Field("objects"),
+}
+PATCH_FIELDS = {
+    "material": Field("name"),
+    "region_um": Field("vector"),
+}
+LIQUID_FIELDS = {
+    "temperature_c": Field("number"),
+    "viscosity_mpa_s": Field("number"),
+}
+FLOW_FIELDS = {
+    "wall_shear_rate_per_s": Field("number"),
+    "distance_from_inlet_mm": Field("number"),
+}
+SUSPENSION_FIELDS = {
+    "reversible": Field("name"),
+    "attached": Field("name"),
+    "cells_per_ml": Field("number"),
+    "cell_diameter_um": Field("number"),
+    "carbon_fmol_per_cell": Field("number"),
+    "blocked_area_um2": Field("number"),
+}
+ADHESION_FIELDS = {
+    "attached": Field("name"),
+    "material": Field("name"),
+    "efficiency": Field("number"),
+    "detachment_per_h": Field("number"),
+    "locking_per_h": Field("number"),
 }
 
 NETWORK_FIELDS = {
@@ -147,6 +183,12 @@ SCHEMA = {
     "domain": DOMAIN_FIELDS,
     "colony": COLONY_FIELDS,
     "random colony": RANDOM_COLONY_FIELDS,
+    "substratum": SUBSTRATUM_FIELDS,
+    "patch": PATCH_FIELDS,
+    "liquid": LIQUID_FIELDS,
+    "flow": FLOW_FIELDS,
+    "suspension": SUSPENSION_FIELDS,
+    "adhesion": ADHESION_FIELDS,
 }
 """Every object of the network format and its fields, as docs/networks.md lists them."""
 

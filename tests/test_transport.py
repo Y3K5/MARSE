@@ -7,13 +7,15 @@ solver is checked for grid-independent convergence and against a direct
 solve. docs/validation.md, "Transport in one, two and three dimensions".
 """
 
+import math
+
 import numpy as np
 import pytest
 
 from marse.core.framestore import FrameStore as CoreFrameStore
 from marse.ecosystem.framestore import FrameStore as EcosystemFrameStore
 from marse.spatial.grid import Grid
-from marse.spatial.multigrid import ImplicitSystem
+from marse.spatial.multigrid import ImplicitSystem, inverse
 from marse.spatial.transport import Diffusion
 from marse.spatial.vtk import read_vti, write_pvd, write_vti
 from marse.validation.analytical import cosine_mode_rate, point_source_diffusion_3d
@@ -166,6 +168,34 @@ def test_the_linear_solver_is_deterministic():
     first, _ = system.solve(b, scale=np.ones_like(b), tolerance=1e-10)
     second, _ = system.solve(b, scale=np.ones_like(b), tolerance=1e-10)
     np.testing.assert_array_equal(first, second)
+
+
+@pytest.mark.numerical
+def test_the_coarsest_level_is_inverted_as_lapack_would():
+    rng = np.random.default_rng(7)
+    for n in (1, 5, 33, 64, 200):  # one panel, several, and a partial last one
+        matrix = rng.normal(size=(n, n)) + 0.5 * n * np.diag(rng.choice([-1.0, 1.0], n))
+        expected = np.linalg.inv(matrix)
+        np.testing.assert_allclose(
+            inverse(matrix), expected, rtol=1e-12, atol=1e-12 * np.abs(expected).max()
+        )
+    swapped = np.array([[0.0, 2.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 3.0]])  # needs a row swap
+    np.testing.assert_allclose(inverse(swapped) @ swapped, np.eye(3), atol=1e-15)
+    with pytest.raises(np.linalg.LinAlgError):
+        inverse(np.array([[1.0, 2.0], [2.0, 4.0]]))
+
+
+def test_the_coarsest_matrix_is_the_operator_applied_to_every_unknown():
+    shape, components = (4, 2, 3), 3
+    system, _ = random_system(shape, components=components)
+    level = system.levels[-1]
+    assert level.dense_inverse is not None  # 72 unknowns: one level, solved exactly
+    n = components * math.prod(shape)
+    one_by_one = np.column_stack(
+        [system.apply(np.eye(n)[k].reshape(components, *shape)).ravel() for k in range(n)]
+    )
+    np.testing.assert_array_equal(system._dense(level), one_by_one)
+    np.testing.assert_allclose(level.dense_inverse @ one_by_one, np.eye(n), atol=1e-12)
 
 
 @pytest.mark.parametrize("dims", [1, 2, 3])

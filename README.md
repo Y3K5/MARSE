@@ -67,6 +67,23 @@ marse replay runs/surface/manifest.json
 [docs/networks.md](docs/networks.md) describes the format. Colonies that spread
 and share space come next.
 
+The surface need not be seeded by hand. Cells suspended in the liquid reach it,
+bind, and lock or leave again. The surface can be patterned in several
+materials, each binding the cells differently. Two scenes show this:
+
+- a laboratory flow chamber of bare and saliva-coated glass;
+- a dental surface of enamel, titanium, zirconia and acrylic under a salivary
+  film, colonized by early streptococci.
+
+[docs/environments.md](docs/environments.md) describes them:
+
+```bash
+marse check examples/environments/dental/dental_surfaces.json            # delivery and binding on each material
+marse run examples/environments/lab/flow_chamber.json -o runs/lab        # about a second
+marse run examples/environments/dental/dental_surfaces.json -o runs/dental   # under a minute
+python examples/surface_adhesion.py    # the four dental materials, hour by hour
+```
+
 The manifest records the configuration, its SHA-256 checksum, the random seed,
 the versioned models used and the software versions — and deliberately records
 no username, hostname or absolute path, so it is safe to attach to a paper or
@@ -123,8 +140,9 @@ predict clinical or vaccine outcomes, or produce experimental evidence; the
 src/marse/         the Python package
   core/            run loop, state, configuration, seeds, provenance, frame store
   schemas/         configuration schema v2: formulas and balanced reaction networks
-  spatial/         voxel grids in 1, 2 or 3 dimensions, diffusion, multigrid, ParaView output
-  microbes/        growth kinetics, cardinal models, niches, genotypes, dose responses
+  spatial/         voxel grids in 1, 2 or 3 dimensions, diffusion, multigrid, surfaces and the
+                   delivery of cells to them, ParaView output
+  microbes/        growth kinetics, cardinal models, adhesion, niches, genotypes, dose responses
   biofilm/         biomass, matrix, maturation
   ecosystem/       the 2-D multispecies engine and its viewer
   adaptation/      state transitions and decision policies
@@ -136,6 +154,7 @@ src/marse/         the Python package
 examples/          runnable reference calculations
   experiments/     experiment configurations for `marse run` and `marse ecosystem`
   networks/        reaction networks for `marse check` and `marse run` (configuration schema v2)
+  environments/    scenes: surfaces, liquids, flows and the cells that bind to them
 tests/             test suite
 docs/              theory, parameters, specification, architecture, validation, roadmap
 tools/             repository tooling (privacy and repository guards)
@@ -173,6 +192,9 @@ Before your first commit, complete the one-time setup in
   extension contracts.
 - [docs/networks.md](docs/networks.md): reaction networks, the configuration
   format in which every process must conserve carbon, nitrogen and electrons.
+- [docs/environments.md](docs/environments.md): scenes of surfaces, liquids and
+  the cells that bind to them, and the programme that extends them to natural
+  waters, rocks and soils.
 - [docs/validation.md](docs/validation.md): benchmark definitions.
 - [docs/modeling-landscape.md](docs/modeling-landscape.md): how the field
   models microbial growth, how natural conditions differ from laboratory ones,

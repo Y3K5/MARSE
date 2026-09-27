@@ -26,12 +26,13 @@ any grid. Its ingredients here:
 - **prolongation**: linear interpolation between voxel centres;
 - **coarse operators**: re-discretised on each level, with the reaction blocks
   averaged over children;
-- **the coarsest level**: solved exactly.
+- **the coarsest level**: solved exactly, through an inverse computed by
+  :func:`inverse` rather than by LAPACK.
 
 The cycle preconditions a restarted GMRES (Saad and Schultz 1986), which keeps
 convergence robust when the reaction blocks make the system non-symmetric.
 Everything is deterministic: the same system gives the same answer, bit for
-bit.
+bit, on any number of threads.
 """
 
 from __future__ import annotations
@@ -45,9 +46,10 @@ from numpy.typing import NDArray
 
 from marse.spatial.transport import diagonal, divergence, face_fluxes
 
-__all__ = ["ImplicitSystem", "gmres", "hierarchy"]
+__all__ = ["ImplicitSystem", "gmres", "hierarchy", "inverse"]
 
 _DIRECT_LIMIT = 512  # coarsest levels up to this many unknowns are solved exactly
+_BLOCK = 32  # columns per panel of the blocked factorisation in inverse()
 
 
 def hierarchy(
@@ -69,6 +71,52 @@ def hierarchy(
             return levels
         levels.append((current, axes))
         current = tuple(n // 2 if axis in axes else n for axis, n in enumerate(current))
+
+
+def inverse(matrix: NDArray[np.float64]) -> NDArray[np.float64]:
+    """The inverse of a dense matrix, by LU factorisation with partial pivoting.
+
+    The coarsest multigrid level is inverted here rather than by LAPACK, whose
+    last bits depend on the number of threads: OpenBLAS factorises a matrix of
+    more than about 100 unknowns in parallel, so a run would replay exactly
+    only on a machine with as many cores. The factorisation is blocked, so
+    most of its work is matrix products, which OpenBLAS computes the same way
+    on any number of threads because each entry is summed by one thread; the
+    rest is numpy's elementwise arithmetic. It agrees with LAPACK to about one
+    unit in the last place.
+    """
+    a = np.array(matrix, dtype=float)
+    n = a.shape[0]
+    order = np.arange(n)
+    for start in range(0, n, _BLOCK):
+        end = min(start + _BLOCK, n)
+        for k in range(start, end):  # factorise the panel, column by column
+            row = k + int(np.argmax(np.abs(a[k:, k])))
+            if row != k:
+                a[[k, row]] = a[[row, k]]
+                order[[k, row]] = order[[row, k]]
+            if a[k, k] == 0.0:
+                raise np.linalg.LinAlgError("Singular matrix")
+            a[k + 1 :, k] /= a[k, k]
+            a[k + 1 :, k + 1 : end] -= np.multiply.outer(a[k + 1 :, k], a[k, k + 1 : end])
+        if end < n:
+            for k in range(start, end):  # the panel's rows of U
+                a[k + 1 : end, end:] -= np.multiply.outer(a[k + 1 : end, k], a[k, end:])
+            a[end:, end:] -= a[end:, start:end] @ a[start:end, end:]
+    # L U X = P: forward substitution with the unit lower triangle, then back with U.
+    x = np.eye(n)[order]
+    for start in range(0, n, _BLOCK):
+        end = min(start + _BLOCK, n)
+        x[start:end] -= a[start:end, :start] @ x[:start]
+        for k in range(start, end):
+            x[k + 1 : end] -= np.multiply.outer(a[k + 1 : end, k], x[k])
+    for end in range(n, 0, -_BLOCK):
+        start = max(end - _BLOCK, 0)
+        x[start:end] -= a[start:end, end:] @ x[end:]
+        for k in range(end - 1, start - 1, -1):
+            x[k] /= a[k, k]
+            x[start:k] -= np.multiply.outer(a[start:k, k], x[k])
+    return x
 
 
 @dataclass(slots=True)
@@ -117,7 +165,7 @@ class ImplicitSystem:
         coarsest = self.levels[-1]
         unknowns = math.prod(coarsest.shape) * self.components
         if unknowns <= _DIRECT_LIMIT:
-            coarsest.dense_inverse = np.linalg.inv(self._dense(coarsest))
+            coarsest.dense_inverse = inverse(self._dense(coarsest))
 
     # -- construction -----------------------------------------------------------------
 
@@ -148,14 +196,28 @@ class ImplicitSystem:
         )
 
     def _dense(self, level: _Level) -> NDArray[np.float64]:
-        n = math.prod(level.shape) * self.components
-        matrix = np.empty((n, n))
-        unit = np.zeros(n)
-        for k in range(n):
-            unit[k] = 1.0
-            matrix[:, k] = self._apply(level, unit.reshape(self.components, -1)).reshape(-1)
-            unit[k] = 0.0
-        return matrix
+        """The system on this level as a dense matrix, unknowns ordered component by component.
+
+        Diffusion never couples components, so one application to a unit field
+        holding every component at one voxel gives that voxel's column for all
+        of them at once. Entry for entry, the matrix is what applying the whole
+        operator to each unknown's unit vector in turn would give.
+        """
+        j, voxels = self.components, math.prod(level.shape)
+        diffusion = np.zeros((j * voxels, j * voxels))
+        unit = np.zeros((j, voxels))
+        for voxel in range(voxels):
+            unit[:, voxel] = 1.0
+            column = self._diffuse(level, unit)
+            for c in range(j):
+                diffusion[c * voxels : (c + 1) * voxels, c * voxels + voxel] = column[c]
+            unit[:, voxel] = 0.0
+        reactions = np.zeros_like(diffusion)
+        index = np.arange(voxels)
+        for c in range(j):
+            for k in range(j):
+                reactions[c * voxels + index, k * voxels + index] = level.blocks[:, c, k]
+        return np.eye(j * voxels) - self.a * (diffusion + reactions)
 
     # -- operators on one level ---------------------------------------------------------
 

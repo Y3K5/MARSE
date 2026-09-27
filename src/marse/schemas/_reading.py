@@ -30,9 +30,16 @@ UNIT_SUFFIXES = {
     "_mol_per_mol": "mol of one component per mol of another",
     "_mol_per_m3": "mol per cubic metre, which is mmol per litre",
     "_m2_per_s": "square metres per second, as diffusivities are tabulated",
+    "_fmol_per_cell": "femtomoles per cell",
+    "_per_ml": "per millilitre",
     "_per_h": "per hour",
+    "_per_s": "per second",
+    "_mpa_s": "millipascal seconds, which is centipoise",
+    "_um2": "square micrometres",
     "_um": "micrometres",
+    "_mm": "millimetres",
     "_h": "hours",
+    "_c": "degrees Celsius",
 }
 """Every numeric field name ends in one of these suffixes, which names its unit.
 
@@ -47,6 +54,7 @@ DIMENSIONLESS = {
     "relative_tolerance": "a fraction: the accepted local error relative to each concentration",
     "voxels": "how many voxels along each axis, a count",
     "count": "how many colonies, a count",
+    "efficiency": "a fraction: of the cells delivered to a surface, the share that binds",
 }
 """Numeric fields that are labels or pure numbers, so they carry no unit suffix."""
 

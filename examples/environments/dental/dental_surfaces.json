@@ -1,0 +1,118 @@
+{
+  "schema_version": 2,
+  "experiment_id": "dental-surfaces-early-colonizers",
+  "description": "A dental scene: one surface patterned in four stripes, enamel, titanium, zirconia and acrylic (PMMA), all under a salivary pellicle, side by side under the same salivary film for 24 hours. The early colonizers Streptococcus oralis and S. sanguinis are suspended in the saliva, bind to the pellicle-coated surfaces, lock, and grow on salivary glucose by lactic fermentation, taking nitrogen from ammonium. The film is 80 um thick and moves at 2 mm per min (70 to 100 um, Collins and Dawes 1987; 0.8 to 7.6 mm per min, Dawes et al. 1989), so its wall shear is 3 u / delta = 1.25 per s; cells are delivered by the Leveque flux. Only one contrast between materials is backed by data: in the mouth, bacteria covered 19.3% of titanium against 12.1% of zirconia after 24 h (Scarano et al. 2004), and the early colonizers bind less to zirconia than to titanium (Oda et al. 2020). So zirconia's attachment efficiency is 0.63 of titanium's; a study of low-roughness surfaces in situ found no difference (docs/parameters.md). Enamel, titanium and PMMA share one efficiency because no comparison was found. Every rate, yield, efficiency, suspension level and the salivary glucose (a daytime average; meals come with the saliva-and-diet stage) is illustrative (confidence C). Colonies grow in place until Stage 2d lets them spread.",
+  "components": [
+    {"name": "glucose", "phase": "dissolved", "formula": "C6H12O6"},
+    {"name": "ammonium", "phase": "dissolved", "formula": "NH4", "charge": 1},
+    {"name": "carbon_dioxide", "phase": "dissolved", "formula": "CO2"},
+    {"name": "lactate", "phase": "dissolved", "formula": "C3H5O3", "charge": -1},
+    {"name": "s_oralis_reversible", "phase": "particulate", "formula": "CH1.8O0.5N0.2"},
+    {"name": "s_oralis", "phase": "particulate", "formula": "CH1.8O0.5N0.2"},
+    {"name": "s_sanguinis_reversible", "phase": "particulate", "formula": "CH1.8O0.5N0.2"},
+    {"name": "s_sanguinis", "phase": "particulate", "formula": "CH1.8O0.5N0.2"}
+  ],
+  "processes": [
+    {
+      "name": "s_oralis_growth_on_glucose",
+      "kind": "growth",
+      "biomass": "s_oralis",
+      "substrate": "glucose",
+      "yield_mol_per_mol": 0.6,
+      "balanced_by": ["lactate", "carbon_dioxide", "ammonium"],
+      "rate": {
+        "maximum_per_h": 0.3,
+        "factors": [
+          {"component": "glucose", "form": "monod", "half_saturation_mol_per_m3": 0.1},
+          {"component": "ammonium", "form": "monod", "half_saturation_mol_per_m3": 0.01}
+        ]
+      }
+    },
+    {
+      "name": "s_sanguinis_growth_on_glucose",
+      "kind": "growth",
+      "biomass": "s_sanguinis",
+      "substrate": "glucose",
+      "yield_mol_per_mol": 0.6,
+      "balanced_by": ["lactate", "carbon_dioxide", "ammonium"],
+      "rate": {
+        "maximum_per_h": 0.25,
+        "factors": [
+          {"component": "glucose", "form": "monod", "half_saturation_mol_per_m3": 0.1},
+          {"component": "ammonium", "form": "monod", "half_saturation_mol_per_m3": 0.01}
+        ]
+      }
+    }
+  ],
+  "initial_mol_per_m3": {
+    "glucose": 0.2,
+    "ammonium": 2.0,
+    "carbon_dioxide": 1.0
+  },
+  "duration_h": 24.0,
+  "timestep_h": 1.0,
+  "record_interval_h": 1.0,
+  "relative_tolerance": 0.0001,
+  "absolute_tolerance_mol_per_m3": 1e-6,
+  "seed": 1,
+  "domain": {
+    "voxels": [16, 4, 8],
+    "voxel_um": 5.0,
+    "bulk_mol_per_m3": {
+      "glucose": 0.2,
+      "ammonium": 2.0,
+      "carbon_dioxide": 1.0
+    },
+    "diffusivity_m2_per_s": {
+      "glucose": 2.3e-10,
+      "ammonium": 1.47e-9,
+      "carbon_dioxide": 1.10e-9,
+      "lactate": 3.9e-10
+    },
+    "substratum": {
+      "conditioning_film": "salivary pellicle",
+      "patches": [
+        {"material": "enamel", "region_um": [0.0, 20.0, 0.0, 20.0]},
+        {"material": "titanium", "region_um": [20.0, 40.0, 0.0, 20.0]},
+        {"material": "zirconia", "region_um": [40.0, 60.0, 0.0, 20.0]},
+        {"material": "pmma", "region_um": [60.0, 80.0, 0.0, 20.0]}
+      ]
+    },
+    "liquid": {
+      "temperature_c": 35.0,
+      "viscosity_mpa_s": 1.2
+    },
+    "flow": {
+      "wall_shear_rate_per_s": 1.25,
+      "distance_from_inlet_mm": 5.0
+    },
+    "suspension": [
+      {
+        "reversible": "s_oralis_reversible",
+        "attached": "s_oralis",
+        "cells_per_ml": 1e7,
+        "cell_diameter_um": 0.9,
+        "carbon_fmol_per_cell": 7.0,
+        "blocked_area_um2": 10.0
+      },
+      {
+        "reversible": "s_sanguinis_reversible",
+        "attached": "s_sanguinis",
+        "cells_per_ml": 5e6,
+        "cell_diameter_um": 1.0,
+        "carbon_fmol_per_cell": 9.0,
+        "blocked_area_um2": 10.0
+      }
+    ],
+    "adhesion": [
+      {"attached": "s_oralis", "material": "enamel", "efficiency": 0.5, "detachment_per_h": 10.0, "locking_per_h": 90.0},
+      {"attached": "s_oralis", "material": "titanium", "efficiency": 0.5, "detachment_per_h": 10.0, "locking_per_h": 90.0},
+      {"attached": "s_oralis", "material": "zirconia", "efficiency": 0.315, "detachment_per_h": 10.0, "locking_per_h": 90.0},
+      {"attached": "s_oralis", "material": "pmma", "efficiency": 0.5, "detachment_per_h": 10.0, "locking_per_h": 90.0},
+      {"attached": "s_sanguinis", "material": "enamel", "efficiency": 0.5, "detachment_per_h": 10.0, "locking_per_h": 90.0},
+      {"attached": "s_sanguinis", "material": "titanium", "efficiency": 0.5, "detachment_per_h": 10.0, "locking_per_h": 90.0},
+      {"attached": "s_sanguinis", "material": "zirconia", "efficiency": 0.315, "detachment_per_h": 10.0, "locking_per_h": 90.0},
+      {"attached": "s_sanguinis", "material": "pmma", "efficiency": 0.5, "detachment_per_h": 10.0, "locking_per_h": 90.0}
+    ]
+  }
+}
