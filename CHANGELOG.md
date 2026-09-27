@@ -182,6 +182,10 @@ results for the same manifest is always called out.
     is about 5e-6 of each component's peak.
   - Prototyped first in one dimension against criteria set in advance
     (docs/validation.md, "Reactions and transport in space").
+  - Measured against its pre-registered performance target, 24 h on a
+    64 × 64 × 32 box in under an hour on one core: it took 2 h 17 min
+    (docs/validation.md, "Performance"). Most of the excess is the start-up
+    transient and the cost per voxel, both taken up in Stage 7.
   - Examples: `examples/networks/surface_biofilm_3d.json`, which runs in about
     five minutes on one core, and a 1-D twin that runs in three seconds.
 

@@ -78,7 +78,7 @@ the simulator, graded parameters in `parameters.md`, and a `CHANGELOG` entry.
 | 4. Verification | Transport in 1, 2 and 3 dimensions against `point_source_diffusion_2d` and `point_source_diffusion_3d`; the spatial solver reducing to V3; manufactured solutions; permutation invariance; the R\* rule through the simulator | Convergence at design order; cross-platform replay in CI |
 | 5. External validation | IWA BM1 (V9) and BM3 (V10); oxygen microprofiles | Published reference solutions reproduced |
 | 6. Flagship study | The periodontal biofilm rebuilt with graded parameters, named metabolite exchanges and a published in-vitro calibration target | A falsifiable, evidence-linked prediction |
-| 7. Scale | Year-long runs and large ensembles, streamed and resumable | Annual runs on a laptop |
+| 7. Scale | Year-long runs and large ensembles, streamed and resumable. The spatial solver made fast enough, without loosening any tolerance, for the target 2c missed: 24 h on 64 × 64 × 32 voxels in under an hour on one core, measured at 2 h 17 min ([validation.md](validation.md#performance)) | Annual runs on a laptop |
 | 8. Publication | JOSS paper on the verified software; a validation paper on Stages 5–6 | Submitted |
 
 The long-term plan below is sequenced after these stages, not beside them.
