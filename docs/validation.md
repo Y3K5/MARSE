@@ -292,6 +292,39 @@ The tests, in `tests/test_reactive_transport.py`:
   - Runs replay bit for bit, and an edited manifest is refused.
   - `marse run` writes the totals, the frames and the ParaView files.
 
+### Performance
+
+The stage pre-registered a target: a 64 × 64 × 32 box (131,072 voxels,
+128 × 128 × 64 µm) should run 24 simulated hours in under an hour on one core.
+**It missed: the run took 2 h 17 min (8,227 s).**
+
+- **The scene:** the 3-D example with 2 µm voxels (`voxels` [64, 64, 32],
+  `voxel_um` 2, `duration_h` 24).
+- **The machine:** one core of a 2.8 GHz Intel Xeon cloud container, with
+  NumPy's BLAS held to one thread.
+
+Where the time went:
+
+- **The start-up, 41 minutes (about 2,440 s) for the first 15 simulated
+  minutes.** The colonies start in fresh liquid, and the start-up transient
+  takes several hundred steps at about 7.7 s each. Up to 51 of the limiter's
+  rounds per step went to traces far below any tolerance.
+- **The remaining 23.75 hours, 5,786 s.** That is 244 s per simulated hour on
+  average, falling from 330 s early on to 156 s over the last eight hours as
+  the steps lengthened.
+- **In all, 691 steps**: 3 rejected, 105 limited, no Newton failures, and 4,324
+  Newton iterations.
+- **Conservation held throughout:** carbon, nitrogen and electrons balanced to
+  3.8e-16.
+- **Scaling:** a step costs 16 times as much as on the 32 × 32 × 16 example,
+  for 8 times the voxels.
+
+By 24 h the biomass has grown in place to about 55 times its starting amount,
+which is not physical until colonies spread (Stage 2d). The run measures the
+solver, not the biology. Stage 7 takes up the acceleration of the start-up and
+of the cost per voxel, without loosening any tolerance
+([roadmap](roadmap.md)).
+
 ## Running the suite
 
 `python -m pytest` runs the pull-request suite, which leaves out tests marked
