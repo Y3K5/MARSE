@@ -80,6 +80,17 @@ results for the same manifest is always called out.
   throughout (citation metadata, package metadata and CLI), matching the README
   and the acronym.
 
+- **The roadmap gains the environments programme, and the stages after it.**
+  - **Environments (E1–E4):** binding to surfaces (E1, this release); binding
+    from surface physics, with natural waters and rock and mineral surfaces
+    (E2); soil as a full 3-D pore structure (E3); and geographic scenes (E4).
+  - **Saliva, diet and caries** comes next: high- and low-sugar diets
+    compared over months to years.
+  - **Host biology** (immune, structural and functional cells, and their
+    signalling) comes after v1.0, as the specification plans.
+- `marse check` says when nothing diffuses, instead of printing an infinite
+  explicit step.
+
 ### Deprecated
 
 - The old import paths (`marse.niche`, `marse.genotype`, `marse.additives`,
@@ -214,6 +225,61 @@ results for the same manifest is always called out.
     - the multigrid solver agrees with a direct solve.
 
     See docs/validation.md, "Transport in one, two and three dimensions".
+
+- **Cells bind to surfaces: environments, increment E1**
+  ([docs/environments.md](docs/environments.md)). The new modules are
+  `marse.spatial.colloids`, `marse.spatial.surface` and
+  `marse.microbes.adhesion`. A domain in space can now say what its
+  substratum is made of and which cells in the liquid bind to it, so the
+  surface is colonized as the run goes instead of being seeded at the start.
+  The model is in docs/theory.md §6.4.
+  - **Delivery.** Cells diffuse as Brownian spheres (Stokes–Einstein). They
+    reach the substratum by the Lévêque flux of a shear flow, the
+    Smoluchowski–Levich approximation of flow-chamber studies. A flow
+    chamber states its shear. A thin film with a free top, such as saliva on
+    a tooth, shears at three times its mean velocity over its thickness.
+  - **Binding.** A fraction of the delivered cells binds: the attachment
+    efficiency of that species on that material. Bound cells block the area
+    around them, and binding stops at the jamming limit of random sequential
+    adsorption, a coverage of 0.547 (Feder 1980).
+  - **Reversible, then locked.** Bound cells detach, or lock into the
+    species' biomass and grow there.
+  - **Conservation.** Deposition and detachment cross the substratum face,
+    and the ledger books them as imports, beside the top face. Locking
+    converts between two components the schema requires to have the same
+    formula, as an extra row of the stoichiometric matrix. The exchange has
+    an analytic Jacobian, and the positivity limiter scales it like any other
+    transfer.
+  - **Schema.**
+    - Five domain fields go together: `substratum`, `liquid`, `flow`,
+      `suspension` and `adhesion`.
+    - Patches of material cover the substratum exactly once.
+    - Impossible scenes are refused with the reason.
+    - A domain without these fields writes exactly what it wrote before, so
+      its run id and checksums are unchanged.
+  - **Scenes.**
+    - `examples/environments/lab/flow_chamber.json`: *S. oralis* on bare and
+      saliva-coated glass, for 4 h.
+    - `examples/environments/dental/dental_surfaces.json`: enamel, titanium,
+      zirconia and acrylic under a salivary film, with *S. oralis* and
+      *S. sanguinis*, for 24 h.
+    - `examples/surface_adhesion.py`: the four dental materials, hour by
+      hour.
+  - **Command line.** `marse check` previews delivery and binding on every
+    material, and `marse run` writes `surface.csv`.
+  - **Verified** against:
+    - the closed-form kinetics with blocking (`adhesion_kinetics`) in 1-, 2-
+      and 3-D;
+    - its Langmuir and jamming limits;
+    - each patch against its own column;
+    - the ledger;
+    - finite differences of the Jacobian.
+
+    Without a substratum, runs are bit-identical to before. See
+    docs/validation.md, "Adhesion to surfaces".
+  - **Parameters,** graded in docs/parameters.md §7. The one contrast between
+    materials that data support, titanium against zirconia, is a calibration.
+    Every binding rate is illustrative.
 
 - **Ecosystem runs are reproducible.** `marse ecosystem` writes a
   `manifest.json` beside its frames and viewer, and `marse replay` reproduces

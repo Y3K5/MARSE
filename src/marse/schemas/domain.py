@@ -14,7 +14,10 @@ substratum, height its last axis, with the bulk liquid held above it
   placed at stated coordinates;
 - ``random_colonies``: a number of such hemispheres placed at random, from the
   run's seed. The placement is recorded as a random stream, so a replay puts
-  them back in the same voxels.
+  them back in the same voxels;
+- ``substratum``, ``liquid``, ``flow``, ``suspension`` and ``adhesion``,
+  stated together: cells in the liquid binding to the materials of the
+  substratum (docs/environments.md, :mod:`marse.microbes.adhesion`).
 
 The run fields' ``initial_mol_per_m3`` fill every voxel, and the colonies then
 set their component inside their hemispheres. A colony that covers no voxel
@@ -34,15 +37,33 @@ from marse.core.config import ConfigError
 from marse.core.seeds import SeedRegistry
 from marse.schemas._reading import plain, read_object
 from marse.schemas.network import (
+    ADHESION_FIELDS,
     COLONY_FIELDS,
     DOMAIN_FIELDS,
+    FLOW_FIELDS,
+    LIQUID_FIELDS,
+    PATCH_FIELDS,
     RANDOM_COLONY_FIELDS,
+    SUBSTRATUM_FIELDS,
+    SUSPENSION_FIELDS,
     Network,
     _known,
 )
 from marse.spatial.grid import Grid
+from marse.spatial.surface import Patch, Substratum
 
-__all__ = ["M2_PER_S_TO_UM2_PER_H", "Colony", "Domain", "RandomColonies", "read_domain"]
+__all__ = [
+    "M2_PER_S_TO_UM2_PER_H",
+    "Adhesion",
+    "Colony",
+    "Domain",
+    "Flow",
+    "Liquid",
+    "RandomColonies",
+    "Surface",
+    "Suspension",
+    "read_domain",
+]
 
 M2_PER_S_TO_UM2_PER_H = 1e12 * 3600.0
 MAX_VOXELS = 2**24
@@ -86,6 +107,93 @@ class RandomColonies:
 
 
 @dataclass(frozen=True, slots=True)
+class Surface:
+    """What the substratum is made of: patches of materials under one conditioning film."""
+
+    conditioning_film: str
+    patches: tuple[Patch, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "conditioning_film": self.conditioning_film,
+            "patches": [
+                {"material": p.material, "region_um": list(p.region_um)} for p in self.patches
+            ],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class Liquid:
+    """The liquid's temperature and viscosity, which set how fast cells diffuse."""
+
+    temperature_c: float
+    viscosity_mpa_s: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"temperature_c": self.temperature_c, "viscosity_mpa_s": self.viscosity_mpa_s}
+
+
+@dataclass(frozen=True, slots=True)
+class Flow:
+    """The shear the liquid's flow applies at the substratum, and how far downstream it is."""
+
+    wall_shear_rate_per_s: float
+    distance_from_inlet_mm: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "wall_shear_rate_per_s": self.wall_shear_rate_per_s,
+            "distance_from_inlet_mm": self.distance_from_inlet_mm,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class Suspension:
+    """A species suspended in the liquid, and the two components it binds into."""
+
+    reversible: str
+    attached: str
+    cells_per_ml: float
+    cell_diameter_um: float
+    carbon_fmol_per_cell: float
+    blocked_area_um2: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "reversible": self.reversible,
+            "attached": self.attached,
+            "cells_per_ml": self.cells_per_ml,
+            "cell_diameter_um": self.cell_diameter_um,
+            "carbon_fmol_per_cell": self.carbon_fmol_per_cell,
+            "blocked_area_um2": self.blocked_area_um2,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class Adhesion:
+    """How one species binds to one material: efficiency, detachment and locking."""
+
+    attached: str
+    material: str
+    efficiency: float
+    detachment_per_h: float
+    locking_per_h: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "attached": self.attached,
+            "material": self.material,
+            "efficiency": self.efficiency,
+            "detachment_per_h": self.detachment_per_h,
+            "locking_per_h": self.locking_per_h,
+        }
+
+
+SCENE = ("substratum", "liquid", "flow", "suspension", "adhesion")
+"""The fields that describe cells binding to a surface, stated all together or not at all."""
+
+
+@dataclass(frozen=True, slots=True)
 class Domain:
     """The grid, the liquid above it, how each component moves, and where the colonies are."""
 
@@ -95,10 +203,23 @@ class Domain:
     diffusivity_m2_per_s: dict[str, float]
     colonies: tuple[Colony, ...] = ()
     random_colonies: tuple[RandomColonies, ...] = ()
+    surface: Surface | None = None
+    liquid: Liquid | None = None
+    flow: Flow | None = None
+    suspension: tuple[Suspension, ...] = ()
+    adhesion: tuple[Adhesion, ...] = ()
 
     @property
     def grid(self) -> Grid:
         return Grid(self.voxels, self.voxel_um)
+
+    @property
+    def substratum(self) -> Substratum | None:
+        """The material of every face of the substratum, if cells bind to it."""
+        return None if self.surface is None else Substratum(self.grid, self.surface.patches)
+
+    def adhesion_of(self, attached: str, material: str) -> Adhesion:
+        return next(a for a in self.adhesion if a.attached == attached and a.material == material)
 
     def diffusivities_um2_per_h(self, names: tuple[str, ...]) -> NDArray[np.float64]:
         return np.array(
@@ -148,7 +269,7 @@ class Domain:
         return state
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        written: dict[str, Any] = {
             "voxels": list(self.voxels),
             "voxel_um": self.voxel_um,
             "bulk_mol_per_m3": dict(self.bulk_mol_per_m3),
@@ -156,6 +277,15 @@ class Domain:
             "colonies": [c.to_dict() for c in self.colonies],
             "random_colonies": [c.to_dict() for c in self.random_colonies],
         }
+        # Only a scene with binding writes these, so a domain without one reads
+        # back, and hashes, exactly as it did before surfaces existed.
+        if self.surface is not None and self.liquid is not None and self.flow is not None:
+            written["substratum"] = self.surface.to_dict()
+            written["liquid"] = self.liquid.to_dict()
+            written["flow"] = self.flow.to_dict()
+            written["suspension"] = [s.to_dict() for s in self.suspension]
+            written["adhesion"] = [a.to_dict() for a in self.adhesion]
+        return written
 
 
 def _hemisphere(grid: Grid, colony: Colony) -> NDArray[np.bool_]:
@@ -289,6 +419,17 @@ def read_domain(raw: Any, network: Network, where: str = "experiment.domain") ->
             )
         random_colonies.append(RandomColonies(component, count, radius, concentration))
 
+    stated = [key for key in SCENE if key in values]
+    scene: dict[str, Any] = {}
+    if stated:
+        missing = [key for key in SCENE if key not in values]
+        if missing:
+            raise ConfigError(
+                f"{where}: cells binding to a surface need {', '.join(SCENE)} together; "
+                f"{', '.join(missing)} {'is' if len(missing) == 1 else 'are'} missing"
+            )
+        scene = _read_scene(values, grid, network, where)
+
     return Domain(
         voxels=tuple(values["voxels"]),
         voxel_um=voxel_um,
@@ -304,4 +445,133 @@ def read_domain(raw: Any, network: Network, where: str = "experiment.domain") ->
         },
         colonies=tuple(colonies),
         random_colonies=tuple(random_colonies),
+        **scene,
     )
+
+
+def _same_formula(a: Any, b: Any) -> bool:
+    return sorted(a.formula.counts) == sorted(b.formula.counts) and a.formula.charge == (
+        b.formula.charge
+    )
+
+
+def _read_scene(values: dict[str, Any], grid: Grid, network: Network, where: str) -> dict[str, Any]:
+    """The substratum, liquid, flow, suspension and adhesion, checked against each other."""
+    components = {c.name: c for c in network.components}
+
+    here = f"{where}.substratum"
+    surface_values = read_object(values["substratum"], here, SUBSTRATUM_FIELDS)
+    patches = []
+    for i, item in enumerate(surface_values["patches"]):
+        patch_values = read_object(item, f"{here}.patches[{i}]", PATCH_FIELDS)
+        region = tuple(float(plain(x)) for x in patch_values["region_um"])
+        patches.append(Patch(patch_values["material"], region))
+    try:
+        substratum = Substratum(grid, patches)
+    except ValueError as error:
+        raise ConfigError(f"{here}: {error}") from None
+    surface = Surface(surface_values["conditioning_film"], tuple(patches))
+
+    here = f"{where}.liquid"
+    liquid_values = read_object(values["liquid"], here, LIQUID_FIELDS)
+    temperature = float(plain(liquid_values["temperature_c"]))
+    if not temperature > -273.15:
+        raise ConfigError(f"{here}.temperature_c: must be above absolute zero, -273.15")
+    viscosity = _positive(liquid_values["viscosity_mpa_s"], f"{here}.viscosity_mpa_s")
+    liquid = Liquid(temperature, viscosity)
+
+    here = f"{where}.flow"
+    flow_values = read_object(values["flow"], here, FLOW_FIELDS)
+    flow = Flow(
+        _positive(flow_values["wall_shear_rate_per_s"], f"{here}.wall_shear_rate_per_s"),
+        _positive(flow_values["distance_from_inlet_mm"], f"{here}.distance_from_inlet_mm"),
+    )
+
+    suspension: list[Suspension] = []
+    used: dict[str, str] = {}
+    if not values["suspension"]:
+        raise ConfigError(f"{where}.suspension: name at least one species that binds")
+    for i, item in enumerate(values["suspension"]):
+        here = f"{where}.suspension[{i}]"
+        s = read_object(item, here, SUSPENSION_FIELDS)
+        reversible, attached = s["reversible"], s["attached"]
+        _known([reversible, attached], components, here)
+        if reversible == attached:
+            raise ConfigError(f"{here}: reversible and attached must be two components")
+        for role, name_ in (("reversible", reversible), ("attached", attached)):
+            if components[name_].phase != "particulate":
+                raise ConfigError(
+                    f"{here}.{role}: '{name_}' is dissolved; bound cells are particulate"
+                )
+            if name_ in used:
+                raise ConfigError(f"{here}.{role}: '{name_}' already binds in {used[name_]}")
+            used[name_] = here
+        if not _same_formula(components[reversible], components[attached]):
+            raise ConfigError(
+                f"{here}: '{reversible}' and '{attached}' must have the same formula, because "
+                "locking turns one into the other and must conserve every element"
+            )
+        touching = [p.name for p in network.processes if p.coefficient(reversible) != 0]
+        if touching:
+            raise ConfigError(
+                f"{here}.reversible: '{reversible}' takes part in {', '.join(touching)}; "
+                "reversibly bound cells only detach or lock, and grow once locked"
+            )
+        suspension.append(
+            Suspension(
+                reversible,
+                attached,
+                _positive(s["cells_per_ml"], f"{here}.cells_per_ml"),
+                _positive(s["cell_diameter_um"], f"{here}.cell_diameter_um"),
+                _positive(s["carbon_fmol_per_cell"], f"{here}.carbon_fmol_per_cell"),
+                _positive(s["blocked_area_um2"], f"{here}.blocked_area_um2"),
+            )
+        )
+
+    adhesion: list[Adhesion] = []
+    species = {s.attached for s in suspension}
+    seen: set[tuple[str, str]] = set()
+    for i, item in enumerate(values["adhesion"]):
+        here = f"{where}.adhesion[{i}]"
+        a = read_object(item, here, ADHESION_FIELDS)
+        attached, material = a["attached"], a["material"]
+        if attached not in species:
+            raise ConfigError(
+                f"{here}.attached: '{attached}' is not the attached component of any species "
+                "in the suspension"
+            )
+        if material not in substratum.materials:
+            raise ConfigError(
+                f"{here}.material: '{material}' is not a material of the substratum "
+                f"({', '.join(substratum.materials)})"
+            )
+        if (attached, material) in seen:
+            raise ConfigError(f"{here}: '{attached}' on '{material}' is stated twice")
+        seen.add((attached, material))
+        efficiency = float(plain(a["efficiency"]))
+        if not 0 <= efficiency <= 1:
+            raise ConfigError(f"{here}.efficiency: a fraction, between 0 and 1")
+        detachment = float(plain(a["detachment_per_h"]))
+        locking = float(plain(a["locking_per_h"]))
+        for field_name, rate in (("detachment_per_h", detachment), ("locking_per_h", locking)):
+            if rate < 0:
+                raise ConfigError(f"{here}.{field_name}: must not be negative")
+        adhesion.append(Adhesion(attached, material, efficiency, detachment, locking))
+    missing_pairs = [
+        f"'{s}' on '{m}'"
+        for s in sorted(species)
+        for m in substratum.materials
+        if (s, m) not in seen
+    ]
+    if missing_pairs:
+        raise ConfigError(
+            f"{where}.adhesion: every species needs its binding on every material; missing "
+            f"{', '.join(missing_pairs)}"
+        )
+    return {
+        "surface": surface,
+        "liquid": liquid,
+        "flow": flow,
+        "suspension": tuple(suspension),
+        "adhesion": tuple(adhesion),
+    }

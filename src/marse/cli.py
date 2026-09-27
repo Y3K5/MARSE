@@ -128,15 +128,31 @@ def _summarise_in_space(result: ReactiveTransportResult) -> None:
         f"{substeps['accepted']} implicit substeps, {substeps['rejected']} retried, "
         f"{substeps['limited']} limited to keep concentrations positive"
     )
-    print(f"{'final':<24}   mol per m2 of surface   entered through the top")
+    boundary = "the top and the substratum" if "surface" in outputs else "the top"
+    print(f"{'final':<24}   mol per m2 of surface   entered through {boundary}")
     for name, value in outputs["totals_mol_per_m2"].items():
         entered = outputs["imported_mol_per_m2"][name]
         print(f"  {name:<24} {value:>12.6g}   {entered:>+12.4g}")
+    if "surface" in outputs:
+        _summarise_surface(result)
     worst = max(q["largest_relative_residual"] for q in outputs["balance"].values())
     print(
-        f"balance     carbon, nitrogen and electrons, counting what crossed the top, "
+        f"balance     carbon, nitrogen and electrons, counting what crossed {boundary}, "
         f"conserved to {worst:.1e}"
     )
+
+
+def _summarise_surface(result: ReactiveTransportResult) -> None:
+    domain = result.config.domain
+    final = result.manifest.outputs["surface"]["final"]
+    substratum = domain.substratum
+    assert substratum is not None
+    species = [s.attached for s in domain.suspension]
+    print(f"surface     {domain.surface.conditioning_film if domain.surface else ''}")
+    print(f"  {'bound cells per cm2':<22}" + "".join(f"{s:>14}" for s in species) + "   covered")
+    for material in substratum.materials:
+        cells = "".join(f"{final[f'{material}_{s}_cells_per_cm2']:>14.4g}" for s in species)
+        print(f"  {material:<22}{cells}   {final[f'{material}_covered']:>6.1%}")
 
 
 def _comparable(outputs: dict) -> dict[str, float | str]:
@@ -148,6 +164,9 @@ def _comparable(outputs: dict) -> dict[str, float | str]:
         }
         for group in ("totals_mol_per_m2", "imported_mol_per_m2"):
             values.update({f"{group}[{n}]": float(v) for n, v in outputs[group].items()})
+        if "surface" in outputs:
+            final = outputs["surface"]["final"]
+            values.update({f"surface[{k}]": float(v) for k, v in final.items()})
         return values
     if "final_mol_per_m3" in outputs:  # a reaction network in a closed box
         values = {
@@ -224,7 +243,10 @@ def _run_in_space(
         index = store.close()
     pvd = write_pvd(vtk / "run.pvd", series)
     totals, manifest = _write_outputs(result, output_dir)
-    return result, (totals, index, pvd, manifest)
+    if result.surface is None:
+        return result, (totals, index, pvd, manifest)
+    surface = result.write_surface(output_dir / "surface.csv")
+    return result, (totals, surface, index, pvd, manifest)
 
 
 def _run_network(args: argparse.Namespace) -> int:
@@ -484,18 +506,25 @@ def _report_domain(config: ReactiveTransportConfig) -> None:
     bulk = ", ".join(f"{n} {v:g}" for n, v in domain.bulk_mol_per_m3.items() if v)
     print(f"  bulk liquid above, mol per m3: {bulk or 'nothing'}")
     moving = ", ".join(f"{n} {v * 1e12:g}" for n, v in domain.diffusivity_m2_per_s.items())
-    print(f"  diffusivities, um2 per s: {moving}")
+    print(f"  diffusivities, um2 per s: {moving or 'nothing diffuses'}")
     placed = len(domain.colonies) + sum(g.count for g in domain.random_colonies)
     kinds = sorted(
         {c.component for c in domain.colonies} | {g.component for g in domain.random_colonies}
     )
     if placed:
         print(f"  colonies: {placed} ({', '.join(kinds)})")
+    if domain.surface is not None:
+        _report_surface(config)
     limit = build_model(config).diffusion.explicit_step_limit_h()
     levels = hierarchy(grid.shape, len(names))
+    if math.isfinite(limit):
+        stability = f"an explicit step would have to be at most {limit * 3600 * 1000:.3g} ms"
+    else:
+        stability = "with nothing diffusing, no step is too long to be stable"
     print(
-        f"  an explicit step would have to be at most {limit * 3600 * 1000:.3g} ms; the implicit "
-        f"solver uses {len(levels)} grid levels, down to {' x '.join(map(str, levels[-1][0]))}"
+        f"  {stability}; the implicit solver uses {len(levels)} grid "
+        f"level{'s' if len(levels) > 1 else ''}, "
+        f"down to {' x '.join(map(str, levels[-1][0]))}"
     )
     if math.prod(levels[-1][0]) > 64:
         print(
@@ -508,6 +537,43 @@ def _report_domain(config: ReactiveTransportConfig) -> None:
             f"time scales diffusion across the box {scales['diffusion_h'] * 3600:.3g} s, "
             f"fastest growth {scales['growth_h']:.3g} h (ratio {scales['ratio']:.2g})"
         )
+
+
+def _report_surface(config: ReactiveTransportConfig) -> None:
+    from marse.core.reactive_transport import transfer_velocities_um_per_s
+    from marse.microbes.adhesion import JAMMING_COVERAGE
+
+    domain = config.domain
+    substratum = domain.substratum
+    assert substratum is not None
+    assert domain.surface is not None
+    assert domain.liquid is not None
+    assert domain.flow is not None
+    total = sum(substratum.area_um2(m) for m in substratum.materials)
+    shares = ", ".join(f"{m} {substratum.area_um2(m) / total:.0%}" for m in substratum.materials)
+    print(f"  substratum: {shares}; conditioning film: {domain.surface.conditioning_film}")
+    print(
+        f"  liquid at {domain.liquid.temperature_c:g} C, {domain.liquid.viscosity_mpa_s:g} mPa s, "
+        f"sheared at {domain.flow.wall_shear_rate_per_s:g} per s, "
+        f"{domain.flow.distance_from_inlet_mm:g} mm downstream"
+    )
+    velocities = transfer_velocities_um_per_s(config)
+    for s in domain.suspension:
+        arrival = velocities[s.attached] * s.cells_per_ml * 1e-12 * 1e8  # per cm2 per s
+        jammed = JAMMING_COVERAGE / s.blocked_area_um2 * 1e8
+        print(
+            f"  {s.attached}: {s.cells_per_ml:.3g} per ml, delivered at "
+            f"{velocities[s.attached]:.3g} um per s, {arrival:.3g} cells per cm2 per s; "
+            f"the surface jams at {jammed:.3g} per cm2"
+        )
+        for m in substratum.materials:
+            rule = domain.adhesion_of(s.attached, m)
+            bound = rule.efficiency * arrival
+            half = math.log(2) * jammed / bound / 3600 if bound > 0 else math.inf
+            print(
+                f"    on {m}: binds {bound:.3g} per cm2 per s at first, half-way to jamming "
+                f"after {half:.3g} h without detachment or growth"
+            )
 
 
 def _command_check(args: argparse.Namespace) -> int:

@@ -333,6 +333,11 @@ chemistry in a single column in three seconds.
 | `diffusivity_m2_per_s` | object of numbers | yes | One value for every dissolved component, in m² per s, as tables give them. Particulate components (biomass) do not diffuse. |
 | `colonies` | list of colonies | no | Hemispheres of biomass on the surface, placed where stated. |
 | `random_colonies` | list of random colonies | no | Hemispheres of biomass scattered over the surface from the run's `seed`. |
+| `substratum` | object | no | What the substratum is made of, for cells that bind to it. [Cells binding to the surface](#cells-binding-to-the-surface): these five fields go together. |
+| `liquid` | object | with `substratum` | The liquid's temperature and viscosity. |
+| `flow` | object | with `substratum` | The flow's shear at the substratum. |
+| `suspension` | list of suspended species | with `substratum` | The cells in the liquid that bind. |
+| `adhesion` | list of bindings | with `substratum` | How each species binds to each material. |
 
 `initial_mol_per_m3` fills every voxel. Each colony then sets its component to
 its concentration in the voxels whose centres lie inside it. A colony that
@@ -364,9 +369,9 @@ Every run in space keeps the three guarantees of a closed box:
 
 - **Matter is conserved, counting what crosses the top.** After every step, a
   ledger compares the carbon, nitrogen and electrons in the box with what has
-  entered or left through the top face. That exchange is computed from the face
-  fluxes themselves, not inferred from the difference. A drift beyond 1e-9
-  stops the run.
+  entered or left through the top face, and through the substratum where cells
+  bind to it. That exchange is computed from the face fluxes themselves, not
+  inferred from the difference. A drift beyond 1e-9 stops the run.
 - **Concentrations stay non-negative, without clipping.**
 - **The run replays bit for bit.**
 
@@ -374,6 +379,76 @@ The method is implicit, so a step can be minutes long even though diffusion
 across a voxel takes milliseconds. It follows fast changes, such as a sudden
 drop in the oxygen above, and settles onto the quasi-steady profile when
 nothing is changing fast ([theory.md §9.8](theory.md#98-implicit-reactiontransport-integration)).
+
+### Cells binding to the surface
+
+A domain can say what its substratum is made of and which cells in the liquid
+bind to it. Then colonies need not be placed at the start: the surface is
+colonized as the run goes ([environments.md](environments.md) describes the
+scenes, [theory.md §6.4](theory.md#64-attachment-to-surfaces) the model).
+
+- **Delivery.** Cells of each species are suspended in the bulk liquid. They
+  are delivered to the substratum by diffusion in the flow's shear, the
+  Lévêque flux.
+- **Binding.** A fraction of the delivered cells binds: the attachment
+  efficiency of that species on that face's material. Bound cells block the
+  area around them, and binding stops as the surface nears the jamming limit.
+- **Reversible, then locked.** Bound cells are held reversibly at first. They
+  detach, or lock into the species' biomass, where they grow.
+- **Five fields together.** `substratum`, `liquid`, `flow`, `suspension` and
+  `adhesion` are given all together. A scene that binds cells needs all five.
+
+`marse run` then also writes `surface.csv`: bound cells per cm² of each
+material, species by species, and the area each material has covered.
+
+### Substratum fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `conditioning_film` | text | yes | What coats every surface in this liquid, such as a salivary pellicle, or `none`. It is recorded; its effect is part of each material's attachment efficiency. |
+| `patches` | list of patches | yes | Rectangles of the substratum, each made of one material. Together they cover it exactly once. |
+
+### Patch fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `material` | name | yes | The material, such as `enamel` or `titanium`. Several patches may share one. |
+| `region_um` | list of numbers | yes | A lower and an upper bound on each lateral axis in turn, in µm: `[x0, x1, y0, y1]` in 3-D, `[x0, x1]` in 2-D, `[]` in 1-D. A face belongs to the patch its centre lies in. |
+
+### Liquid fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `temperature_c` | number | yes | The liquid's temperature, in °C. |
+| `viscosity_mpa_s` | number | yes | Its viscosity, in mPa s (centipoise). With the temperature it sets how fast cells diffuse. |
+
+### Flow fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `wall_shear_rate_per_s` | number | yes | The flow's shear rate at the substratum, per second. A flow chamber states it. A thin film with a free top, such as saliva on a tooth, shears at three times its mean velocity over its thickness. |
+| `distance_from_inlet_mm` | number | yes | How far downstream of where the surface starts capturing cells, in mm. |
+
+### Suspension fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `reversible` | component name | yes | The particulate component holding this species' reversibly bound cells. It takes part in no process. |
+| `attached` | component name | yes | The species' biomass, which locked cells join and grow in. It has the same formula as `reversible`. |
+| `cells_per_ml` | number | yes | Cells of this species in the bulk liquid, per mL. |
+| `cell_diameter_um` | number | yes | A cell's diameter, which sets how fast it diffuses. |
+| `carbon_fmol_per_cell` | number | yes | Carbon in one cell, in fmol: how a number of cells converts to C-mol. |
+| `blocked_area_um2` | number | yes | The area one bound cell keeps others from binding to, in µm². |
+
+### Adhesion fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `attached` | component name | yes | The species, by its attached component. |
+| `material` | name | yes | A material of the substratum. Every species needs an entry for every material. |
+| `efficiency` | number | yes | The fraction of the cells delivered to this material that binds, 0 to 1, under the conditioning film. |
+| `detachment_per_h` | number | yes | How fast reversibly bound cells detach, per hour. |
+| `locking_per_h` | number | yes | How fast they lock into the biomass, per hour. |
 
 ## Balancing: `balanced_by`
 
@@ -436,15 +511,26 @@ the field that exists.
 | `_mol_per_mol` | mol of one component per mol of another |
 | `_mol_per_m3` | mol per cubic metre, which is mmol per litre |
 | `_m2_per_s` | square metres per second, as diffusivities are tabulated |
+| `_fmol_per_cell` | femtomoles per cell |
+| `_per_ml` | per millilitre |
 | `_per_h` | per hour |
+| `_per_s` | per second |
+| `_mpa_s` | millipascal seconds, which is centipoise |
+| `_um2` | square micrometres |
 | `_um` | micrometres |
+| `_mm` | millimetres |
 | `_h` | hours |
+| `_c` | degrees Celsius |
 
-Six numeric fields have no unit: `schema_version`, a version number;
-`charge`, in elementary charges; `seed`, an identifier; `relative_tolerance`,
-a fraction; and `voxels` and `count`, which are counts. The test suite checks that every numeric
-field follows this rule, and that the tables on this page list exactly the
-fields MARSE reads.
+Seven numeric fields have no unit:
+- `schema_version`, a version number;
+- `charge`, in elementary charges;
+- `seed`, an identifier;
+- `relative_tolerance` and `efficiency`, which are fractions;
+- `voxels` and `count`, which are counts.
+
+The test suite checks that every numeric field follows this rule, and that the
+tables on this page list exactly the fields MARSE reads.
 
 ## Converting a literature yield
 

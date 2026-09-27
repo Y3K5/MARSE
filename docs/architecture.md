@@ -41,8 +41,10 @@ src/marse/
   schemas/         configuration schema v2: formula.py, network.py (reaction networks), experiment.py,
                    domain.py (space)
   spatial/         grid.py (voxels in 1, 2 or 3 dimensions over a surface), transport.py
-                   (finite-volume diffusion), multigrid.py (the implicit solver), vtk.py
-                   (ParaView output); domain.py and diffusion.py (the 1-D steady solver)
+                   (finite-volume diffusion), multigrid.py (the implicit solver), colloids.py
+                   (how cells in the liquid reach a surface), surface.py (the materials of the
+                   substratum), vtk.py (ParaView output); domain.py and diffusion.py (the 1-D
+                   steady solver)
   microbes/        growth.py, resource_use.py, adhesion.py, phenotype.py, interactions.py
   biofilm/         biomass.py, matrix.py, maturation.py
   ecosystem/       the 2-D multispecies engine (model.py, providers.py, framestore.py, viewer.py)
@@ -59,8 +61,8 @@ Implemented so far (the rest of the layout above is planned):
 | Package | Modules |
 |---|---|
 | `core/` | `config`, `state`, `seeds`, `provenance`, `simulation`, `integrators`, `ledger`, `well_mixed`, `framestore`, `implicit`, `reactive_transport` |
-| `spatial/` | `grid`, `transport`, `multigrid`, `vtk`, `domain`, `diffusion`, `solutes` |
-| `microbes/` | `growth`, `cardinal`, `kinetics`, `niche`, `genotype`, `additives` |
+| `spatial/` | `grid`, `transport`, `multigrid`, `colloids`, `surface`, `vtk`, `domain`, `diffusion`, `solutes` |
+| `microbes/` | `growth`, `cardinal`, `kinetics`, `adhesion`, `niche`, `genotype`, `additives` |
 | `schemas/` | `formula`, `network`, `experiment`, `domain`: configuration schema v2 (reaction networks checked for continuity, with rates, run settings and space) |
 | `biofilm/` | `biomass` |
 | `ecosystem/` | `model`, `providers`, `framestore`, `viewer` (not yet verified: see validation.md) |

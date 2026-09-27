@@ -335,6 +335,102 @@ solver, not the biology. Stage 7 takes up the acceleration of the start-up and
 of the cost per voxel, without loosening any tolerance
 ([roadmap](roadmap.md)).
 
+## Adhesion to surfaces
+
+Cells in the liquid bind to the substratum, detach from it or lock onto it
+([theory.md §6.4](theory.md#64-attachment-to-surfaces)). The checks, in
+`tests/test_surfaces.py` and `tests/test_adhesion.py`, were set before the
+code was written:
+
+| Criterion | Threshold | Measured |
+|---|---|---|
+| The Lévêque constant, and the wall flux of the boundary-layer problem marched numerically | 1e-12; 1% | exact to rounding; within 1% |
+| Stokes–Einstein, a 1 µm sphere in water at 25 °C | 0.4907 µm² s⁻¹ to 0.1% | 0.4907 |
+| The engine against the closed-form kinetics with blocking, in 1-, 2- and 3-D | the solver's tolerance | 2.0e-6 relative at a tolerance of 1e-6, identical in every dimension |
+| The Langmuir limit without locking, $n_\infty = j_0/(j_0/n_J + k_{\mathrm{off}})$ | 1e-6 | 7e-16 |
+| Coverage never passes the jamming limit, and reaches it without detachment | exact; 1e-3 | never above 0.547; reaches it to 1e-3 |
+| Each patch of a patterned box evolves as its own column | rounding, 1e-12 | agrees to 1e-12 |
+| The ledger, with deposition and detachment | 1e-12 of the totals | 4e-16 to 6e-16 |
+| Hour-long steps | never negative, nothing clipped | never negative; the ledger balances after every step |
+| Without a substratum, a run of Stage 2c | bit for bit | bit for bit: the 1-D and 3-D examples end with the same digests with and without E1's code |
+| Replay, and the schema's refusals | bit for bit, on any number of threads; each refusal says why | as required; both scenes end with one digest at 1 and 4 threads |
+| The lab scene's initial deposition | inside 0–2.9 × 10³ cm⁻² s⁻¹ (Sjollema et al. 1988) | 595 on bare glass, 357 on coated glass |
+| The dental scene, zirconia over titanium | 0.63 ± 1% after 2 h; 0.60–0.72 covered after 24 h | 0.63; 0.67 |
+
+The last row checks consistency with a calibration, not a prediction:
+zirconia's attachment efficiency was set to 0.63 of titanium's from Scarano et
+al. (2004) ([parameters.md §7.2](parameters.md#72-titanium-against-zirconia)).
+The covered ratio drifts to 0.67 over the day because the covered area is not
+proportional to the cells bound. Locked cells grow, and a surface grown past
+jamming binds no more.
+
+The tests in detail:
+
+- **Delivery** (`marse.spatial.colloids`). A cell's delivery is checked three
+  ways:
+  - the Lévêque constant is checked against its closed form;
+  - the wall flux of the convection–diffusion equation, marched downstream on
+    a stretched grid, matches it to 1%;
+  - the transfer velocity scales as $D^{2/3}$, $\dot\gamma^{1/3}$ and
+    $x^{-1/3}$.
+
+  Stokes–Einstein matches the known diffusivity of a micron sphere, and the
+  salivary film shears its surface at 0.4 to 5.4 s⁻¹.
+- **The substratum** (`marse.spatial.surface`). Patches give every face
+  exactly one material, by where its centre lies. A pattern with a gap, an
+  overlap, a patch outside the box or covering no face, or the wrong number of
+  bounds is refused with the reason.
+- **The closed form.** `adhesion_kinetics` matches an independent fourth-order
+  Runge–Kutta integration, with and without locking and from a surface
+  already partly covered. It approaches the jamming limit and never passes it.
+- **The engine against the closed form.** A box with no dissolved components
+  and no growth binds cells as `adhesion_kinetics` says, in 1-, 2- and 3-D.
+  Without locking it settles on the Langmuir balance, and with it every
+  surface jams.
+- **Geometry.** A box patterned with two materials, taking the same fixed
+  steps as two single columns, evolves face by face as those columns do.
+- **Conservation.** Carbon, nitrogen and electrons equal what crossed the top
+  and the substratum, to 1e-12 of the totals. With nothing growing, the cells
+  on the surface equal the cells imported through it.
+- **Positivity.** Hour-long steps leave every concentration non-negative, and
+  a ledger held to 1e-12 balances after each one.
+- **The analytic Jacobian** of the exchange and of locking matches central
+  finite differences to 1e-6. The dental scene is sampled at random, with 20%
+  of the values negative and faces on both sides of jamming.
+- **The schema.** A domain without a surface writes exactly the fields it wrote
+  before, so its run id and checksums are unchanged. One with a surface
+  round-trips. Thirteen impossible scenes are refused with the reason:
+  - a missing field;
+  - one component named as both states of a species, or two states with
+    different formulas;
+  - a reversible state that diffuses;
+  - an unknown material, or a species and material pair stated twice or not
+    at all;
+  - an efficiency outside [0, 1], or a negative rate;
+  - a temperature below absolute zero, or a shear or cell diameter of zero;
+  - patches that overlap.
+
+  A reversible state that takes part in a process is refused too.
+- **The scenes and the command line.** The lab scene binds at an initial rate
+  inside the published range. The dental scene binds to zirconia at 0.63 of
+  titanium, and to enamel exactly as to titanium. `marse run` writes
+  `surface.csv` and replays it bit for bit. `marse check` previews delivery
+  and binding on every material. A day on the dental surfaces, which covers
+  titanium more than zirconia, runs in the slow suite.
+
+### Timings
+
+On one machine (4 cores, Python 3.12):
+
+| Run | Voxels | Simulated | Wall time |
+|---|---|---|---|
+| Lab flow chamber, `marse run` | 8 × 4 | 4 h | 0.5 s |
+| Dental surfaces, `marse run` | 16 × 4 × 8 | 24 h | 35 s |
+| Dental surfaces as four columns, `examples/surface_adhesion.py` | 8 per column | 24 h each | 6.6 s |
+
+The times are the same at 1 and 4 BLAS threads, to within a few percent, and
+so are the results, bit for bit.
+
 ## Running the suite
 
 `python -m pytest` runs the pull-request suite, which leaves out tests marked

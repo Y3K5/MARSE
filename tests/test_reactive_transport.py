@@ -268,8 +268,8 @@ def test_the_ledger_balances_what_crossed_the_top_to_rounding():
 def test_a_planted_leak_is_caught_at_the_first_step(monkeypatch):
     honest = ReactionTransport._flows
 
-    def leaky(self, transfers, extents):
-        into, out = honest(self, transfers, extents)
+    def leaky(self, *args):
+        into, out = honest(self, *args)
         return into * (1.0 - 1e-3), out  # a thousandth of every arrival goes missing
 
     monkeypatch.setattr(ReactionTransport, "_flows", leaky)

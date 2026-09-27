@@ -54,6 +54,13 @@ everything is integrated together, implicitly (docs/theory.md, section 9.8):
   their quasi-steady state, and a step that tried to cross that in one go
   would only fail.
 
+Where cells in the liquid bind to the substratum (:mod:`marse.microbes.adhesion`,
+docs/theory.md, section 6.4), the bottom face carries a second exchange beside
+the top one. Deposition arrives through it and detachment leaves through it, as
+face transfers. The limiter scales them like any other, and the ledger counts
+them as imports. Locking turns reversibly bound cells into biomass, as an extra
+row of the stoichiometric matrix acting in the bottom layer.
+
 The linear systems are solved by :mod:`marse.spatial.multigrid`. One matrix,
 with the Jacobian at the start of the step, serves both stages, and it is
 rebuilt only when Newton converges slowly.
@@ -68,6 +75,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from marse.microbes.adhesion import SurfaceExchange
 from marse.spatial.multigrid import ImplicitSystem
 from marse.spatial.transport import Diffusion, divergence
 
@@ -117,6 +125,7 @@ class _Stage:
     rate: Field
     fluxes: Transfers
     reactions: Field
+    substratum: Field | None = None  # into the bottom voxels through the substratum
 
 
 class ReactionTransport:
@@ -128,9 +137,23 @@ class ReactionTransport:
         stoichiometry: NDArray[np.float64],
         rates: Callable[[Field], Field],
         jacobian: Callable[[Field], Field],
+        surface: SurfaceExchange | None = None,
     ) -> None:
         self.diffusion = diffusion
-        self.stoichiometry = np.asarray(stoichiometry, dtype=float)  # processes x components
+        self.surface = surface
+        stoichiometry = np.asarray(stoichiometry, dtype=float)  # processes x components
+        if surface is not None:
+            # Locking runs as one more process per species, in the bottom layer.
+            stoichiometry = np.vstack((stoichiometry, surface.locking_rows))
+            network_rates, network_jacobian = rates, jacobian
+
+            def rates(c: Field) -> Field:
+                return np.concatenate((network_rates(c), surface.locking(c)))
+
+            def jacobian(c: Field) -> Field:
+                return np.concatenate((network_jacobian(c), surface.locking_jacobian(c)))
+
+        self.stoichiometry = stoichiometry
         self.consumed = np.maximum(-self.stoichiometry, 0.0)
         self.produced = np.maximum(self.stoichiometry, 0.0)
         self.rates = rates
@@ -146,10 +169,17 @@ class ReactionTransport:
     def evaluate(self, c: Field) -> _Stage:
         fluxes = self.diffusion.fluxes(c)
         reactions = self.rates(c)
-        return _Stage(divergence(fluxes, self.spacing) + self._react(reactions), fluxes, reactions)
+        rate = divergence(fluxes, self.spacing) + self._react(reactions)
+        if self.surface is None:
+            return _Stage(rate, fluxes, reactions)
+        substratum = self.surface.exchange(c)
+        rate[..., 0] += substratum / self.spacing[-1]
+        return _Stage(rate, fluxes, reactions, substratum)
 
     def _system(self, c: Field, a: float) -> ImplicitSystem:
         blocks = np.einsum("pj,pk...->jk...", self.stoichiometry, self.jacobian(c))
+        if self.surface is not None:
+            blocks[..., 0] += self.surface.exchange_jacobian(c)
         return ImplicitSystem(
             self.shape, self.spacing, self.diffusion.diffusivity_um2_per_h, a, blocks
         )
@@ -187,7 +217,9 @@ class ReactionTransport:
 
     # -- the conservative, positive update ------------------------------------------------
 
-    def _flows(self, transfers: Transfers, extents: Field) -> tuple[Field, Field]:
+    def _flows(
+        self, transfers: Transfers, extents: Field, substratum: Field | None = None
+    ) -> tuple[Field, Field]:
         """What arrives in each voxel and what leaves it, per component: both non-negative.
 
         Arrivals are inflow through the faces and production; departures are
@@ -209,18 +241,30 @@ class ReactionTransport:
             if axis < dims - 1:  # periodic: the upper face of i is the lower face of i + 1
                 into += np.roll(forward, 1, axis=axis + 1)
                 out += np.roll(backward, 1, axis=axis + 1)
-            else:  # the substratum below the first voxel carries nothing
+            else:  # the substratum face below the first voxel carries only adhesion
                 into[..., 1:] += forward[..., :-1]
                 out[..., 1:] += backward[..., :-1]
+        if substratum is not None:
+            h = self.spacing[-1]
+            into[..., 0] += np.maximum(substratum, 0.0) / h  # bound from the suspension
+            out[..., 0] += np.maximum(-substratum, 0.0) / h  # detached into the liquid
         return into, out
 
-    def _apply(self, y: Field, transfers: Transfers, extents: Field) -> tuple[Field, Field, Field]:
+    def _apply(
+        self, y: Field, transfers: Transfers, extents: Field, substratum: Field | None = None
+    ) -> tuple[Field, Field, Field]:
         """The new state, with what arrived and what left."""
-        into, out = self._flows(transfers, extents)
+        into, out = self._flows(transfers, extents, substratum)
         return (y - out) + into, into, out
 
-    def _scale(self, transfers: Transfers, extents: Field, share: Field) -> tuple[Transfers, Field]:
-        """Scale what leaves voxel i by share[i]: transfers by their source, processes whole."""
+    def _scale(
+        self, transfers: Transfers, extents: Field, share: Field, substratum: Field | None = None
+    ) -> tuple[Transfers, Field, Field | None]:
+        """Scale what leaves voxel i by share[i]: transfers by their source, processes whole.
+
+        What binds from the suspension comes from the bulk, which is never
+        short; what detaches leaves the bottom voxel and is scaled with it.
+        """
         dims = len(self.shape)
         scaled = []
         for axis, upper in enumerate(transfers):
@@ -236,14 +280,16 @@ class ReactionTransport:
             share[None],
             1.0,
         ).min(axis=1)
-        return tuple(scaled), extents * limit
+        if substratum is not None:
+            substratum = np.where(substratum < 0, substratum * share[..., 0], substratum)
+        return tuple(scaled), extents * limit, substratum
 
     def _limited_update(
-        self, y: Field, transfers: Transfers, extents: Field
-    ) -> tuple[Field, Transfers, Field, int]:
-        new, into, out = self._apply(y, transfers, extents)
+        self, y: Field, transfers: Transfers, extents: Field, substratum: Field | None = None
+    ) -> tuple[Field, Transfers, Field, Field | None, int]:
+        new, into, out = self._apply(y, transfers, extents, substratum)
         if np.all(new >= 0):
-            return new, transfers, extents, 0
+            return new, transfers, extents, substratum, 0
         for rounds in range(1, 51):
             # A voxel is short only if more leaves than it holds and receives, so out > 0.
             short = new < 0
@@ -253,17 +299,19 @@ class ReactionTransport:
             # scaled by 4/6, a transfer of one unit in the last place rounds back up
             # to one. A voxel holding that little stops giving instead.
             share = np.where(short & (available < _TINY), 0.0, share)
-            transfers, extents = self._scale(transfers, extents, np.minimum(share, 1.0))
-            new, into, out = self._apply(y, transfers, extents)
+            transfers, extents, substratum = self._scale(
+                transfers, extents, np.minimum(share, 1.0), substratum
+            )
+            new, into, out = self._apply(y, transfers, extents, substratum)
             if np.all(new >= 0):
-                return new, transfers, extents, rounds
+                return new, transfers, extents, substratum, rounds
         over = out > y * _MARGIN  # the stock-only limiter
         share = np.where(over, y * _MARGIN / np.where(over, out, 1.0), 1.0)
         while True:
-            transfers, extents = self._scale(transfers, extents, share)
-            new, _, _ = self._apply(y, transfers, extents)
+            transfers, extents, substratum = self._scale(transfers, extents, share, substratum)
+            new, _, _ = self._apply(y, transfers, extents, substratum)
             if np.all(new >= 0):
-                return new, transfers, extents, 51
+                return new, transfers, extents, substratum, 51
             # Whatever rounding leaves below zero stops giving: a voxel that gives
             # nothing can only gain, so each pass settles more voxels for good.
             share = np.where(new < 0, 0.0, 1.0)
@@ -293,11 +341,18 @@ class ReactionTransport:
             h * ((1 - g) * f1 + g * f2) for f1, f2 in zip(s1.fluxes, s2.fluxes, strict=True)
         )
         extents = h * ((1 - g) * s1.reactions + g * s2.reactions)
-        new, transfers, extents, rounds = self._limited_update(y, transfers, extents)
+        substratum = None
+        if s1.substratum is not None and s2.substratum is not None:
+            substratum = h * ((1 - g) * s1.substratum + g * s2.substratum)
+        new, transfers, extents, substratum, rounds = self._limited_update(
+            y, transfers, extents, substratum
+        )
         scale = atol + rtol * np.maximum(reference, _magnitude(y, new))
         estimate, _ = system.solve(g * h * (s2.rate - s1.rate), scale=scale, tolerance=1e-2)
         top = -transfers[-1][..., -1]  # into the box through each top face
         imports = top.reshape(top.shape[0], -1).sum(axis=1) / self.spacing[-1]
+        if substratum is not None:  # and through the substratum: bound less detached
+            imports = imports + substratum.reshape(top.shape[0], -1).sum(axis=1) / self.spacing[-1]
         return new, imports, estimate, rounds, n1 + n2
 
     def starting_step(self, y: Field, reference: Field, atol: float, rtol: float) -> float:
