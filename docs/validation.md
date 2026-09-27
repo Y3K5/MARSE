@@ -243,6 +243,11 @@ in `tests/test_transport.py`:
     0.06–0.09.
   - GMRES with this preconditioner agrees with a direct solve.
   - The same system gives the same answer, bit for bit.
+  - The coarsest level's inverse, from MARSE's own blocked LU factorisation,
+    agrees with LAPACK's to 1e-12, including a matrix that needs pivoting. A
+    singular matrix is refused. Its dense matrix, assembled with one
+    application per voxel, equals the operator applied to each unknown in
+    turn, bit for bit.
 - **Output.** VTK frames read back exactly in double precision and to 1e-7 in
   single precision.
 
@@ -286,6 +291,11 @@ The tests, in `tests/test_reactive_transport.py`:
 - **The analytic Jacobian** of the rates matches finite differences of the
   rates as the engine evaluates them, including below zero, where it has no
   slope.
+- **The same result on any number of threads.** The 1-D example, run in
+  subprocesses with OpenBLAS at 1 and at 4 threads, ends with one final
+  digest. Before the coarsest level left LAPACK it did not: the digests
+  differed at 1, 2 and 4 threads, so a run replayed only on a machine with as
+  many cores.
 - **Schema, replay and command line.**
   - Every impossible domain is refused with a message that says why.
   - Random colonies are placed by the seed and replaced by it.

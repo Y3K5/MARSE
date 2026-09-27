@@ -366,6 +366,25 @@ results for the same manifest is always called out.
 
 ### Fixed
 
+- **Runs in space now replay bit for bit on any number of threads.** They used
+  to differ in their last digits between machines with different numbers of
+  cores. The coarsest multigrid level was inverted by LAPACK, and OpenBLAS
+  factorises a matrix of more than about 100 unknowns in parallel, so the
+  result depended on its thread count. The 1-D example's final digest was
+  different at 1, 2 and 4 threads, and `marse replay` reported a difference
+  on a machine with a different core count.
+  - **The fix.** MARSE now inverts that level itself, by a blocked LU
+    factorisation with partial pivoting, which agrees with LAPACK to about one
+    unit in the last place. Its matrix products run through OpenBLAS, which
+    computes them the same way on any number of threads. The rest is numpy's
+    elementwise arithmetic.
+  - **Faster assembly.** The level's matrix is assembled with one operator
+    application per voxel instead of one per unknown. It is the same matrix,
+    bit for bit.
+  - **Tested.** A test runs the 1-D example in subprocesses at 1 and 4
+    threads and requires one final digest.
+  - **Results changed.** Every run in space differs from before in its last
+    digits, and no more.
 - `marse` no longer switches every NumPy floating-point error to "warn" when a
   command ends. It now restores the caller's settings, where before it turned
   underflow into a warning, or into an error under `pytest`, for the rest of the

@@ -1183,7 +1183,13 @@ where it is rough:
   - The correction is interpolated back linearly between voxel centres.
   - Coarse operators are re-discretised, and the reaction blocks are averaged
     over each voxel's children.
-- **The coarsest grid** is solved exactly.
+- **The coarsest grid** is solved exactly, through its inverse, which MARSE
+  computes by a blocked LU factorisation with partial pivoting. LAPACK would
+  be faster, but OpenBLAS factorises a matrix of more than about 100 unknowns
+  in parallel, and its last bits then depend on the number of threads. The
+  blocked factorisation leaves those bits to matrix products, which OpenBLAS
+  computes the same way on any number of threads, and to numpy's elementwise
+  arithmetic.
 
 Each cycle then reduces the error by a similar factor on any grid, measured at
 0.06–0.09 from 8³ to 64×64×32 voxels. The work per cycle is proportional to
@@ -1192,7 +1198,8 @@ Schultz 1986), which keeps convergence robust when the reaction blocks make
 the system non-symmetric. Residuals are weighed on the same per-entry scale
 the error control uses, because biomass near $10^3$ mol m⁻³ and oxygen near
 $10^{-1}$ must be solved to the same relative accuracy. Every operation runs
-in a fixed order, so the same system gives the same answer, bit for bit.
+in a fixed order, so the same system gives the same answer, bit for bit, on
+any number of threads.
 Implemented as `marse.spatial.multigrid`.
 
 ### 9.8 Implicit reaction–transport integration
