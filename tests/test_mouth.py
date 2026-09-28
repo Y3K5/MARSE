@@ -1,12 +1,16 @@
-"""The mouth over a column of plaque: clearance, conservation and the coupling.
+"""The mouth over a column of plaque: clearance, the diet, conservation and the coupling.
 
 The criteria set before Stage S1 was built that these check:
 
 - G6a: with a constant flow and nothing taken up, the mouth's sugar falls by
   RESID / VMAX of the pool at every swallow, as Dawes's (1983) model says;
 - G3 and G6b: the box and the mouth together conserve every quantity,
-  counting what was secreted and swallowed, to rounding;
-- G6c: the answer does not depend on how far the mouth runs ahead of the box.
+  counting what was secreted, eaten, swallowed and expelled, to rounding;
+- G6c: the answer does not depend on how far the mouth runs ahead of the box,
+  even while a rinse mixes the film fast.
+
+The diet's rinses, drinks and foods each bring into the mouth what they state,
+when they state it, and the food they leave on the teeth goes where it is put.
 """
 
 import copy
@@ -20,7 +24,7 @@ import marse.core.reactive_transport as reactive_transport
 from marse.chemistry import ChargeBalance
 from marse.cli import main
 from marse.core.config import ConfigError
-from marse.oral import OralFluid, renewal_per_h
+from marse.oral import OralFluid, film_layers, renewal_per_h
 from marse.schemas import experiment_from_dict, network_from_dict
 from marse.spatial.grid import Grid
 
@@ -265,3 +269,275 @@ def test_a_mouth_is_written_back_as_read():
 
 def test_the_grid_of_a_scene_is_what_the_film_assumes():
     assert Grid((100,), 4.0).size_um[-1] == 400.0
+
+
+# --- the diet ----------------------------------------------------------------------------
+
+AREA_M2 = 2e-4  # the scene's plaque, 2 cm2
+FOOD = {"name": "food_sugar", "phase": "particulate", "formula": "C6H12O6"}
+DISSOLVING = {
+    "name": "dissolving",
+    "kind": "reaction",
+    "stoichiometry_mol_per_mol": {"food_sugar": -1, "sugar": 1},
+    "rate": {"maximum_per_h": 6, "proportional_to": "food_sugar"},
+}
+RINSE = {
+    "kind": "rinse",
+    "start_h": 0.0,
+    "duration_min": 1,
+    "volume_ml": 10,
+    "composition_mol_per_m3": {"sugar": 584},
+}
+
+
+def dieted(diet, *, pocket=False, **kwargs):
+    """The scene with a diet; with ``pocket``, food that sticks to the teeth and dissolves."""
+    raw = scene(**kwargs)
+    if pocket:
+        raw["components"].append(dict(FOOD))
+        raw["processes"].append(copy.deepcopy(DISSOLVING))
+    raw["domain"]["diet"] = copy.deepcopy(diet)
+    return raw
+
+
+def test_g3_every_intake_is_booked_as_eaten_and_conserved():
+    diet = [
+        RINSE,
+        {
+            "kind": "drink",
+            "start_h": 2 / 60,
+            "duration_min": 2,
+            "volume_ml": 20,
+            "composition_mol_per_m3": {"sugar": 300, "potassium": 10, "chloride": 10},
+        },
+        {
+            "kind": "food",
+            "start_h": 4.5 / 60,
+            "duration_min": 2.5,
+            "released_mmol": {"sugar": 5},
+            "retained": {"component": "food_sugar", "amount_mol_per_m2": 0.05},
+        },
+    ]
+    result = reactive_transport.run(
+        experiment_from_dict(dieted(diet, pocket=True, duration_h=9 / 60, timestep_h=0.5 / 60))
+    )
+    mouth = result.manifest.outputs["mouth"]
+    assert mouth["intakes"] == 3
+    assert result.manifest.models["diet"] == reactive_transport.DIET_VERSION
+    eaten = mouth["eaten_mol_per_m2"]
+    sugar = (584 * 10e-6 + 300 * 20e-6 + 5e-3) / AREA_M2
+    assert eaten["sugar"] == pytest.approx(sugar, rel=1e-12)
+    assert eaten["potassium"] == pytest.approx(10 * 20e-6 / AREA_M2, rel=1e-12)
+    assert eaten["food_sugar"] == pytest.approx(0.05, rel=1e-12)
+    assert mouth["expelled_mol_per_m2"]["sugar"] > 0.5 * 584 * 10e-6 / AREA_M2
+    assert mouth["swallowed_mol_per_m2"]["sugar"] > 0.0
+    for quantity, entry in mouth["balance"].items():
+        assert entry["largest_relative_residual"] < 1e-12, quantity
+    for quantity, entry in result.manifest.outputs["balance"].items():
+        assert entry["largest_relative_residual"] < 1e-12, quantity
+    # The box's imports count the pocket, placed in it, as well as what crossed into the film.
+    assert result.imported_mol_per_m2[-1][result.component_names.index("food_sugar")] == (
+        pytest.approx(0.05, rel=1e-12)
+    )
+
+
+def test_a_rinse_is_held_without_swallowing_then_expelled_to_the_resting_volume():
+    rinse = dict(RINSE, start_h=0.3 / 60)  # from 0.3 to 1.3 minutes, between records
+    result = reactive_transport.run(
+        experiment_from_dict(dieted([rinse], duration_h=3 / 60, timestep_h=0.25 / 60))
+    )
+    t = np.round(result.times_h * 60, 9)
+    volume, swallows = result.mouth["volume_ml"], result.mouth["swallows"]
+    held = (t >= 0.5) & (t <= 1.25)
+    assert np.all(volume[held] > 10.77)
+    assert np.all(np.diff(volume[held]) > 0)  # the glands keep secreting into it
+    assert np.all(swallows[held] == swallows[t == 0.25])
+    assert np.all(volume[t >= 1.5] <= 1.07)
+    assert result.manifest.outputs["mouth"]["intakes"] == 1
+
+
+def test_expelling_a_rinse_keeps_the_resting_share_and_changes_no_concentration():
+    config = experiment_from_dict(scene())
+    fluid = OralFluid(config.domain.mouth, config.domain.film, config.network.component_names)
+    fluid.take(10e-6)
+    held = fluid.thickness_um(fluid.volume_m3)
+    kept = fluid.expel()
+    assert fluid.volume_m3 == fluid.resting_m3
+    assert kept == pytest.approx(fluid.thickness_um(fluid.resting_m3) / held, rel=1e-15)
+
+
+def test_a_drink_is_swallowed_as_it_fills_the_mouth_and_sets_its_sugar():
+    drink = {
+        "kind": "drink",
+        "start_h": 0.0,
+        "duration_min": 2,
+        "volume_ml": 20,
+        "composition_mol_per_m3": {"sugar": 300},
+    }
+    result = reactive_transport.run(
+        experiment_from_dict(dieted([drink], duration_h=2 / 60, timestep_h=0.5 / 60))
+    )
+    # 10 mL a minute and the saliva with it: a swallow for every 0.3 mL.
+    assert result.mouth["swallows"][-1] > 2 * 10 / 0.3
+    # The mouth holds the drink diluted by the stimulated flow: c = q c_drink / (q + Q).
+    flow = result.mouth["flow_ml_per_min"][-1]
+    expected = 10 * 300 / (10 + flow)
+    assert result.mouth["sugar_mol_per_m3"][-1] == pytest.approx(expected, rel=0.02)
+
+
+def test_a_sweet_releases_its_sugar_steadily_without_liquid():
+    sweet = {"kind": "food", "start_h": 0.0, "duration_min": 5, "released_mmol": {"sugar": 10}}
+    result = reactive_transport.run(
+        experiment_from_dict(dieted([sweet], duration_h=5 / 60, timestep_h=0.5 / 60))
+    )
+    mouth = result.manifest.outputs["mouth"]
+    assert mouth["eaten_mol_per_m2"]["sugar"] == pytest.approx(10e-3 / AREA_M2, rel=1e-12)
+    assert mouth["eaten_mol_per_m2"]["potassium"] == 0.0
+    # Tasted, the sugar raises the flow well above the resting 0.3 mL per minute.
+    assert np.all(result.mouth["flow_ml_per_min"][2:] > 1.0)
+    assert np.all(np.diff(result.mouth["sugar_mol_per_m3"][:3]) > 0)
+
+
+def test_food_left_on_the_teeth_goes_into_the_film_over_its_region():
+    raw = dieted(
+        [
+            {
+                "kind": "food",
+                "start_h": 0.0,
+                "duration_min": 0.5,
+                "released_mmol": {"sugar": 1},
+                "retained": {
+                    "component": "food_sugar",
+                    "amount_mol_per_m2": 0.2,
+                    "region_um": [0, 8],
+                },
+            }
+        ],
+        pocket=True,
+        duration_h=1 / 60,
+        timestep_h=0.5 / 60,
+    )
+    raw["domain"]["voxels"] = [4, 100]  # four columns of 4 um: the region covers two
+    for colony in raw["domain"]["colonies"]:
+        colony["center_um"] = [8]  # 300 um of plaque under all four
+    config = experiment_from_dict(raw)
+    result = reactive_transport.run(config)
+    food = result.final_state[result.component_names.index("food_sugar")]
+    layers = film_layers(config.domain.grid, config.domain.film)
+    assert np.all(food[:2, -layers:] > 0.0)
+    assert np.all(food[2:] == 0.0)
+    assert np.all(food[:, :-layers] == 0.0)
+    eaten = result.manifest.outputs["mouth"]["eaten_mol_per_m2"]["food_sugar"]
+    assert eaten == pytest.approx(0.2 * 8 / 16, rel=1e-12)  # per m2 of the whole substratum
+    # Half an hour's first-order release at 6 per hour has dissolved some of it.
+    sugar = result.manifest.outputs["totals_mol_per_m2"]
+    assert sugar["food_sugar"] < eaten
+
+
+def test_mixing_during_an_intake_brings_its_sugar_to_the_plaque_faster():
+    def plaque_sugar(mixing):
+        rinse = dict(RINSE, mixing_per_s=mixing)
+        result = reactive_transport.run(
+            experiment_from_dict(dieted([rinse], duration_h=1 / 60, timestep_h=0.5 / 60))
+        )
+        return result.final_state[NAMES.index("sugar"), :75].mean()
+
+    assert plaque_sugar(1.0) > 1.5 * plaque_sugar(0.0)
+
+
+def test_a_diet_that_starts_after_the_run_changes_nothing():
+    plain = reactive_transport.run(experiment_from_dict(scene(sugar=100.0, duration_h=2 / 60)))
+    later = dieted([dict(RINSE, start_h=1.0)], sugar=100.0, duration_h=2 / 60)
+    dieted_run = reactive_transport.run(experiment_from_dict(later))
+    digest = plain.manifest.outputs["final_state_sha256"]
+    assert dieted_run.manifest.outputs["final_state_sha256"] == digest
+    assert dieted_run.manifest.outputs["mouth"]["intakes"] == 0
+
+
+def test_g6c_a_rinse_that_mixes_the_film_fast_does_not_depend_on_the_spans(monkeypatch):
+    raw = dieted([RINSE], duration_h=6 / 60, timestep_h=0.5 / 60)
+    long = reactive_transport.run(experiment_from_dict(raw))
+    monkeypatch.setattr(reactive_transport, "_LONGEST_SPAN_S", 5.0)
+    short = reactive_transport.run(experiment_from_dict(raw))
+    assert short.manifest.outputs["mouth"]["spans"] > 2 * long.manifest.outputs["mouth"]["spans"]
+    assert np.max(np.abs(long.ph["substratum_mean"] - short.ph["substratum_mean"])) < 1e-3
+    np.testing.assert_allclose(
+        long.mouth["sugar_mol_per_m3"], short.mouth["sugar_mol_per_m3"], rtol=1e-3
+    )
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda d: d.pop("mouth"), "a diet is taken into the mouth"),
+        (lambda d: d["diet"][0].update(kind="snack"), "kind"),
+        (lambda d: d["diet"][0].pop("volume_ml"), "a rinse needs volume_ml"),
+        (lambda d: d["diet"][0].update(released_mmol={"sugar": 1}), "give it as composition"),
+        (lambda d: d["diet"][0].update(start_h=-1), "must not be negative"),
+        (lambda d: d["diet"][0].update(duration_min=0), "must be positive"),
+        (lambda d: d["diet"][0].update(mixing_per_s=-1), "must not be negative"),
+        (lambda d: d["diet"][0]["composition_mol_per_m3"].update(bacteria=1), "a rinse holds"),
+        (lambda d: d["diet"][1].update(volume_ml=5), "food adds no liquid"),
+        (lambda d: d["diet"][1].pop("released_mmol"), "food needs released_mmol"),
+        (lambda d: d["diet"][1].update(start_h=0.5 / 60), "before intake 0 ends"),
+        (
+            lambda d: d["diet"][1]["retained"].update(component="sugar"),
+            "food left on the teeth is particulate",
+        ),
+        (lambda d: d["diet"][1]["retained"].update(component="bacteria"), "no process consumes"),
+        (lambda d: d["diet"][1]["retained"].update(region_um=[0, 4]), "needs 0 bounds"),
+        (lambda d: d["diet"][1]["retained"].update(amount_mol_per_m2=0), "must be positive"),
+    ],
+)
+def test_impossible_diets_are_refused(change, message):
+    diet = [
+        RINSE,
+        {
+            "kind": "food",
+            "start_h": 2 / 60,
+            "duration_min": 1,
+            "released_mmol": {"sugar": 1},
+            "retained": {"component": "food_sugar", "amount_mol_per_m2": 0.01},
+        },
+    ]
+    raw = dieted(diet, pocket=True)
+    change(raw["domain"])
+    with pytest.raises(ConfigError, match=message):
+        experiment_from_dict(raw)
+
+
+def test_a_diet_is_written_back_as_read_and_replays(tmp_path, capsys):
+    diet = [
+        RINSE,
+        {
+            "kind": "food",
+            "start_h": 1.5 / 60,
+            "duration_min": 1,
+            "released_mmol": {"sugar": 2},
+            "mixing_per_s": 0.5,
+            "retained": {"component": "food_sugar", "amount_mol_per_m2": 0.01},
+        },
+    ]
+    raw = dieted(diet, pocket=True, duration_h=3 / 60)
+    config = experiment_from_dict(raw)
+    again = experiment_from_dict(json.loads(json.dumps(config.to_dict())))
+    assert again == config
+    written = config.to_dict()["domain"]["diet"]
+    assert written[0]["mixing_per_s"] == 1.0  # the default, written out
+    assert written[1]["retained"]["region_um"] == []
+    path = tmp_path / "diet.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    assert main(["check", str(path)]) == 0
+    out = " ".join(capsys.readouterr().out.split())
+    assert "rinse at 0 min for 1 min: 10 mL holding sugar 584 mol per m3" in out
+    assert "food at 1.5 min for 1 min: releases sugar 2 mmol; mixes the film at 0.5 per s" in out
+    assert "leaves 0.01 mol per m2 of food_sugar on the teeth" in out
+    assert main(["run", str(path), "-o", str(tmp_path / "out")]) == 0
+    out = " ".join(capsys.readouterr().out.split())
+    assert "counting what was secreted, eaten, swallowed and expelled" in out
+    assert "counting what crossed the film (food left on the teeth included)" in out
+    assert (
+        main(["replay", str(tmp_path / "out" / "manifest.json"), "-o", str(tmp_path / "again")])
+        == 0
+    )
+    assert "reproduced the recorded results exactly" in capsys.readouterr().out

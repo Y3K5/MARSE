@@ -76,6 +76,7 @@ class ReservoirPath:
     composition ``drink_mol_per_m3``, the rest is secretion of composition
     ``secreted_mol_per_m3``. ``supply_per_h`` adds amounts without volume, such
     as sugar dissolving from a sweet, per unit area per hour, in mol/m3 x um.
+    What is drunk or supplied is what :meth:`taken` returns.
     """
 
     start_h: float
@@ -128,6 +129,16 @@ class ReservoirPath:
     def added(self, t0_h: float, t1_h: float) -> NDArray[np.float64]:
         """What enters per unit area between two times, exactly as the thickness grows."""
         return self._sources(self.at(t1_h)[0] - self.at(t0_h)[0], t1_h - t0_h)
+
+    def taken(self, t0_h: float, t1_h: float) -> NDArray[np.float64]:
+        """The part of :meth:`added` that was drunk or supplied rather than secreted."""
+        span = t1_h - t0_h
+        taken = np.zeros_like(self.secreted_mol_per_m3)
+        if self.drink_mol_per_m3 is not None:
+            taken = taken + self.drink_mol_per_m3 * (self.drink_um_per_h * span)
+        if self.supply_per_h is not None:
+            taken = taken + self.supply_per_h * span
+        return taken
 
 
 class BorderedSystem:

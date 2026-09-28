@@ -19,9 +19,14 @@ the box, so the pool the box exchanges with is the mouth's liquid less the
 film. Its composition is solved with the box (:mod:`marse.core.reservoir`).
 The mouth runs ahead of the box to the end of each span, or to the next
 swallow, with the stimulus it holds at the start, diluted by the saliva it
-secretes: that sets its volume over the span. The box's uptake of the
-stimulus over the span changes the flow only from the next span on, and the
-swallows it moves are booked exactly wherever they fall.
+secretes and added to by what is eaten or drunk (:mod:`marse.oral.diet`):
+that sets its volume over the span. It expects the plaque to go on taking up,
+or giving back, the stimulus at the rate it did over the span before; a
+change in that rate reaches the flow from the next span on, and the swallows
+it moves are booked exactly wherever they fall.
+
+A rinse is held without swallowing, whatever the volume, and expelled at its
+end down to RESID; like a swallow, that changes no concentration.
 """
 
 from __future__ import annotations
@@ -31,6 +36,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from marse.oral.diet import NOTHING, Inflow
 from marse.schemas.domain import Film, Mouth
 
 __all__ = ["OralFluid", "Stretch"]
@@ -109,40 +115,52 @@ class OralFluid:
 
     # -- a span ---------------------------------------------------------------------------
 
-    def run_ahead(self, stimulus_mol: float, most_s: float) -> Stretch:
+    def run_ahead(
+        self,
+        stimulus_mol: float,
+        most_s: float,
+        inflow: Inflow = NOTHING,
+        returned_mol_per_s: float = 0.0,
+    ) -> Stretch:
         """The volume from now until ``most_s`` seconds, or until the mouth is full.
 
         Classical Runge-Kutta in steps of a quarter of a second, the flow
-        following the stimulus as secretion dilutes it. A step that would
-        overfill the mouth is shortened to end at the swallow, and the volume
-        there is set to exactly VMAX.
+        following the stimulus as secretion dilutes it and an intake adds to
+        it; a drink adds its own flow. ``returned_mol_per_s`` is how fast the
+        plaque gave the stimulus back over the span before, if it did, which
+        the mouth expects it to go on doing. A step that would overfill the
+        mouth is shortened to end at the swallow, and the volume there is set
+        to exactly VMAX. A rinse is held: the mouth does not swallow it.
         """
+        tasted = inflow.stimulus_mol_per_s(self.stimulus) + returned_mol_per_s
+        drink = inflow.liquid_m3_per_s
 
-        def flow(volume: float) -> float:
-            return self.flow_m3_per_s(stimulus_mol / (volume - self.film_m3))
+        def flow(t: float, volume: float) -> float:
+            held = stimulus_mol + tasted * t
+            return self.flow_m3_per_s(held / (volume - self.film_m3)) + drink
 
         volume, t = self.volume_m3, 0.0
-        times, volumes, flows = [0.0], [volume], [flow(volume)]
+        times, volumes, flows = [0.0], [volume], [flow(t, volume)]
         swallowed = False
         while t < most_s * (1.0 - 1e-12):
             dt = min(_RESOLUTION_S, most_s - t)
-            rate = flow(volume)
+            rate = flow(t, volume)
             to_full = (self.full_m3 - volume) / rate
             # Full within this step, or within rounding of its end: swallow, landing no later
             # than the span's end, so a swallow on a span's last instant is never put off.
-            if to_full <= dt * (1.0 + 1e-9):
+            if not inflow.held and to_full <= dt * (1.0 + 1e-9):
                 dt, swallowed = min(max(to_full, 0.0), most_s - t), True
             k1 = rate
-            k2 = flow(volume + 0.5 * dt * k1)
-            k3 = flow(volume + 0.5 * dt * k2)
-            k4 = flow(volume + dt * k3)
+            k2 = flow(t + 0.5 * dt, volume + 0.5 * dt * k1)
+            k3 = flow(t + 0.5 * dt, volume + 0.5 * dt * k2)
+            k4 = flow(t + dt, volume + dt * k3)
             volume = volume + dt / 6.0 * (k1 + 2 * k2 + 2 * k3 + k4)
             t += dt
             if swallowed:
                 volume = self.full_m3
             times.append(t)
             volumes.append(volume)
-            flows.append(flow(volume))
+            flows.append(flow(t, volume))
             if swallowed:
                 break
         return Stretch(np.array(times), np.array(volumes), np.array(flows), t, swallowed)
@@ -155,4 +173,14 @@ class OralFluid:
         kept = self.thickness_um(self.resting_m3) / self.thickness_um(self.full_m3)
         self.volume_m3 = self.resting_m3
         self.swallows += 1
+        return kept
+
+    def take(self, volume_m3: float) -> None:
+        """Take a rinse into the mouth: its volume adds to the liquid at once."""
+        self.volume_m3 += volume_m3
+
+    def expel(self) -> float:
+        """Expel everything above the resting volume; the share of the pool that stays."""
+        kept = self.thickness_um(self.resting_m3) / self.thickness_um(self.volume_m3)
+        self.volume_m3 = self.resting_m3
         return kept

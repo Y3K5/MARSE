@@ -145,6 +145,8 @@ def _summarise_in_space(result: ReactiveTransportResult) -> None:
     boundary = "the top and the substratum" if "surface" in outputs else "the top"
     if "mouth" in outputs:
         boundary = "the film and the substratum" if "surface" in outputs else "the film"
+        if any(intake.retained for intake in result.config.domain.diet):
+            boundary += " (food left on the teeth included)"
     print(f"{'final':<24}   mol per m2 of surface   entered through {boundary}")
     for name, value in outputs["totals_mol_per_m2"].items():
         entered = outputs["imported_mol_per_m2"][name]
@@ -180,10 +182,14 @@ def _summarise_mouth(result: ReactiveTransportResult) -> None:
         print(f"  {name:<24} {value:>12.6g}")
     if result.mouth is not None and "ph" in result.mouth:
         print(f"  {'pH':<24} {result.mouth['ph'][-1]:>12.3f}")
-    print(
-        f"  box and mouth together, counting what was secreted and swallowed, "
-        f"conserved to {worst:.1e}"
-    )
+    counted = "secreted and swallowed"
+    if "intakes" in mouth:
+        counted = "secreted, eaten, swallowed and expelled"
+        print(f"  {'taken in':<24} mol per m2 of plaque, from {mouth['intakes']} intake(s)")
+        for name, value in mouth["eaten_mol_per_m2"].items():
+            if value:
+                print(f"  {name:<24} {value:>12.6g}")
+    print(f"  box and mouth together, counting what was {counted}, conserved to {worst:.1e}")
 
 
 def _summarise_surface(result: ReactiveTransportResult) -> None:
@@ -658,6 +664,32 @@ def _report_mouth(config: ReactiveTransportConfig) -> None:
     )
     saliva = ", ".join(f"{n} {v:g}" for n, v in mouth.saliva_mol_per_m3.items() if v)
     print(f"  saliva, mol per m3: {saliva or 'nothing'}")
+    for intake in domain.diet:
+        if intake.kind == "food":
+            released = intake.released_mmol or {}
+            what = ", ".join(f"{n} {v:g}" for n, v in released.items() if v)
+            brings = f"releases {what or 'nothing'} mmol"
+        else:
+            held = intake.composition_mol_per_m3 or {}
+            what = ", ".join(f"{n} {v:g}" for n, v in held.items() if v)
+            brings = f"{intake.volume_ml:g} mL holding {what or 'nothing'} mol per m3"
+        print(
+            f"  {intake.kind:<11} at {_clock(intake.start_h)} for {intake.duration_min:g} min: "
+            f"{brings}; mixes the film at {intake.mixing_per_s:g} per s"
+        )
+        if intake.retained is not None:
+            print(
+                f"              leaves {intake.retained.amount_mol_per_m2:g} mol per m2 of "
+                f"{intake.retained.component} on the teeth"
+            )
+
+
+def _clock(hours: float) -> str:
+    """A time in the run, in hours and minutes to a tenth of a minute."""
+    whole, minutes = divmod(round(hours * 60.0, 1), 60.0)
+    if not whole:
+        return f"{minutes:g} min"
+    return f"{whole:g} h {minutes:g} min" if minutes else f"{whole:g} h"
 
 
 def _report_surface(config: ReactiveTransportConfig) -> None:

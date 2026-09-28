@@ -349,14 +349,53 @@ results for the same manifest is always called out.
   - **Verified:**
     - the mouth's clearance against Dawes's closed form (3.7e-11 over ten
       swallows);
-    - the box and the mouth conserving everything over an hour (6.8e-16);
-    - the same pH, within 4.1e-5, whether the mouth runs a minute or 5 s
+    - the box and the mouth conserving everything over an hour (5.6e-16);
+    - the same pH, within 6.1e-5, whether the mouth runs a minute or 5 s
       ahead of the box;
     - the exchange of a film with its pool against its closed form;
     - the bordered linear system against the Jacobian;
     - replay.
 
     See docs/validation.md, "The mouth and its film".
+
+- **What is eaten and drunk: Stage S, increment S1, part three**
+  (`marse.oral.diet`, [docs/networks.md](docs/networks.md#the-diet)). A
+  mouth can now take a diet: intakes listed in order, one at a time, each
+  from a start for a duration. The equations are in docs/theory.md §4.9.
+  - **A rinse** is taken in at once, held without swallowing, and expelled
+    down to the resting volume at its end. A Stephan curve is the plaque's
+    response to one.
+  - **A drink** is sipped steadily and swallowed as the mouth fills. **A
+    food** releases what it holds into the saliva steadily, without liquid,
+    as a sweet sucked slowly does. The mouth tastes what they bring, and its
+    flow rises.
+  - **Mixing.** While an intake lasts, the film is mixed with the mouth's
+    liquid (Dibdin 1990), once a second unless the intake says otherwise.
+  - **Food left on the teeth.** An intake may leave an amount of a
+    particulate component in the film when it ends, over a region of the
+    substratum. A process of the network releases what dissolves from it, as
+    starchy particles held on the teeth release sugars (Kashket, Zhang and
+    Van Houte 1996).
+  - **Booked.** The ledger of the box and the mouth counts what was eaten and
+    expelled; the box's own counts the food placed in it. The manifest records
+    the intakes taken, what was eaten and expelled, and the diet's model
+    version. `marse check` lists the diet.
+  - **The mouth expects the plaque to go on giving sugar back** at the rate it
+    just did, when it runs ahead of the box. After a rinse, the mouth's sugar
+    had changed by 1% with the length of the span; it now changes by 8e-4.
+    Runs under a mouth change accordingly.
+  - **Verified:**
+    - every intake booked as eaten within 5e-15 of what was stated, and the
+      box and the mouth conserving everything over an hour with a rinse, a
+      sipped drink and a sweet that sticks (1.1e-15);
+    - the same pH, within 8.6e-5 over an hour after a rinse, whether the
+      mouth runs a minute or 5 s ahead of the box;
+    - a rinse held and expelled, a drink setting the mouth's sugar, a sweet
+      releasing its sugar, and food placed only over its region;
+    - a diet that starts after the run changing nothing, bit for bit;
+    - replay.
+
+    See docs/validation.md, "The diet".
 
 - **Ecosystem runs are reproducible.** `marse ecosystem` writes a
   `manifest.json` beside its frames and viewer, and `marse replay` reproduces

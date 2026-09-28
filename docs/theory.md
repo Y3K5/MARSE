@@ -987,11 +987,63 @@ up, a component has fallen to $(H_{\text{resid}}/H_{\max})^N$ of what it was.
 - **Each layer of the film is renewed independently**, at $u/l$. Within a
   voxel the film is mixed.
 - **The flow over each span** (§9.9) follows the stimulus the pool holds at
-  the span's start, diluted by secretion. The box's uptake of the stimulus
-  reaches the flow one span later, at most a minute. This changes when the
-  swallows fall, not what is conserved.
+  the span's start, diluted by secretion and added to by what an intake
+  brings (§4.9) and by what the plaque gave back over the span before. A
+  change in what the plaque takes up or gives back reaches the flow one span
+  later, at most a minute. This changes when the swallows fall, not what is
+  conserved.
 
 Implemented as `marse.oral` and `marse.core.reservoir`.
+
+### 4.9 The diet
+
+After sugar, the pH of plaque falls within minutes to a minimum, then returns
+over half an hour or more: the Stephan curve (Stephan 1944). How deep and how
+long depends on how the sugar comes. A high-sugar eater differs from a
+low-sugar eater in more than the amount: sugar stays in the mouth for longer,
+sipped in drinks or sucked from sweets, and food retained on the teeth holds
+it where the plaque is. Particles of starchy foods stayed on the teeth for up
+to 20 minutes and accumulated sugars and acids (Kashket, Zhang and Van Houte
+1996). A `diet` lists intakes, each from a start for a duration $T$, one at a
+time. In the notation of §4.8:
+
+- **A rinse** of volume $V_r$ and composition $c_r$ is taken in at once: $V$
+  gains $V_r$, and $n$ gains $c_r V_r / A$. The mouth holds it without
+  swallowing, secreting as it tastes it, and at the end expels everything
+  above RESID. $H$ falls to $H_{	ext{resid}}$ and $n$ in proportion, as at a
+  swallow.
+- **A drink** of volume $V_d$ and composition $c_d$ flows in at $q = V_d/T$:
+  $dV/dt = Q + q$, and $dn/dt$ gains $c_d\, q/A$. The mouth swallows at VMAX
+  as before.
+- **A food** releases amounts $R$ at $R/T$ without liquid: $dn/dt$ gains
+  $R/(AT)$.
+- **Mixing.** While an intake lasts, each voxel of the film also exchanges
+  with the pool at $k_{	ext{mix}}$, so that $k(\zeta) = u(\zeta)/l +
+  k_{	ext{mix}}$. Dibdin (1990) mixed the film with the mouth's liquid while
+  sugar was in the mouth. The default, once a second, brings the film to the
+  mouth's composition within seconds.
+- **Food left on the teeth.** An amount $M$ per unit area of a particulate
+  component is placed in the film over its region when the intake ends, at
+  $M/\delta$ in each voxel. It does not move and is not renewed. A process of
+  the network, such as $r = k\,c_{	ext{food}}$, releases what dissolves from
+  it, which diffuses into the plaque and out through the film.
+
+What an intake brings is booked as eaten on the ledger of the box and the
+mouth together (§9.5), and what a rinse takes away as expelled. Food placed in
+the film enters the box, and the box's own ledger books it so.
+
+**Assumptions.**
+
+- **Steady intakes.** A drink or a food enters at a constant rate over its
+  duration. Sips and bites are smoothed out; a series of short intakes can
+  resolve them.
+- **A food brings no liquid.** A dissolving sweet adds little volume beside
+  the saliva it stimulates.
+- **Mixing only while an intake lasts**, the same through the film's depth.
+  Between intakes the film is renewed by its flow alone.
+- **Retained food lies in the film**, above the plaque, not within it.
+
+Implemented as `marse.oral.diet`.
 
 ## 5. Reaction–diffusion coupling
 
@@ -1715,11 +1767,17 @@ therefore solved with the box, in the same implicit steps.
   method, and they are amounts to the update, which books every transfer on
   both sides.
 - **Spans.** The mouth runs ahead of the box to the end of each span, at most
-  a minute, or to its next swallow. Classical Runge–Kutta in steps of a
-  quarter of a second gives its volume, and $H(t)$ is the cubic Hermite
-  polynomial through the samples. A swallow ends a span. What was secreted
-  over a step is $c_{\text{secreted}}\,[H(t+h) - H(t)]$, so it adds up exactly
-  over a span.
+  a minute, to its next swallow, or to the next start or end of an intake
+  (§4.9). Classical Runge–Kutta in steps of a quarter of a second gives its
+  volume, and $H(t)$ is the cubic Hermite polynomial through the samples. A
+  swallow ends a span. What was secreted over a step is
+  $c_{\text{secreted}}\,[H(t+h) - H(t)]$, so it adds up exactly over a span.
+- **The flow's lag.** The flow over a span depends on the stimulus in the
+  pool, which the box changes as the span goes. The run-ahead expects the box
+  to go on giving the stimulus back at the rate it did over the span before.
+  Without that, after a rinse, the mouth's sugar changed by 1% between spans
+  of 60 s and 5 s, and the plaque's pH by $2 \times 10^{-4}$; with it, by
+  $8 \times 10^{-4}$ and $9 \times 10^{-5}$.
 - **Exchange as processes.** The exchange with each voxel runs as two
   processes per component: one brings the pool's liquid in at $k\,m$, one
   takes the voxel's back at $k\,c$. The positivity limiter of §9.6 treats the
@@ -1742,7 +1800,10 @@ therefore solved with the box, in the same implicit steps.
 
 The prototype of this coupling gave the same pH, within $9 \times 10^{-5}$,
 with spans of 60 s and 5 s. It conserved the box and the mouth together to
-$7 \times 10^{-16}$ over an hour. Implemented as `marse.core.reservoir`.
+$7 \times 10^{-16}$ over an hour. After a rinse of 10% sucrose held for a
+minute, MARSE gives the same pH within $9 \times 10^{-5}$ over an hour with
+spans of 60 s and 5 s ([validation](validation.md#the-diet)). Implemented as
+`marse.core.reservoir`.
 
 ## 10. Assumptions and limitations
 
@@ -1782,6 +1843,10 @@ cannot do:
 11. **pH from local electroneutrality.** The hydrogen ion concentration keeps
     every voxel neutral while ions diffuse independently, with conditional
     constants and no activities (§3.8).
+12. **One well-mixed mouth, and a steady diet.** The saliva is one pool,
+    secreted and swallowed as Dawes (1983) described, over one site of
+    plaque. Drinks and foods enter it steadily over their durations, one at a
+    time (§4.8, §4.9).
 
 **Simulation output is not experimental evidence.** MARSE produces
 consequences of stated assumptions. Conclusions are phrased as "under these
@@ -1838,32 +1903,34 @@ tabulated in [`docs/parameters.md`](parameters.md).
 24. Henze, M., Gujer, W., Mino, T. & van Loosdrecht, M.C.M. (2000) *Activated Sludge Models ASM1, ASM2, ASM2d and ASM3.* IWA Scientific and Technical Report No. 9. IWA Publishing, London.
 25. Hsu, S.-B., Hubbell, S.P. & Waltman, P. (1977) A mathematical theory for single-nutrient competition in continuous cultures of micro-organisms. *SIAM Journal on Applied Mathematics* **32**:366–383. [doi:10.1137/0132030](https://doi.org/10.1137/0132030)
 26. Huber, M.L., Perkins, R.A., Laesecke, A. *et al.* (2009) New international formulation for the viscosity of H₂O. *Journal of Physical and Chemical Reference Data* **38**:101–125. [doi:10.1063/1.3088050](https://doi.org/10.1063/1.3088050)
-27. Kovárová-Kovar, K. & Egli, T. (1998) Growth kinetics of suspended microbial cells: from single-substrate-controlled growth to mixed-substrate kinetics. *Microbiology and Molecular Biology Reviews* **62**:646–666. [doi:10.1128/mmbr.62.3.646-666.1998](https://doi.org/10.1128/mmbr.62.3.646-666.1998)
-28. Kreft, J.-U., Picioreanu, C., Wimpenny, J.W.T. & van Loosdrecht, M.C.M. (2001) Individual-based modelling of biofilms. *Microbiology* **147**:2897–2912. [doi:10.1099/00221287-147-11-2897](https://doi.org/10.1099/00221287-147-11-2897)
-29. Lagerlöf, F. & Dawes, C. (1984) The volume of saliva in the mouth before and after swallowing. *Journal of Dental Research* **63**:618–621. [doi:10.1177/00220345840630050201](https://doi.org/10.1177/00220345840630050201)
-30. Lardon, L.A., Merkey, B.V., Martins, S. *et al.* (2011) iDynoMiCS: next-generation individual-based modelling of biofilms. *Environmental Microbiology* **13**:2416–2434. [doi:10.1111/j.1462-2920.2011.02414.x](https://doi.org/10.1111/j.1462-2920.2011.02414.x)
-31. Lévêque, A. (1928) Les lois de la transmission de chaleur par convection. *Annales des Mines*, 12th series, **13**:201–299, 305–362, 381–415.
-32. Luedeking, R. & Piret, E.L. (1959) A kinetic study of the lactic acid fermentation. Batch process at controlled pH. *Journal of Biochemical and Microbiological Technology and Engineering* **1**:393–412. [doi:10.1002/jbmte.390010406](https://doi.org/10.1002/jbmte.390010406)
-33. Mei, L., Ren, Y., Busscher, H.J., Chen, Y. & van der Mei, H.C. (2009) Poisson analysis of streptococcal bond-strengthening on saliva-coated enamel. *Journal of Dental Research* **88**:841–845. [doi:10.1177/0022034509342523](https://doi.org/10.1177/0022034509342523)
-34. Meinders, J.M., van der Mei, H.C. & Busscher, H.J. (1995) Deposition efficiency and reversibility of bacterial adhesion under flow. *Journal of Colloid and Interface Science* **176**:329–341. [doi:10.1006/jcis.1995.9960](https://doi.org/10.1006/jcis.1995.9960)
-35. Monod, J. (1949) The growth of bacterial cultures. *Annual Review of Microbiology* **3**:371–394. [doi:10.1146/annurev.mi.03.100149.002103](https://doi.org/10.1146/annurev.mi.03.100149.002103)
-36. Picioreanu, C., van Loosdrecht, M.C.M. & Heijnen, J.J. (1998) Mathematical modeling of biofilm structure with a hybrid differential-discrete cellular automaton approach. *Biotechnology and Bioengineering* **58**:101–116. [doi:10.1002/(SICI)1097-0290(19980405)58:1<101::AID-BIT11>3.0.CO;2-M](https://doi.org/10.1002/(SICI)1097-0290(19980405)58:1%3C101::AID-BIT11%3E3.0.CO;2-M)
-37. Pirt, S.J. (1965) The maintenance energy of bacteria in growing cultures. *Proceedings of the Royal Society B* **163**:224–231. [doi:10.1098/rspb.1965.0069](https://doi.org/10.1098/rspb.1965.0069)
-38. Pirt, S.J. (1967) A kinetic study of the mode of growth of surface colonies of bacteria and fungi. *Journal of General Microbiology* **47**:181–197. [doi:10.1099/00221287-47-2-181](https://doi.org/10.1099/00221287-47-2-181)
-39. Prothero, A. & Robinson, A. (1974) On the stability and accuracy of one-step methods for solving stiff systems of ordinary differential equations. *Mathematics of Computation* **28**:145–162. [doi:10.1090/S0025-5718-1974-0331793-2](https://doi.org/10.1090/S0025-5718-1974-0331793-2)
-40. Ratkowsky, D.A., Lowry, R.K., McMeekin, T.A., Stokes, A.N. & Chandler, R.E. (1983) Model for bacterial culture growth rate throughout the entire biokinetic temperature range. *Journal of Bacteriology* **154**:1222–1226. [doi:10.1128/jb.154.3.1222-1226.1983](https://doi.org/10.1128/jb.154.3.1222-1226.1983)
-41. Ratkowsky, D.A., Olley, J., McMeekin, T.A. & Ball, A. (1982) Relationship between temperature and growth rate of bacterial cultures. *Journal of Bacteriology* **149**:1–5. [doi:10.1128/jb.149.1.1-5.1982](https://doi.org/10.1128/jb.149.1.1-5.1982)
-42. Rittmann, B.E. & McCarty, P.L. (2001) *Environmental Biotechnology: Principles and Applications.* McGraw-Hill, New York.
-43. Roels, J.A. (1983) *Energetics and Kinetics in Biotechnology.* Elsevier Biomedical Press, Amsterdam.
-44. Rosso, L., Lobry, J.R. & Flandrois, J.P. (1993) An unexpected correlation between cardinal temperatures of microbial growth highlighted by a new model. *Journal of Theoretical Biology* **162**:447–463. [doi:10.1006/jtbi.1993.1099](https://doi.org/10.1006/jtbi.1993.1099)
-45. Rosso, L., Lobry, J.R., Bajard, S. & Flandrois, J.P. (1995) Convenient model to describe the combined effects of temperature and pH on microbial growth. *Applied and Environmental Microbiology* **61**:610–616. [doi:10.1128/aem.61.2.610-616.1995](https://doi.org/10.1128/aem.61.2.610-616.1995)
-46. Saad, Y. & Schultz, M.H. (1986) GMRES: a generalized minimal residual algorithm for solving nonsymmetric linear systems. *SIAM Journal on Scientific and Statistical Computing* **7**:856–869. [doi:10.1137/0907058](https://doi.org/10.1137/0907058)
-47. Shu, C.-W. & Osher, S. (1988) Efficient implementation of essentially non-oscillatory shock-capturing schemes. *Journal of Computational Physics* **77**:439–471. [doi:10.1016/0021-9991(88)90177-5](https://doi.org/10.1016/0021-9991(88)90177-5)
-48. Stewart, P.S. (1998) A review of experimental measurements of effective diffusive permeabilities and effective diffusion coefficients in biofilms. *Biotechnology and Bioengineering* **59**:261–272. [doi:10.1002/(SICI)1097-0290(19980805)59:3<261::AID-BIT1>3.0.CO;2-9](https://doi.org/10.1002/(SICI)1097-0290(19980805)59:3%3C261::AID-BIT1%3E3.0.CO;2-9)
-49. Stewart, P.S. (2003) Diffusion in biofilms. *Journal of Bacteriology* **185**:1485–1491. [doi:10.1128/jb.185.5.1485-1491.2003](https://doi.org/10.1128/jb.185.5.1485-1491.2003)
-50. Stumm, W. & Morgan, J.J. (1996) *Aquatic Chemistry: Chemical Equilibria and Rates in Natural Waters*, 3rd edn. Wiley, New York. ISBN 978-0-471-51185-4.
-51. Walters, M.C., Roe, F., Bugnicourt, A., Franklin, M.J. & Stewart, P.S. (2003) Contributions of antibiotic penetration, oxygen limitation, and low metabolic activity to tolerance of *Pseudomonas aeruginosa* biofilms. *Antimicrobial Agents and Chemotherapy* **47**:317–323. [doi:10.1128/aac.47.1.317-323.2003](https://doi.org/10.1128/aac.47.1.317-323.2003)
-52. Wanner, O. & Gujer, W. (1986) A multispecies biofilm model. *Biotechnology and Bioengineering* **28**:314–328. [doi:10.1002/bit.260280304](https://doi.org/10.1002/bit.260280304)
-53. Werner, E., Roe, F., Bugnicourt, A. *et al.* (2004) Stratified growth in *Pseudomonas aeruginosa* biofilms. *Applied and Environmental Microbiology* **70**:6188–6196. [doi:10.1128/aem.70.10.6188-6196.2004](https://doi.org/10.1128/aem.70.10.6188-6196.2004)
-54. Zwietering, M.H., Jongenburger, I., Rombouts, F.M. & van 't Riet, K. (1990) Modeling of the bacterial growth curve. *Applied and Environmental Microbiology* **56**:1875–1881. [doi:10.1128/aem.56.6.1875-1881.1990](https://doi.org/10.1128/aem.56.6.1875-1881.1990)
-55. Zwietering, M.H., Wijtzes, T., de Wit, J.C. & van 't Riet, K. (1992) A decision support system for prediction of the microbial spoilage in foods. *Journal of Food Protection* **55**:973–979. [doi:10.4315/0362-028X-55.12.973](https://doi.org/10.4315/0362-028X-55.12.973)
+27. Kashket, S., Zhang, J. & Van Houte, J. (1996) Accumulation of fermentable sugars and metabolic acids in food particles that become entrapped on the dentition. *Journal of Dental Research* **75**:1885–1891. [doi:10.1177/00220345960750111101](https://doi.org/10.1177/00220345960750111101)
+28. Kovárová-Kovar, K. & Egli, T. (1998) Growth kinetics of suspended microbial cells: from single-substrate-controlled growth to mixed-substrate kinetics. *Microbiology and Molecular Biology Reviews* **62**:646–666. [doi:10.1128/mmbr.62.3.646-666.1998](https://doi.org/10.1128/mmbr.62.3.646-666.1998)
+29. Kreft, J.-U., Picioreanu, C., Wimpenny, J.W.T. & van Loosdrecht, M.C.M. (2001) Individual-based modelling of biofilms. *Microbiology* **147**:2897–2912. [doi:10.1099/00221287-147-11-2897](https://doi.org/10.1099/00221287-147-11-2897)
+30. Lagerlöf, F. & Dawes, C. (1984) The volume of saliva in the mouth before and after swallowing. *Journal of Dental Research* **63**:618–621. [doi:10.1177/00220345840630050201](https://doi.org/10.1177/00220345840630050201)
+31. Lardon, L.A., Merkey, B.V., Martins, S. *et al.* (2011) iDynoMiCS: next-generation individual-based modelling of biofilms. *Environmental Microbiology* **13**:2416–2434. [doi:10.1111/j.1462-2920.2011.02414.x](https://doi.org/10.1111/j.1462-2920.2011.02414.x)
+32. Lévêque, A. (1928) Les lois de la transmission de chaleur par convection. *Annales des Mines*, 12th series, **13**:201–299, 305–362, 381–415.
+33. Luedeking, R. & Piret, E.L. (1959) A kinetic study of the lactic acid fermentation. Batch process at controlled pH. *Journal of Biochemical and Microbiological Technology and Engineering* **1**:393–412. [doi:10.1002/jbmte.390010406](https://doi.org/10.1002/jbmte.390010406)
+34. Mei, L., Ren, Y., Busscher, H.J., Chen, Y. & van der Mei, H.C. (2009) Poisson analysis of streptococcal bond-strengthening on saliva-coated enamel. *Journal of Dental Research* **88**:841–845. [doi:10.1177/0022034509342523](https://doi.org/10.1177/0022034509342523)
+35. Meinders, J.M., van der Mei, H.C. & Busscher, H.J. (1995) Deposition efficiency and reversibility of bacterial adhesion under flow. *Journal of Colloid and Interface Science* **176**:329–341. [doi:10.1006/jcis.1995.9960](https://doi.org/10.1006/jcis.1995.9960)
+36. Monod, J. (1949) The growth of bacterial cultures. *Annual Review of Microbiology* **3**:371–394. [doi:10.1146/annurev.mi.03.100149.002103](https://doi.org/10.1146/annurev.mi.03.100149.002103)
+37. Picioreanu, C., van Loosdrecht, M.C.M. & Heijnen, J.J. (1998) Mathematical modeling of biofilm structure with a hybrid differential-discrete cellular automaton approach. *Biotechnology and Bioengineering* **58**:101–116. [doi:10.1002/(SICI)1097-0290(19980405)58:1<101::AID-BIT11>3.0.CO;2-M](https://doi.org/10.1002/(SICI)1097-0290(19980405)58:1%3C101::AID-BIT11%3E3.0.CO;2-M)
+38. Pirt, S.J. (1965) The maintenance energy of bacteria in growing cultures. *Proceedings of the Royal Society B* **163**:224–231. [doi:10.1098/rspb.1965.0069](https://doi.org/10.1098/rspb.1965.0069)
+39. Pirt, S.J. (1967) A kinetic study of the mode of growth of surface colonies of bacteria and fungi. *Journal of General Microbiology* **47**:181–197. [doi:10.1099/00221287-47-2-181](https://doi.org/10.1099/00221287-47-2-181)
+40. Prothero, A. & Robinson, A. (1974) On the stability and accuracy of one-step methods for solving stiff systems of ordinary differential equations. *Mathematics of Computation* **28**:145–162. [doi:10.1090/S0025-5718-1974-0331793-2](https://doi.org/10.1090/S0025-5718-1974-0331793-2)
+41. Ratkowsky, D.A., Lowry, R.K., McMeekin, T.A., Stokes, A.N. & Chandler, R.E. (1983) Model for bacterial culture growth rate throughout the entire biokinetic temperature range. *Journal of Bacteriology* **154**:1222–1226. [doi:10.1128/jb.154.3.1222-1226.1983](https://doi.org/10.1128/jb.154.3.1222-1226.1983)
+42. Ratkowsky, D.A., Olley, J., McMeekin, T.A. & Ball, A. (1982) Relationship between temperature and growth rate of bacterial cultures. *Journal of Bacteriology* **149**:1–5. [doi:10.1128/jb.149.1.1-5.1982](https://doi.org/10.1128/jb.149.1.1-5.1982)
+43. Rittmann, B.E. & McCarty, P.L. (2001) *Environmental Biotechnology: Principles and Applications.* McGraw-Hill, New York.
+44. Roels, J.A. (1983) *Energetics and Kinetics in Biotechnology.* Elsevier Biomedical Press, Amsterdam.
+45. Rosso, L., Lobry, J.R. & Flandrois, J.P. (1993) An unexpected correlation between cardinal temperatures of microbial growth highlighted by a new model. *Journal of Theoretical Biology* **162**:447–463. [doi:10.1006/jtbi.1993.1099](https://doi.org/10.1006/jtbi.1993.1099)
+46. Rosso, L., Lobry, J.R., Bajard, S. & Flandrois, J.P. (1995) Convenient model to describe the combined effects of temperature and pH on microbial growth. *Applied and Environmental Microbiology* **61**:610–616. [doi:10.1128/aem.61.2.610-616.1995](https://doi.org/10.1128/aem.61.2.610-616.1995)
+47. Saad, Y. & Schultz, M.H. (1986) GMRES: a generalized minimal residual algorithm for solving nonsymmetric linear systems. *SIAM Journal on Scientific and Statistical Computing* **7**:856–869. [doi:10.1137/0907058](https://doi.org/10.1137/0907058)
+48. Shu, C.-W. & Osher, S. (1988) Efficient implementation of essentially non-oscillatory shock-capturing schemes. *Journal of Computational Physics* **77**:439–471. [doi:10.1016/0021-9991(88)90177-5](https://doi.org/10.1016/0021-9991(88)90177-5)
+49. Stephan, R.M. (1944) Intra-oral hydrogen-ion concentrations associated with dental caries activity. *Journal of Dental Research* **23**:257–266. [doi:10.1177/00220345440230040401](https://doi.org/10.1177/00220345440230040401)
+50. Stewart, P.S. (1998) A review of experimental measurements of effective diffusive permeabilities and effective diffusion coefficients in biofilms. *Biotechnology and Bioengineering* **59**:261–272. [doi:10.1002/(SICI)1097-0290(19980805)59:3<261::AID-BIT1>3.0.CO;2-9](https://doi.org/10.1002/(SICI)1097-0290(19980805)59:3%3C261::AID-BIT1%3E3.0.CO;2-9)
+51. Stewart, P.S. (2003) Diffusion in biofilms. *Journal of Bacteriology* **185**:1485–1491. [doi:10.1128/jb.185.5.1485-1491.2003](https://doi.org/10.1128/jb.185.5.1485-1491.2003)
+52. Stumm, W. & Morgan, J.J. (1996) *Aquatic Chemistry: Chemical Equilibria and Rates in Natural Waters*, 3rd edn. Wiley, New York. ISBN 978-0-471-51185-4.
+53. Walters, M.C., Roe, F., Bugnicourt, A., Franklin, M.J. & Stewart, P.S. (2003) Contributions of antibiotic penetration, oxygen limitation, and low metabolic activity to tolerance of *Pseudomonas aeruginosa* biofilms. *Antimicrobial Agents and Chemotherapy* **47**:317–323. [doi:10.1128/aac.47.1.317-323.2003](https://doi.org/10.1128/aac.47.1.317-323.2003)
+54. Wanner, O. & Gujer, W. (1986) A multispecies biofilm model. *Biotechnology and Bioengineering* **28**:314–328. [doi:10.1002/bit.260280304](https://doi.org/10.1002/bit.260280304)
+55. Werner, E., Roe, F., Bugnicourt, A. *et al.* (2004) Stratified growth in *Pseudomonas aeruginosa* biofilms. *Applied and Environmental Microbiology* **70**:6188–6196. [doi:10.1128/aem.70.10.6188-6196.2004](https://doi.org/10.1128/aem.70.10.6188-6196.2004)
+56. Zwietering, M.H., Jongenburger, I., Rombouts, F.M. & van 't Riet, K. (1990) Modeling of the bacterial growth curve. *Applied and Environmental Microbiology* **56**:1875–1881. [doi:10.1128/aem.56.6.1875-1881.1990](https://doi.org/10.1128/aem.56.6.1875-1881.1990)
+57. Zwietering, M.H., Wijtzes, T., de Wit, J.C. & van 't Riet, K. (1992) A decision support system for prediction of the microbial spoilage in foods. *Journal of Food Protection* **55**:973–979. [doi:10.4315/0362-028X-55.12.973](https://doi.org/10.4315/0362-028X-55.12.973)

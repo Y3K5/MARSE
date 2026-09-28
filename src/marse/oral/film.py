@@ -25,9 +25,14 @@ from numpy.typing import NDArray
 from marse.schemas.domain import Film
 from marse.spatial.grid import Grid
 
-__all__ = ["renewal_per_h"]
+__all__ = ["film_layers", "renewal_per_h"]
 
 _MM_PER_MIN_TO_UM_PER_H = 1000.0 * 60.0
+
+
+def film_layers(grid: Grid, film: Film) -> int:
+    """How many voxels deep the film is: the top layers of the box."""
+    return round(film.thickness_um / grid.voxel_um)
 
 
 def renewal_per_h(grid: Grid, film: Film) -> NDArray[np.float64]:
@@ -35,7 +40,7 @@ def renewal_per_h(grid: Grid, film: Film) -> NDArray[np.float64]:
 
     Zero below the film; in the film's voxels, u(zeta) / l at their centres.
     """
-    layers = round(film.thickness_um / grid.voxel_um)
+    layers = film_layers(grid, film)
     zeta = (np.arange(layers) + 0.5) / layers
     speed = 1.5 * film.velocity_mm_per_min * _MM_PER_MIN_TO_UM_PER_H * (2 * zeta - zeta**2)
     rate = np.zeros(grid.shape)

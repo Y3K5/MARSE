@@ -33,9 +33,10 @@ run records the pH over the substratum and its range in the box.
 Where the domain has a salivary film and a mouth (:mod:`marse.oral`), the
 film is renewed from the mouth's saliva, whose composition is solved with the
 box (:mod:`marse.core.reservoir`). The run then advances in spans of at most a
-minute that end at every swallow. A second ledger checks the box and the mouth
-together, against what the glands secreted and what was swallowed, and the
-run records the mouth's volume, flow and composition.
+minute that end at every swallow, and at the start and end of every intake of
+the diet. A second ledger checks the box and the mouth together, against what
+the glands secreted, what was eaten and drunk, and what was swallowed or
+expelled, and the run records the mouth's volume, flow and composition.
 """
 
 from __future__ import annotations
@@ -59,7 +60,7 @@ from marse.core.provenance import Manifest
 from marse.core.reservoir import ReservoirPath, ReservoirTransport
 from marse.microbes.adhesion import AttachingSpecies, SurfaceExchange
 from marse.microbes.kinetics import compile_rates, process_rates, rate_jacobian
-from marse.oral import OralFluid, renewal_per_h
+from marse.oral import Diet, Inflow, OralFluid, film_layers, renewal_per_h
 from marse.schemas.experiment import ReactiveTransportConfig
 from marse.spatial.colloids import leveque_transfer_um_per_s, stokes_einstein_um2_per_s
 from marse.spatial.transport import Diffusion
@@ -70,6 +71,8 @@ ENGINE_VERSION = "reactive_transport_v2"
 INTEGRATOR_VERSION = "sdirk2_limited_v1"
 MOUTH_VERSION = "dawes_1983_mouth_renewed_film_v1"
 """The mouth and its film, recorded in the manifest of every run that has them."""
+DIET_VERSION = "rinse_drink_food_mixed_film_v1"
+"""The intakes and the food they leave, recorded in the manifest of every run with a diet."""
 
 type FrameWriter = Callable[[int, float, NDArray[np.float64]], None]
 
@@ -443,15 +446,25 @@ def run(
 
 
 def _path(
-    fluid: OralFluid, start_h: float, stretch: Any, secreted: NDArray[np.float64]
+    fluid: OralFluid,
+    start_h: float,
+    stretch: Any,
+    secreted: NDArray[np.float64],
+    inflow: Inflow,
 ) -> ReservoirPath:
-    """The pool's thickness over one span, from the mouth's run ahead."""
+    """The pool's thickness over one span, from the mouth's run ahead, and what enters it."""
+    supply = None
+    if inflow.released_mol_per_s is not None:  # mol/s into the mouth; mol/m3 x um/h per area
+        supply = inflow.released_mol_per_s * 3600.0 / fluid.area_m2 * 1e6
     return ReservoirPath(
         start_h=start_h,
         times_h=stretch.times_s / 3600.0,
         thickness_um=np.array([fluid.thickness_um(v) for v in stretch.volumes_m3]),
         growth_um_per_h=np.array([fluid.growth_um_per_h(q) for q in stretch.flows_m3_per_s]),
         secreted_mol_per_m3=secreted,
+        drink_um_per_h=fluid.growth_um_per_h(inflow.liquid_m3_per_s),
+        drink_mol_per_m3=inflow.liquid_mol_per_m3,
+        supply_per_h=supply,
     )
 
 
@@ -484,9 +497,12 @@ def _run_with_mouth(
 
     Each span runs the mouth ahead to its end, at most a minute, or to the
     next swallow; the box and the pool are then integrated together over it,
-    and a swallow takes the pool back to its resting volume. The box's ledger
-    books what crossed into the film; the second ledger checks the box and the
-    mouth together, against what was secreted and swallowed.
+    and a swallow takes the pool back to its resting volume. Spans also end
+    where an intake starts or ends: a rinse is taken in, or expelled, and food
+    left on the teeth is placed in the film. The box's ledger books what
+    crossed into the film and the food placed in it; the second ledger checks
+    the box and the mouth together, against what was secreted, eaten,
+    swallowed and expelled.
     """
     started = datetime.now(UTC)
     network = config.network
@@ -498,7 +514,10 @@ def _run_with_mouth(
     engine = build_model(config)
     assert isinstance(engine, ReservoirTransport)
     fluid = OralFluid(domain.mouth, domain.film, names)
-    engine.exchange_per_h = renewal_per_h(grid, domain.film)
+    renewal = renewal_per_h(grid, domain.film)
+    in_film = np.zeros(grid.shape)
+    in_film[..., -film_layers(grid, domain.film) :] = 1.0
+    diet = Diet(domain.diet, names)
     box = domain.initial_state(names, config.initial_mol_per_m3, config.seed)
     pool = np.array([domain.mouth.initial_mol_per_m3.get(n, 0.0) for n in names])
     y = engine.pack(box, pool)  # at the resting volume, the pool's unknowns are its concentrations
@@ -515,6 +534,8 @@ def _run_with_mouth(
     imported = np.zeros(len(names))
     secreted = np.zeros(len(names))
     swallowed = np.zeros(len(names))
+    eaten = np.zeros(len(names))
+    expelled = np.zeros(len(names))
     times, totals, imports = [0.0], [box.reshape(len(names), -1).sum(axis=1) * areal], [imported]
     exchange = engine.surface
     surface_rows = [] if exchange is None else [_surface_record(config, exchange, box)]
@@ -524,24 +545,63 @@ def _run_with_mouth(
         frames(0, 0.0, box)
     now, substep = 0.0, None
     accepted = rejected = limited = failures = newton = spans = 0
+    returned = 0.0  # how fast the box gave the stimulus back to the pool over the last span, mol/s
     steps = config.steps
     for step in range(1, steps + 1):
         target = min(step * config.timestep_h, config.duration_h)
         while target - now > 1e-12 * target:
+            # An intake starts or ends: a rinse is taken in or expelled, and food left on
+            # the teeth is placed in the film.
+            events = diet.due(now)
+            if events:
+                returned = 0.0  # what the box did before an intake says nothing about after it
+                box, pool = engine.unpack(y)
+                for event in events:
+                    intake = event.intake
+                    if event.starts and intake.kind == "rinse":
+                        volume, amounts = diet.rinse(intake)
+                        fluid.take(volume)
+                        brought = amounts / fluid.area_m2  # mol/m2
+                        eaten += brought
+                        whole.exchange(brought)
+                        pool = pool + brought / to_mol_per_m2
+                    if not event.starts and intake.kind == "rinse":
+                        kept = fluid.expel()
+                        gone = pool * (1.0 - kept) * to_mol_per_m2
+                        expelled += gone
+                        whole.exchange(-gone)
+                        pool = pool * kept
+                    pocket = None if event.starts else diet.pocket(intake, grid, domain.film)
+                    if pocket is not None:
+                        box = box + pocket
+                        placed = pocket.reshape(len(names), -1).sum(axis=1)
+                        ledger.exchange(placed)
+                        imported = imported + placed
+                        eaten += placed * areal
+                        whole.exchange(placed * areal)
+                y = engine.pack(box, pool)
+                ledger.check(box, step=step, time_h=now)
+                whole.check(everything(box, pool), step=step, time_h=now)
+                peak = np.maximum(peak, y)
+            inflow = diet.inflow()
+            engine.exchange_per_h = (
+                renewal if inflow.mixing_per_h == 0.0 else renewal + inflow.mixing_per_h * in_film
+            )
             box, pool = engine.unpack(y)
             stimulus = 0.0
             if fluid.stimulus is not None:
                 stimulus = pool[fluid.stimulus] * to_mol_per_m2 * fluid.area_m2
-            left = (target - now) * 3600.0
-            stretch = fluid.run_ahead(stimulus, min(_LONGEST_SPAN_S, left))
-            # Land exactly on the step's end when the span reaches it, so times never drift.
-            end = (
-                target if stretch.seconds >= left * (1 - 1e-12) else now + stretch.seconds / 3600.0
-            )
+            stop = min(target, diet.next_h())
+            left = (stop - now) * 3600.0
+            stretch = fluid.run_ahead(stimulus, min(_LONGEST_SPAN_S, left), inflow, returned)
+            # Land exactly on the step's end, or the intake's, when the span reaches it, so
+            # times never drift.
+            end = stop if stretch.seconds >= left * (1 - 1e-12) else now + stretch.seconds / 3600.0
             span = end - now
             if span > 0:
                 growth = stretch.volumes_m3[-1] - stretch.volumes_m3[0]
-                engine.path = _path(fluid, now, stretch, fluid.secreted(growth / stretch.seconds))
+                saliva = growth / stretch.seconds - inflow.liquid_m3_per_s
+                engine.path = _path(fluid, now, stretch, fluid.secreted(saliva), inflow)
                 y, entered, stats = engine.integrate(
                     y,
                     span,
@@ -560,8 +620,13 @@ def _run_with_mouth(
                 spans += 1
                 ledger.exchange(entered)
                 imported = imported + entered
+                if fluid.stimulus is not None:
+                    given = entered[fluid.stimulus] * areal * fluid.area_m2  # mol, into the box
+                    returned = -given / (span * 3600.0)
                 added = engine.path.added(now, end) * 1e-6  # mol/m2
-                secreted += added
+                taken = engine.path.taken(now, end) * 1e-6
+                secreted += added - taken
+                eaten += taken
                 whole.exchange(added)
             kept = fluid.end(stretch)
             box, pool = engine.unpack(y)
@@ -591,6 +656,25 @@ def _run_with_mouth(
 
     box, pool = engine.unpack(y)
     concentration = pool * engine.reference_um / fluid.thickness_um(fluid.volume_m3)
+
+    def per_component(amounts: NDArray[np.float64]) -> dict[str, float]:
+        return {n: float(v) for n, v in zip(names, amounts, strict=True)}
+
+    mouth: dict[str, Any] = {
+        "spans": spans,
+        "swallows": fluid.swallows,
+        "final_volume_ml": fluid.volume_m3 * _ML_PER_M3,
+        "final_mol_per_m3": {names[j]: float(concentration[j]) for j in engine.exchanged},
+        "secreted_mol_per_m2": per_component(secreted),
+        "swallowed_mol_per_m2": per_component(swallowed),
+    }
+    models = {"engine": ENGINE_VERSION, "integrator": INTEGRATOR_VERSION, "mouth": MOUTH_VERSION}
+    if domain.diet:
+        models["diet"] = DIET_VERSION
+        mouth["intakes"] = diet.taken
+        mouth["eaten_mol_per_m2"] = per_component(eaten)
+        mouth["expelled_mol_per_m2"] = per_component(expelled)
+    mouth["balance"] = whole.summary(everything(box, pool))
     outputs: dict[str, Any] = {
         "final_time_h": now,
         "grid": {"voxels": list(grid.shape), "voxel_um": grid.voxel_um},
@@ -605,15 +689,7 @@ def _run_with_mouth(
             "newton_iterations": newton,
         },
         "time_scales": time_scales(config),
-        "mouth": {
-            "spans": spans,
-            "swallows": fluid.swallows,
-            "final_volume_ml": fluid.volume_m3 * _ML_PER_M3,
-            "final_mol_per_m3": {names[j]: float(concentration[j]) for j in engine.exchanged},
-            "secreted_mol_per_m2": {n: float(v) for n, v in zip(names, secreted, strict=True)},
-            "swallowed_mol_per_m2": {n: float(v) for n, v in zip(names, swallowed, strict=True)},
-            "balance": whole.summary(everything(box, pool)),
-        },
+        "mouth": mouth,
         "final_state_sha256": _digest(names, box, pool),
     }
     surface = None
@@ -635,7 +711,7 @@ def _run_with_mouth(
         }
     manifest = Manifest.build(
         config=config,
-        models={"engine": ENGINE_VERSION, "integrator": INTEGRATOR_VERSION, "mouth": MOUTH_VERSION},
+        models=models,
         random_streams=domain.random_streams,
         started=started,
         finished=datetime.now(UTC),

@@ -480,10 +480,10 @@ film, in `tests/test_mouth.py`:
 | | Criterion | Threshold | Result |
 |---|---|---|---|
 | G6a | With a constant flow and nothing taken up, the mouth's sugar after each swallow against Dawes's closed form, (H_resid / H_max) to the number of swallows | rounding | 3.7e-11 over ten swallows |
-| G3, G6b | The box and the mouth together conserve every quantity over an hour with a residue of 10% sucrose, counting what was secreted and swallowed | 1e-12 | 6.8e-16; the box alone 2.7e-16 |
-| G6c | The pH at the substratum, with the mouth running 60 s and 5 s ahead of the box | 1e-3 | 4.1e-5 |
+| G3, G6b | The box and the mouth together conserve every quantity over an hour with a residue of 10% sucrose, counting what was secreted and swallowed | 1e-12 | 5.6e-16; the box alone 3.2e-16 |
+| G6c | The pH at the substratum over that hour, with the mouth running 60 s and 5 s ahead of the box | 1e-3 | 6.1e-5 |
 
-That hour takes 5.8 s: 358 steps and 71 swallows.
+That hour takes 5.9 s: 358 steps and 71 swallows.
 
 Other checks, in `tests/test_reservoir.py`, `tests/test_mouth.py` and
 `tests/test_transport.py`:
@@ -502,6 +502,45 @@ Other checks, in `tests/test_reservoir.py`, `tests/test_mouth.py` and
   with multigrid, and the operator it applies is multigrid's, bit for bit.
 - **Replay** reproduces a run under the mouth exactly, and every impossible
   film or mouth is refused with the reason.
+
+## The diet
+
+A mouth takes the rinses, drinks and foods of a diet, and the food some of
+them leave on the teeth ([theory.md §4.9](theory.md#49-the-diet)). On the
+column of the section above, in `tests/test_mouth.py`:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| G3, G6b | The box and the mouth together conserve every quantity over an hour with a rinse of 10% sucrose, 200 mL of a sugared drink sipped over 20 minutes and a sweet that leaves food on the teeth, counting what was secreted, eaten, swallowed and expelled | 1e-12 | 1.1e-15; the box alone 5.5e-16 |
+| G6c | The pH at the substratum over an hour after a rinse of 10% sucrose held for a minute, which mixes the film with the mouth once a second, with the mouth running 60 s and 5 s ahead of the box | 1e-3 | 8.6e-5 |
+
+Over the same hour, the mouth's sugar agrees within 8.4e-4. Without the
+run-ahead's expectation of what the plaque gives back (theory.md §9.9), it
+agreed within 1.2e-2 and the pH within 2.3e-4. The hour after the rinse takes
+7.0 s: 404 steps and 73 swallows. The hour with the drink takes 33 s, because
+a drink sipped at 10 mL a minute makes the mouth swallow 910 times, and every
+swallow ends a span.
+
+Other checks:
+
+- **What each intake brings** is booked as eaten exactly: the sugar of the
+  rinse, the drink and the sweet, the drink's salts, and the food left on the
+  teeth, within 5e-15 of what was stated.
+- **A rinse** is held without a swallow while the glands secrete into it,
+  and is expelled to the resting volume at its end, keeping the resting
+  share of every amount.
+- **A drink** makes the mouth swallow for every 0.3 mL it and the saliva
+  add, and holds the mouth's sugar at q c / (q + Q) of the drink's, within 2%.
+- **A sweet** releases what it states, adds no liquid, and raises the flow
+  above 1 mL a minute as it is tasted.
+- **Food left on the teeth** goes into the film over its region only, in two
+  dimensions, and dissolves as the network's process releases it.
+- **Mixing** during a rinse brings more of its sugar into the plaque than the
+  film's renewal alone.
+- **A diet that starts after the run ends** changes nothing: the final state
+  is bit for bit that of the run without it.
+- **Replay** reproduces a run with a diet exactly, `marse check` lists the
+  diet, and every impossible diet is refused with the reason.
 
 ## Running the suite
 

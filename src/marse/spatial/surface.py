@@ -22,7 +22,7 @@ from numpy.typing import NDArray
 
 from marse.spatial.grid import Grid
 
-__all__ = ["Patch", "Substratum"]
+__all__ = ["Patch", "Substratum", "faces_within"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +38,34 @@ class Patch:
     region_um: tuple[float, ...]
 
 
+def faces_within(grid: Grid, region_um: Sequence[float]) -> NDArray[np.bool_]:
+    """Which faces of the substratum a rectangle covers, by where their centres lie.
+
+    ``region_um`` holds a lower and an upper bound for each lateral axis in
+    turn, as a :class:`Patch` does; a column, with a single face, takes none.
+    """
+    lateral = grid.lateral_axes
+    if len(region_um) != 2 * len(lateral):
+        raise ValueError(
+            f"a {grid.dimensions}-D box needs {2 * len(lateral)} bounds (a lower and an upper "
+            f"one per lateral axis), got {len(region_um)}"
+        )
+    inside = np.ones(tuple(grid.shape[a] for a in lateral), dtype=bool)
+    for k, axis in enumerate(lateral):
+        low, high = region_um[2 * k], region_um[2 * k + 1]
+        size = grid.size_um[axis]
+        if not 0 <= low < high <= size:
+            raise ValueError(
+                f"bounds {low:g} to {high:g} um must satisfy 0 <= lower < upper <= {size:g}"
+            )
+        centres = grid.centers_um(axis)
+        along = (centres >= low) & (centres < high)
+        inside &= along.reshape([-1 if j == k else 1 for j in range(len(lateral))])
+    if not inside.any():
+        raise ValueError("covers no face; faces are assigned by their centres")
+    return inside
+
+
 class Substratum:
     """The material of every face of the substratum, from non-overlapping patches."""
 
@@ -49,29 +77,10 @@ class Substratum:
         owner = np.full(shape, -1, dtype=np.intp)
         materials: list[str] = []
         for number, patch in enumerate(patches):
-            if len(patch.region_um) != 2 * len(lateral):
-                raise ValueError(
-                    f"patch {number} ({patch.material}): a {grid.dimensions}-D box needs "
-                    f"{2 * len(lateral)} bounds (a lower and an upper one per lateral axis), "
-                    f"got {len(patch.region_um)}"
-                )
-            inside = np.ones(shape, dtype=bool)
-            for k, axis in enumerate(lateral):
-                low, high = patch.region_um[2 * k], patch.region_um[2 * k + 1]
-                size = grid.size_um[axis]
-                if not 0 <= low < high <= size:
-                    raise ValueError(
-                        f"patch {number} ({patch.material}): bounds {low:g} to {high:g} um must "
-                        f"satisfy 0 <= lower < upper <= {size:g}"
-                    )
-                centres = grid.centers_um(axis)
-                along = (centres >= low) & (centres < high)
-                inside &= along.reshape([-1 if j == k else 1 for j in range(len(lateral))])
-            if not inside.any():
-                raise ValueError(
-                    f"patch {number} ({patch.material}): covers no face; faces are assigned by "
-                    "their centres"
-                )
+            try:
+                inside = faces_within(grid, patch.region_um)
+            except ValueError as error:
+                raise ValueError(f"patch {number} ({patch.material}): {error}") from None
             taken = owner[inside]
             if (taken >= 0).any():
                 other = patches[int(taken[taken >= 0][0])].material

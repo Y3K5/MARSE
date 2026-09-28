@@ -47,7 +47,7 @@ src/marse/
                    substratum), column.py (the direct solve of a column), vtk.py (ParaView
                    output); domain.py and diffusion.py (the 1-D steady solver)
   oral/            mouth.py (saliva secreted and swallowed), film.py (the salivary film's
-                   renewal)
+                   renewal), diet.py (rinses, drinks and foods, and food left on the teeth)
   chemistry/       acid_base.py (pH from electroneutrality over acid-base totals and ions)
   microbes/        growth.py, resource_use.py, adhesion.py, phenotype.py, interactions.py
   biofilm/         biomass.py, matrix.py, maturation.py
@@ -66,7 +66,7 @@ Implemented so far (the rest of the layout above is planned):
 |---|---|
 | `core/` | `config`, `state`, `seeds`, `provenance`, `simulation`, `integrators`, `ledger`, `well_mixed`, `framestore`, `implicit`, `reactive_transport`, `reservoir` |
 | `spatial/` | `grid`, `transport`, `multigrid`, `column`, `colloids`, `surface`, `vtk`, `domain`, `diffusion`, `solutes` |
-| `oral/` | `mouth`, `film` |
+| `oral/` | `mouth`, `film`, `diet` |
 | `chemistry/` | `acid_base` |
 | `microbes/` | `growth`, `cardinal`, `kinetics`, `adhesion`, `niche`, `genotype`, `additives` |
 | `schemas/` | `formula`, `network`, `experiment`, `domain`: configuration schema v2 (reaction networks checked for continuity, with rates, run settings and space) |

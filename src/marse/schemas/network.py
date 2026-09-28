@@ -95,6 +95,7 @@ DOMAIN_FIELDS = {
     "adhesion": Field("objects", required=False),
     "film": Field("object", required=False),
     "mouth": Field("object", required=False),
+    "diet": Field("objects", required=False),
 }
 """The box of voxels a network runs in; read by :mod:`marse.schemas.domain`."""
 
@@ -157,6 +158,22 @@ MOUTH_FIELDS = {
     "stimulus_half_mol_per_m3": Field("number", required=False),
     "plaque_area_cm2": Field("number"),
     "initial_mol_per_m3": Field("numbers", required=False),
+}
+INTAKES = ("rinse", "drink", "food")
+INTAKE_FIELDS = {
+    "kind": Field("choice", choices=INTAKES),
+    "start_h": Field("number"),
+    "duration_min": Field("number"),
+    "volume_ml": Field("number", required=False),
+    "composition_mol_per_m3": Field("numbers", required=False),
+    "released_mmol": Field("numbers", required=False),
+    "mixing_per_s": Field("number", required=False),
+    "retained": Field("object", required=False),
+}
+RETAINED_FIELDS = {
+    "component": Field("name"),
+    "amount_mol_per_m2": Field("number"),
+    "region_um": Field("vector", required=False),
 }
 
 NETWORK_FIELDS = {
@@ -228,6 +245,8 @@ SCHEMA = {
     "adhesion": ADHESION_FIELDS,
     "film": FILM_FIELDS,
     "mouth": MOUTH_FIELDS,
+    "intake": INTAKE_FIELDS,
+    "retained": RETAINED_FIELDS,
 }
 """Every object of the network format and its fields, as docs/networks.md lists them."""
 

@@ -29,6 +29,8 @@ from marse.core.config import ConfigError
 UNIT_SUFFIXES = {
     "_mol_per_mol": "mol of one component per mol of another",
     "_mol_per_m3": "mol per cubic metre, which is mmol per litre",
+    "_mol_per_m2": "mol per square metre of surface",
+    "_mmol": "millimoles",
     "_m2_per_s": "square metres per second, as diffusivities are tabulated",
     "_fmol_per_cell": "femtomoles per cell",
     "_ml_per_min": "millilitres per minute",
@@ -43,6 +45,7 @@ UNIT_SUFFIXES = {
     "_um": "micrometres",
     "_mm": "millimetres",
     "_h": "hours",
+    "_min": "minutes",
     "_c": "degrees Celsius",
 }
 """Every numeric field name ends in one of these suffixes, which names its unit.

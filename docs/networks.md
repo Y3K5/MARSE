@@ -394,6 +394,7 @@ chemistry in a single column in three seconds.
 | `adhesion` | list of bindings | with `substratum` | How each species binds to each material. |
 | `film` | object | no | The top voxels are a salivary film, closed to the air and renewed from the mouth. [A salivary film and the mouth](#a-salivary-film-and-the-mouth): these two fields go together, and replace `bulk_mol_per_m3`. |
 | `mouth` | object | with `film` | The mouth's saliva: what is secreted, how much the mouth holds, and when it swallows. |
+| `diet` | list of intakes | no, with `mouth` | What is eaten and drunk: rinses, drinks and foods, each from a start for a duration. [The diet](#the-diet). |
 
 `initial_mol_per_m3` fills every voxel. Each colony then sets its component to
 its concentration in the voxels whose centres lie inside it. A colony that
@@ -551,6 +552,56 @@ a run in space models exactly that
 | `stimulus_half_mol_per_m3` | number | with `stimulus` | The concentration in the mouth that raises the flow by half the stimulated flow. |
 | `plaque_area_cm2` | number | yes | The plaque this box stands for, which exchanges with the mouth through its film. |
 | `initial_mol_per_m3` | object of numbers | no, default the saliva | What the mouth holds at the start. |
+
+### The diet
+
+A high-sugar eater differs from a low-sugar eater in more than the amount of
+sugar: sugar stays in the mouth for longer, sipped in drinks or sucked from
+sweets, and food left on the teeth keeps it concentrated where the plaque is
+(Kashket, Zhang and Van Houte 1996). `diet` lists the intakes, in order and one
+at a time, each from `start_h` for `duration_min`
+([theory.md §4.9](theory.md#49-the-diet)):
+
+- **A rinse** adds `volume_ml` at once. The mouth holds it without swallowing,
+  and at the end expels everything above its resting volume. Expelling, like
+  a swallow, changes no concentration. A Stephan curve is the plaque's
+  response to a rinse of 10 mL of 10% sucrose held for a minute.
+- **A drink** of `volume_ml` flows in steadily over the duration, as sips
+  would, and is swallowed as the mouth fills.
+- **A food** releases `released_mmol` into the saliva steadily over the
+  duration, as a sweet sucked slowly does. It brings no liquid.
+- **Mixing.** While an intake is in the mouth, the film is mixed with the
+  mouth's liquid at `mixing_per_s` in each of its voxels (Dibdin 1990), on top
+  of its own renewal. The taste of what it brings raises the flow.
+- **Food left on the teeth.** `retained` places an amount of a particulate
+  component in the film when the intake ends. A process of the network, such
+  as a first-order reaction to sugar, releases what dissolves from it.
+
+Spans of the run end at every start and end. The manifest records how many
+intakes were taken, what was eaten and what was expelled, and the second
+balance counts them with what was secreted and swallowed; the box's balance
+counts food placed in the film as entering the box.
+
+### Intake fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `kind` | `rinse`, `drink` or `food` | yes | How it enters the mouth: held and expelled, sipped and swallowed, or dissolved. |
+| `start_h` | number | yes | When it starts, in hours from the start of the run: no earlier than the previous intake ends. |
+| `duration_min` | number | yes | How long a rinse is held, a drink sipped or a food eaten. |
+| `volume_ml` | number | for a rinse or a drink | How much liquid it brings. A food brings none. |
+| `composition_mol_per_m3` | object of numbers | no, default water | What a rinse or a drink holds. Dissolved components only. |
+| `released_mmol` | object of numbers | for a food | What a food releases into the saliva over its duration, in the whole mouth. Dissolved components only. |
+| `mixing_per_s` | number | no, default `1` | How fast the film mixes with the mouth's liquid while the intake lasts, per second. `0` leaves the film's own renewal alone. |
+| `retained` | object | no | Food it leaves on the teeth when it ends. |
+
+### Retained fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `component` | component name | yes | A particulate component, such as the sugar held in food particles. A process of the network must consume it: what that process makes is what dissolves. |
+| `amount_mol_per_m2` | number | yes | How much, per m² of the substratum it covers, spread evenly through the film's depth. |
+| `region_um` | list of numbers | no, default the whole substratum | Where, with a patch's bounds: `[x0, x1]` in 2-D, `[x0, x1, y0, y1]` in 3-D, none in 1-D. |
 
 ## Balancing: `balanced_by`
 
