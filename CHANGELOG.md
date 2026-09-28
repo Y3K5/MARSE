@@ -9,6 +9,12 @@ results for the same manifest is always called out.
 
 ### Changed
 
+- **Columns are solved directly.** A one-dimensional run's linear systems are
+  now solved exactly, by block-tridiagonal elimination, instead of by
+  multigrid. The 1-D example runs three times faster, in the same 348 steps.
+  **Results changed**, in their last digits only: the example's totals agree
+  with before to about 1e-14. Boxes in two and three dimensions are
+  unchanged, bit for bit.
 - **The package follows its documented layout.** Modules that had been added
   at the package root now live in subpackages:
   - `niche`, `genotype` and `additives` are in `marse.microbes`;
@@ -314,6 +320,43 @@ results for the same manifest is always called out.
     A network without acids, bases or the new elements runs exactly as
     before: the examples' final digests are unchanged. See docs/validation.md,
     "pH from electroneutrality".
+
+- **The mouth over a site of plaque: Stage S, increment S1, part two**
+  (`marse.oral`, `marse.core.reservoir`, [docs/networks.md](docs/networks.md#a-salivary-film-and-the-mouth)).
+  A domain in space can now stand under a salivary film, renewed from the
+  mouth, instead of under a fixed bulk liquid. The equations are in
+  docs/theory.md §4.8 and §9.9.
+  - **The film** is the top of the box, closed to the air. Saliva replaces
+    each of its voxels at u(z) / l: the film's speed at that height over the
+    length of plaque it has crossed (Dawes 1989), with the free-surface
+    profile whose shear increment E1 uses.
+  - **The mouth** follows Dawes's (1983) model of sugar clearance. Its volume
+    grows from the resting volume at a salivary flow that tasting sugar
+    raises, and a swallow takes it back without changing its concentrations.
+    Secreted saliva moves from resting towards stimulated saliva as the flow
+    rises.
+  - **Solved together.** The mouth's composition is part of the implicit
+    system: its unknowns border the box's, and each linear system is solved
+    by a Schur complement on the pool. The S1 prototype showed why. A mouth
+    solved apart and corrected after each span conserved to rounding, but its
+    answer changed by 0.03 pH with the length of the span.
+  - **Two ledgers.** The box's books what crossed into the film. The second
+    checks the box and the mouth together, against what was secreted and
+    swallowed.
+  - **Outputs.** `mouth.csv` gives the mouth's volume, flow, swallows,
+    composition and pH at every recorded time. The manifest adds both balances
+    and the model's version. `marse check` describes the film and the mouth.
+  - **Verified:**
+    - the mouth's clearance against Dawes's closed form (3.7e-11 over ten
+      swallows);
+    - the box and the mouth conserving everything over an hour (6.8e-16);
+    - the same pH, within 4.1e-5, whether the mouth runs a minute or 5 s
+      ahead of the box;
+    - the exchange of a film with its pool against its closed form;
+    - the bordered linear system against the Jacobian;
+    - replay.
+
+    See docs/validation.md, "The mouth and its film".
 
 - **Ecosystem runs are reproducible.** `marse ecosystem` writes a
   `manifest.json` beside its frames and viewer, and `marse replay` reproduces

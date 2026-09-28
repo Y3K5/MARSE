@@ -93,6 +93,8 @@ DOMAIN_FIELDS = {
     "flow": Field("object", required=False),
     "suspension": Field("objects", required=False),
     "adhesion": Field("objects", required=False),
+    "film": Field("object", required=False),
+    "mouth": Field("object", required=False),
 }
 """The box of voxels a network runs in; read by :mod:`marse.schemas.domain`."""
 
@@ -138,6 +140,23 @@ ADHESION_FIELDS = {
     "efficiency": Field("number"),
     "detachment_per_h": Field("number"),
     "locking_per_h": Field("number"),
+}
+FILM_FIELDS = {
+    "thickness_um": Field("number"),
+    "velocity_mm_per_min": Field("number"),
+    "plaque_length_mm": Field("number"),
+}
+MOUTH_FIELDS = {
+    "saliva_mol_per_m3": Field("numbers"),
+    "stimulated_saliva_mol_per_m3": Field("numbers", required=False),
+    "resting_volume_ml": Field("number"),
+    "swallow_volume_ml": Field("number"),
+    "unstimulated_flow_ml_per_min": Field("number"),
+    "stimulated_flow_ml_per_min": Field("number", required=False),
+    "stimulus": Field("name", required=False),
+    "stimulus_half_mol_per_m3": Field("number", required=False),
+    "plaque_area_cm2": Field("number"),
+    "initial_mol_per_m3": Field("numbers", required=False),
 }
 
 NETWORK_FIELDS = {
@@ -207,6 +226,8 @@ SCHEMA = {
     "flow": FLOW_FIELDS,
     "suspension": SUSPENSION_FIELDS,
     "adhesion": ADHESION_FIELDS,
+    "film": FILM_FIELDS,
+    "mouth": MOUTH_FIELDS,
 }
 """Every object of the network format and its fields, as docs/networks.md lists them."""
 

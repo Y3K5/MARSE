@@ -468,6 +468,41 @@ Other checks:
   reproduces the run with a single tolerance, bit for bit, in a box and in
   space.
 
+## The mouth and its film
+
+A domain under a salivary film exchanges with the mouth's saliva, whose
+composition is solved with the box
+([theory.md §4.8](theory.md#48-a-salivary-film-and-the-mouth) and
+[§9.9](theory.md#99-the-mouth-solved-with-the-box)). The criteria set before
+Stage S1 was built, checked on a column of 300 µm of plaque under 100 µm of
+film, in `tests/test_mouth.py`:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| G6a | With a constant flow and nothing taken up, the mouth's sugar after each swallow against Dawes's closed form, (H_resid / H_max) to the number of swallows | rounding | 3.7e-11 over ten swallows |
+| G3, G6b | The box and the mouth together conserve every quantity over an hour with a residue of 10% sucrose, counting what was secreted and swallowed | 1e-12 | 6.8e-16; the box alone 2.7e-16 |
+| G6c | The pH at the substratum, with the mouth running 60 s and 5 s ahead of the box | 1e-3 | 4.1e-5 |
+
+That hour takes 5.8 s: 358 steps and 71 swallows.
+
+Other checks, in `tests/test_reservoir.py`, `tests/test_mouth.py` and
+`tests/test_transport.py`:
+
+- **A film and its pool** relax towards their volume-weighted mean at
+  k (1 + delta / H), as the closed form says, to 1e-6.
+- **The bordered linear system** is the Jacobian of the step, by central
+  differences, in one and two dimensions. It is solved exactly.
+- **The pool never goes below zero.** Asked for more than it holds, it gives
+  what it has, and both ledgers still balance.
+- **At rest**, a column of plaque under resting saliva stays at pH 7.00 and
+  swallows once a minute.
+- **The film** is renewed fastest at its surface, not at all below it, and at
+  u_bar / l on average.
+- **A closed top** keeps everything in the box. A column's direct solve agrees
+  with multigrid, and the operator it applies is multigrid's, bit for bit.
+- **Replay** reproduces a run under the mouth exactly, and every impossible
+  film or mouth is refused with the reason.
+
 ## Running the suite
 
 `python -m pytest` runs the pull-request suite, which leaves out tests marked

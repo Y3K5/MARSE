@@ -61,9 +61,10 @@ face transfers. The limiter scales them like any other, and the ledger counts
 them as imports. Locking turns reversibly bound cells into biomass, as an extra
 row of the stoichiometric matrix acting in the bottom layer.
 
-The linear systems are solved by :mod:`marse.spatial.multigrid`. One matrix,
-with the Jacobian at the start of the step, serves both stages, and it is
-rebuilt only when Newton converges slowly.
+The linear systems are solved by :mod:`marse.spatial.multigrid`, or, in a
+column, directly by :mod:`marse.spatial.column`. One matrix, with the
+Jacobian at the start of the step, serves both stages, and it is rebuilt only
+when Newton converges slowly.
 """
 
 from __future__ import annotations
@@ -76,6 +77,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from marse.microbes.adhesion import SurfaceExchange
+from marse.spatial.column import ColumnSystem
 from marse.spatial.multigrid import ImplicitSystem
 from marse.spatial.transport import Diffusion, divergence
 
@@ -172,6 +174,7 @@ class ReactionTransport:
         self.jacobian = jacobian
         self.shape = diffusion.grid.shape
         self.spacing = diffusion.spacing
+        self._now = 0.0  # the start of the current step, h
 
     # -- the right-hand side --------------------------------------------------------------
 
@@ -188,12 +191,19 @@ class ReactionTransport:
         rate[..., 0] += substratum / self.spacing[-1]
         return _Stage(rate, fluxes, reactions, substratum)
 
-    def _system(self, c: Field, a: float) -> ImplicitSystem:
+    def _system(self, c: Field, a: float) -> ImplicitSystem | ColumnSystem:
         blocks = np.einsum("pj,pk...->jk...", self.stoichiometry, self.jacobian(c))
         if self.surface is not None:
             blocks[..., 0] += self.surface.exchange_jacobian(c)
-        return ImplicitSystem(
-            self.shape, self.spacing, self.diffusion.diffusivity_um2_per_h, a, blocks
+        # A column is solved directly; a box by multigrid (docs/theory.md, section 9.7).
+        solver = ColumnSystem if len(self.shape) == 1 else ImplicitSystem
+        return solver(
+            self.shape,
+            self.spacing,
+            self.diffusion.diffusivity_um2_per_h,
+            a,
+            blocks,
+            closed_top=self.diffusion.closed_top,
         )
 
     # -- one stage: Y = base + a f(Y) ----------------------------------------------------
@@ -203,11 +213,11 @@ class ReactionTransport:
         base: Field,
         a: float,
         guess: Field,
-        system: ImplicitSystem,
+        system: ImplicitSystem | ColumnSystem,
         reference: Field,
         atol: Tolerance,
         rtol: float,
-    ) -> tuple[Field, ImplicitSystem, int]:
+    ) -> tuple[Field, ImplicitSystem | ColumnSystem, int]:
         y = guess.copy()
         previous = math.inf
         for iteration in range(1, _NEWTON_ITERATIONS + 1):
@@ -399,14 +409,18 @@ class ReactionTransport:
         absolute_tolerance: Tolerance,
         first_step: float | None = None,
         peak: Field | None = None,
+        start_h: float = 0.0,
     ) -> tuple[Field, NDArray[np.float64], StepStats]:
         """Advance ``y`` by ``span`` in adaptive steps; imports are summed over the span.
 
         Without ``first_step``, the first step comes from :meth:`starting_step`.
         Imports are in the units the ledger sums: concentration summed over
         voxels, per component. ``absolute_tolerance`` is one number, or one per
-        component.
+        component. ``start_h`` is the time the span starts at, for a subclass
+        whose rates depend on time (:mod:`marse.core.reservoir`); each step
+        sees its own start as ``self._now``.
         """
+        self._now = start_h
         absolute_tolerance = _tolerance(absolute_tolerance, y.ndim - 1)
         reference = _magnitude(y if peak is None else peak)
         if first_step is None:
@@ -419,6 +433,7 @@ class ReactionTransport:
         while span - elapsed > 1e-12 * span:
             step = min(h, span - elapsed)
             clipped = step < h
+            self._now = start_h + elapsed
             try:
                 new, entered, estimate, rounds, iterations = self.step(
                     y, step, reference, absolute_tolerance, relative_tolerance

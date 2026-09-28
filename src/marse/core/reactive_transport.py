@@ -29,6 +29,13 @@ records bound cells per cm² of each material, and the area each has covered.
 
 Where the network's charges set a pH (:mod:`marse.chemistry.acid_base`), the
 run records the pH over the substratum and its range in the box.
+
+Where the domain has a salivary film and a mouth (:mod:`marse.oral`), the
+film is renewed from the mouth's saliva, whose composition is solved with the
+box (:mod:`marse.core.reservoir`). The run then advances in spans of at most a
+minute that end at every swallow. A second ledger checks the box and the mouth
+together, against what the glands secreted and what was swallowed, and the
+run records the mouth's volume, flow and composition.
 """
 
 from __future__ import annotations
@@ -49,8 +56,10 @@ from marse.chemistry import ChargeBalance
 from marse.core.implicit import ReactionTransport
 from marse.core.ledger import Ledger
 from marse.core.provenance import Manifest
+from marse.core.reservoir import ReservoirPath, ReservoirTransport
 from marse.microbes.adhesion import AttachingSpecies, SurfaceExchange
 from marse.microbes.kinetics import compile_rates, process_rates, rate_jacobian
+from marse.oral import OralFluid, renewal_per_h
 from marse.schemas.experiment import ReactiveTransportConfig
 from marse.spatial.colloids import leveque_transfer_um_per_s, stokes_einstein_um2_per_s
 from marse.spatial.transport import Diffusion
@@ -59,11 +68,15 @@ __all__ = ["ENGINE_VERSION", "INTEGRATOR_VERSION", "ReactiveTransportResult", "r
 
 ENGINE_VERSION = "reactive_transport_v2"
 INTEGRATOR_VERSION = "sdirk2_limited_v1"
+MOUTH_VERSION = "dawes_1983_mouth_renewed_film_v1"
+"""The mouth and its film, recorded in the manifest of every run that has them."""
 
 type FrameWriter = Callable[[int, float, NDArray[np.float64]], None]
 
 _AMOL_PER_UM2_TO_MOL_PER_M2 = 1e-6  # 1e-18 mol per 1e-12 m2
 _PER_UM2_TO_PER_CM2 = 1e8
+_LONGEST_SPAN_S = 60.0  # the mouth runs ahead of the box at most this far
+_ML_PER_M3 = 1e6
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +91,7 @@ class ReactiveTransportResult:
     final_state: NDArray[np.float64]  # (components, *voxels)
     surface: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
     ph: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
+    mouth: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
 
     @property
     def component_names(self) -> tuple[str, ...]:
@@ -109,6 +123,19 @@ class ReactiveTransportResult:
                 writer.writerow([f"{t:.6f}"] + [f"{self.ph[c][i]:.6f}" for c in columns])
         return destination
 
+    def write_mouth(self, path: str | Path) -> Path:
+        """Write the mouth's volume, flow, swallows and composition at every recorded time."""
+        if self.mouth is None:
+            raise ValueError("this run has no mouth")
+        destination = Path(path)
+        columns = list(self.mouth)
+        with destination.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["time_h", *columns])
+            for i, t in enumerate(self.times_h):
+                writer.writerow([f"{t:.6f}"] + [f"{self.mouth[c][i]:.10g}" for c in columns])
+        return destination
+
     def write_totals(self, path: str | Path) -> Path:
         """Write the areal totals and what has crossed the top face, as CSV with units."""
         destination = Path(path)
@@ -129,12 +156,20 @@ class ReactiveTransportResult:
         return destination
 
 
-def _digest(names: tuple[str, ...], state: NDArray[np.float64]) -> str:
-    """SHA-256 over every field in a fixed byte order, independent of the machine."""
+def _digest(
+    names: tuple[str, ...], state: NDArray[np.float64], pool: NDArray[np.float64] | None = None
+) -> str:
+    """SHA-256 over every field in a fixed byte order, independent of the machine.
+
+    A run with a mouth adds the mouth's composition, so a replay reproduces both.
+    """
     digest = hashlib.sha256()
     for name, field in zip(names, np.asarray(state, dtype="<f8"), strict=True):
         digest.update(f"{name}:".encode())
         digest.update(np.ascontiguousarray(field).tobytes())
+    if pool is not None:
+        digest.update(b"mouth:")
+        digest.update(np.ascontiguousarray(np.asarray(pool, dtype="<f8")).tobytes())
     return digest.hexdigest()
 
 
@@ -203,20 +238,49 @@ def surface_exchange(config: ReactiveTransportConfig) -> SurfaceExchange | None:
 
 
 def build_model(config: ReactiveTransportConfig) -> ReactionTransport:
-    """The discretised system a configuration describes."""
+    """The discretised system a configuration describes.
+
+    Under a film, a :class:`~marse.core.reservoir.ReservoirTransport`, closed at
+    the top and bordered by the mouth's pool.
+    """
     network = config.network
     names = network.component_names
     terms = compile_rates(network)
+    domain = config.domain
+
+    def rates(c: NDArray[np.float64]) -> NDArray[np.float64]:
+        return process_rates(terms, np.maximum(c, 0.0))
+
+    def jacobian(c: NDArray[np.float64]) -> NDArray[np.float64]:
+        return rate_jacobian(terms, c)
+
+    if domain.film is not None and domain.mouth is not None:
+        fluid = OralFluid(domain.mouth, domain.film, names)
+        diffusion = Diffusion(
+            domain.grid,
+            domain.diffusivities_um2_per_h(names),
+            np.zeros(len(names)),
+            closed_top=True,
+        )
+        return ReservoirTransport(
+            diffusion,
+            network.stoichiometric_matrix(),
+            rates,
+            jacobian,
+            exchanged=[j for j, c in enumerate(network.components) if c.phase == "dissolved"],
+            reference_um=fluid.reference_um,
+            surface=surface_exchange(config),
+        )
     diffusion = Diffusion(
-        config.domain.grid,
-        config.domain.diffusivities_um2_per_h(names),
-        config.domain.bulk(names),
+        domain.grid,
+        domain.diffusivities_um2_per_h(names),
+        domain.bulk(names),
     )
     return ReactionTransport(
         diffusion,
         network.stoichiometric_matrix(),
-        lambda c: process_rates(terms, np.maximum(c, 0.0)),
-        lambda c: rate_jacobian(terms, c),
+        rates,
+        jacobian,
         surface_exchange(config),
     )
 
@@ -270,6 +334,8 @@ def run(
     :class:`~marse.core.simulation.ConservationError` if carbon, nitrogen or
     electrons drift.
     """
+    if config.domain.mouth is not None:
+        return _run_with_mouth(config, frames)
     started = datetime.now(UTC)
     network = config.network
     names = network.component_names
@@ -373,4 +439,217 @@ def run(
         final_state=state,
         surface=surface,
         ph=ph,
+    )
+
+
+def _path(
+    fluid: OralFluid, start_h: float, stretch: Any, secreted: NDArray[np.float64]
+) -> ReservoirPath:
+    """The pool's thickness over one span, from the mouth's run ahead."""
+    return ReservoirPath(
+        start_h=start_h,
+        times_h=stretch.times_s / 3600.0,
+        thickness_um=np.array([fluid.thickness_um(v) for v in stretch.volumes_m3]),
+        growth_um_per_h=np.array([fluid.growth_um_per_h(q) for q in stretch.flows_m3_per_s]),
+        secreted_mol_per_m3=secreted,
+    )
+
+
+def _mouth_record(
+    fluid: OralFluid,
+    engine: ReservoirTransport,
+    pool: NDArray[np.float64],
+    names: tuple[str, ...],
+    balance: ChargeBalance | None,
+) -> dict[str, float]:
+    """The mouth's volume, flow and swallows, and the composition of its pool."""
+    concentration = pool * engine.reference_um / fluid.thickness_um(fluid.volume_m3)
+    stimulus = 0.0 if fluid.stimulus is None else float(concentration[fluid.stimulus])
+    record = {
+        "volume_ml": fluid.volume_m3 * _ML_PER_M3,
+        "flow_ml_per_min": fluid.flow_m3_per_s(stimulus) * _ML_PER_M3 * 60.0,
+        "swallows": float(fluid.swallows),
+    }
+    for j in engine.exchanged:
+        record[f"{names[j]}_mol_per_m3"] = float(concentration[j])
+    if balance is not None:
+        record["ph"] = float(balance.ph(concentration))
+    return record
+
+
+def _run_with_mouth(
+    config: ReactiveTransportConfig, frames: FrameWriter | None
+) -> ReactiveTransportResult:
+    """Integrate a box under a salivary film, bordered by the mouth's saliva.
+
+    Each span runs the mouth ahead to its end, at most a minute, or to the
+    next swallow; the box and the pool are then integrated together over it,
+    and a swallow takes the pool back to its resting volume. The box's ledger
+    books what crossed into the film; the second ledger checks the box and the
+    mouth together, against what was secreted and swallowed.
+    """
+    started = datetime.now(UTC)
+    network = config.network
+    names = network.component_names
+    domain = config.domain
+    assert domain.film is not None
+    assert domain.mouth is not None
+    grid = domain.grid
+    engine = build_model(config)
+    assert isinstance(engine, ReservoirTransport)
+    fluid = OralFluid(domain.mouth, domain.film, names)
+    engine.exchange_per_h = renewal_per_h(grid, domain.film)
+    box = domain.initial_state(names, config.initial_mol_per_m3, config.seed)
+    pool = np.array([domain.mouth.initial_mol_per_m3.get(n, 0.0) for n in names])
+    y = engine.pack(box, pool)  # at the resting volume, the pool's unknowns are its concentrations
+    areal = grid.voxel_volume_um3 / grid.footprint_um2 * _AMOL_PER_UM2_TO_MOL_PER_M2
+    to_mol_per_m2 = engine.reference_um * 1e-6  # the pool's unknowns, per unit area
+
+    def everything(box: NDArray[np.float64], pool: NDArray[np.float64]) -> NDArray:
+        return box.reshape(len(names), -1).sum(axis=1) * areal + pool * to_mol_per_m2
+
+    ledger = Ledger(network.composition_matrix(), box, network.quantities)
+    whole = Ledger(network.composition_matrix(), everything(box, pool), network.quantities)
+    balance = ChargeBalance.of(network) if network.has_ph else None
+    peak = y.copy()
+    imported = np.zeros(len(names))
+    secreted = np.zeros(len(names))
+    swallowed = np.zeros(len(names))
+    times, totals, imports = [0.0], [box.reshape(len(names), -1).sum(axis=1) * areal], [imported]
+    exchange = engine.surface
+    surface_rows = [] if exchange is None else [_surface_record(config, exchange, box)]
+    ph_rows = [] if balance is None else [_ph_record(balance, box)]
+    mouth_rows = [_mouth_record(fluid, engine, pool, names, balance)]
+    if frames is not None:
+        frames(0, 0.0, box)
+    now, substep = 0.0, None
+    accepted = rejected = limited = failures = newton = spans = 0
+    steps = config.steps
+    for step in range(1, steps + 1):
+        target = min(step * config.timestep_h, config.duration_h)
+        while target - now > 1e-12 * target:
+            box, pool = engine.unpack(y)
+            stimulus = 0.0
+            if fluid.stimulus is not None:
+                stimulus = pool[fluid.stimulus] * to_mol_per_m2 * fluid.area_m2
+            left = (target - now) * 3600.0
+            stretch = fluid.run_ahead(stimulus, min(_LONGEST_SPAN_S, left))
+            # Land exactly on the step's end when the span reaches it, so times never drift.
+            end = (
+                target if stretch.seconds >= left * (1 - 1e-12) else now + stretch.seconds / 3600.0
+            )
+            span = end - now
+            if span > 0:
+                growth = stretch.volumes_m3[-1] - stretch.volumes_m3[0]
+                engine.path = _path(fluid, now, stretch, fluid.secreted(growth / stretch.seconds))
+                y, entered, stats = engine.integrate(
+                    y,
+                    span,
+                    first_step=substep,
+                    relative_tolerance=config.relative_tolerance,
+                    absolute_tolerance=config.absolute_tolerances(),
+                    peak=peak,
+                    start_h=now,
+                )
+                substep = stats.next_step
+                accepted += stats.accepted
+                rejected += stats.rejected
+                limited += stats.limited
+                failures += stats.newton_failures
+                newton += stats.newton_iterations
+                spans += 1
+                ledger.exchange(entered)
+                imported = imported + entered
+                added = engine.path.added(now, end) * 1e-6  # mol/m2
+                secreted += added
+                whole.exchange(added)
+            kept = fluid.end(stretch)
+            box, pool = engine.unpack(y)
+            if kept < 1.0:
+                gone = pool * (1.0 - kept) * to_mol_per_m2
+                swallowed += gone
+                whole.exchange(-gone)
+                pool = pool * kept
+                y = engine.pack(box, pool)
+            ledger.check(box, step=step, time_h=end)
+            whole.check(everything(box, pool), step=step, time_h=end)
+            peak = np.maximum(peak, y)
+            now = end
+        now = target
+        if step % config.record_every == 0 or step == steps:
+            box, pool = engine.unpack(y)
+            times.append(now)
+            totals.append(box.reshape(len(names), -1).sum(axis=1) * areal)
+            imports.append(imported * areal)
+            if exchange is not None:
+                surface_rows.append(_surface_record(config, exchange, box))
+            if balance is not None:
+                ph_rows.append(_ph_record(balance, box))
+            mouth_rows.append(_mouth_record(fluid, engine, pool, names, balance))
+            if frames is not None:
+                frames(len(times) - 1, now, box)
+
+    box, pool = engine.unpack(y)
+    concentration = pool * engine.reference_um / fluid.thickness_um(fluid.volume_m3)
+    outputs: dict[str, Any] = {
+        "final_time_h": now,
+        "grid": {"voxels": list(grid.shape), "voxel_um": grid.voxel_um},
+        "totals_mol_per_m2": {n: float(v) for n, v in zip(names, totals[-1], strict=True)},
+        "imported_mol_per_m2": {n: float(v) for n, v in zip(names, imports[-1], strict=True)},
+        "balance": ledger.summary(box),
+        "substeps": {
+            "accepted": accepted,
+            "rejected": rejected,
+            "limited": limited,
+            "newton_failures": failures,
+            "newton_iterations": newton,
+        },
+        "time_scales": time_scales(config),
+        "mouth": {
+            "spans": spans,
+            "swallows": fluid.swallows,
+            "final_volume_ml": fluid.volume_m3 * _ML_PER_M3,
+            "final_mol_per_m3": {names[j]: float(concentration[j]) for j in engine.exchanged},
+            "secreted_mol_per_m2": {n: float(v) for n, v in zip(names, secreted, strict=True)},
+            "swallowed_mol_per_m2": {n: float(v) for n, v in zip(names, swallowed, strict=True)},
+            "balance": whole.summary(everything(box, pool)),
+        },
+        "final_state_sha256": _digest(names, box, pool),
+    }
+    surface = None
+    if exchange is not None:
+        surface = {key: np.array([row[key] for row in surface_rows]) for key in surface_rows[0]}
+        outputs["surface"] = {
+            "conditioning_film": domain.surface.conditioning_film if domain.surface else "",
+            "transfer_um_per_s": transfer_velocities_um_per_s(config),
+            "final": dict(surface_rows[-1]),
+        }
+    ph = None
+    if balance is not None:
+        ph = {key: np.array([row[key] for row in ph_rows]) for key in ph_rows[0]}
+        lowest = int(np.argmin(ph["substratum_min"]))
+        outputs["ph"] = {
+            "final": dict(ph_rows[-1]),
+            "lowest_at_substratum": float(ph["substratum_min"][lowest]),
+            "lowest_at_substratum_h": float(times[lowest]),
+        }
+    manifest = Manifest.build(
+        config=config,
+        models={"engine": ENGINE_VERSION, "integrator": INTEGRATOR_VERSION, "mouth": MOUTH_VERSION},
+        random_streams=domain.random_streams,
+        started=started,
+        finished=datetime.now(UTC),
+        steps=steps,
+        outputs=outputs,
+    )
+    return ReactiveTransportResult(
+        config=config,
+        manifest=manifest,
+        times_h=np.array(times),
+        totals_mol_per_m2=np.array(totals),
+        imported_mol_per_m2=np.array(imports),
+        final_state=box,
+        surface=surface,
+        ph=ph,
+        mouth={key: np.array([row[key] for row in mouth_rows]) for key in mouth_rows[0]},
     )

@@ -392,6 +392,8 @@ chemistry in a single column in three seconds.
 | `flow` | object | with `substratum` | The flow's shear at the substratum. |
 | `suspension` | list of suspended species | with `substratum` | The cells in the liquid that bind. |
 | `adhesion` | list of bindings | with `substratum` | How each species binds to each material. |
+| `film` | object | no | The top voxels are a salivary film, closed to the air and renewed from the mouth. [A salivary film and the mouth](#a-salivary-film-and-the-mouth): these two fields go together, and replace `bulk_mol_per_m3`. |
+| `mouth` | object | with `film` | The mouth's saliva: what is secreted, how much the mouth holds, and when it swallows. |
 
 `initial_mol_per_m3` fills every voxel. Each colony then sets its component to
 its concentration in the voxels whose centres lie inside it. A colony that
@@ -504,12 +506,59 @@ material, species by species, and the area each material has covered.
 | `detachment_per_h` | number | yes | How fast reversibly bound cells detach, per hour. |
 | `locking_per_h` | number | yes | How fast they lock into the biomass, per hour. |
 
+### A salivary film and the mouth
+
+Plaque in the mouth lies under a film of saliva about 0.1 mm thick, which
+moves slowly over the teeth and is renewed from the saliva in the mouth. The
+mouth fills with saliva and empties by swallowing. With `film` and `mouth`,
+a run in space models exactly that
+([theory.md §4.8 and §9.9](theory.md#48-a-salivary-film-and-the-mouth)):
+
+- **The film** is the top `thickness_um` of the box. Its surface is open to the
+  air, so nothing crosses the top face. Saliva replaces each of its voxels at
+  the rate u(z) / l, where u is the film's speed at that height and l the
+  length of plaque the film has crossed to reach the site.
+- **The mouth** holds a pool of saliva between a resting volume and the volume
+  at which it swallows (Dawes 1983). The glands secrete saliva into it, faster
+  while it tastes the stimulus, and a swallow takes it back to the resting
+  volume without changing its concentrations. The film exchanges with this
+  pool, whose composition is solved together with the box.
+- **What the run records.** `mouth.csv` gives the pool's volume, the flow, the
+  swallows so far and the pool's concentration of every dissolved component,
+  and its pH, at every recorded time. The manifest adds what was secreted and
+  swallowed, and a second balance: the box and the mouth together, counting
+  both.
+
+### Film fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `thickness_um` | number | yes | How thick the film is: a whole number of voxels, less than the box. |
+| `velocity_mm_per_min` | number | yes | Its mean speed over the teeth; measured values are 0.8 to 7.6 mm per minute. |
+| `plaque_length_mm` | number | yes | How much plaque it crossed to reach this site. The film is renewed every `plaque_length_mm` / `velocity_mm_per_min` minutes on average. |
+
+### Mouth fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `saliva_mol_per_m3` | object of numbers | yes | What the glands secrete at rest. Dissolved components only; it must be neutral at its pH. |
+| `stimulated_saliva_mol_per_m3` | object of numbers | no | What they secrete at the highest stimulated flow; between the two flows, in proportion. |
+| `resting_volume_ml` | number | yes | How much the mouth holds after a swallow, films included. |
+| `swallow_volume_ml` | number | yes | How much it holds when it swallows. |
+| `unstimulated_flow_ml_per_min` | number | yes | The flow at rest. |
+| `stimulated_flow_ml_per_min` | number | no, default `0` | The most the stimulus can add to it. |
+| `stimulus` | component name | with a stimulated flow | The dissolved component whose taste raises the flow, such as sugar. |
+| `stimulus_half_mol_per_m3` | number | with `stimulus` | The concentration in the mouth that raises the flow by half the stimulated flow. |
+| `plaque_area_cm2` | number | yes | The plaque this box stands for, which exchanges with the mouth through its film. |
+| `initial_mol_per_m3` | object of numbers | no, default the saliva | What the mouth holds at the start. |
+
 ## Balancing: `balanced_by`
 
 Each component in `balanced_by` gets the coefficient that makes the process
-balance. There are three balances (carbon, nitrogen and electrons), so at most
-three components can be determined, and they must be determined uniquely.
-MARSE refuses:
+balance. There is one balance for each conserved quantity (carbon, nitrogen and
+electrons, and each of phosphorus, potassium, chlorine and sodium that the
+network contains), so at most that many components can be determined, and they
+must be determined uniquely. MARSE refuses:
 
 - **a quantity nothing in `balanced_by` carries.** Growth on glucose balanced
   only by oxygen and carbon dioxide leaves the biomass's nitrogen with no

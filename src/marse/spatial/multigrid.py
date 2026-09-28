@@ -138,7 +138,8 @@ class ImplicitSystem:
     """The system x - a (L x + B x) = b on a grid, with its multigrid hierarchy.
 
     ``blocks`` has shape ``(J, J, *shape)``: at each voxel, the derivative of the
-    reaction rates of every component with respect to every component.
+    reaction rates of every component with respect to every component. With
+    ``closed_top``, diffusion has no exchange through the top face.
     """
 
     def __init__(
@@ -148,8 +149,11 @@ class ImplicitSystem:
         diffusivity: NDArray[np.float64],
         a: float,
         blocks: NDArray[np.float64],
+        *,
+        closed_top: bool = False,
     ) -> None:
         self.components = int(diffusivity.size)
+        self.closed_top = closed_top
         self.diffusivity = np.asarray(diffusivity, dtype=float)
         self.a = float(a)
         voxel_blocks = np.moveaxis(blocks.reshape(self.components, self.components, -1), -1, 0)
@@ -173,7 +177,8 @@ class ImplicitSystem:
         self, shape: tuple[int, ...], spacing: tuple[float, ...], blocks: NDArray[np.float64]
     ) -> _Level:
         j = self.components
-        diag_l = diagonal(self.diffusivity, spacing, shape).reshape(j, -1)
+        diag_l = diagonal(self.diffusivity, spacing, shape, closed_top=self.closed_top)
+        diag_l = diag_l.reshape(j, -1)
         system = np.eye(j)[None] - self.a * blocks
         system[:, np.arange(j), np.arange(j)] -= self.a * diag_l.T
         inverse = np.linalg.inv(system)
@@ -223,8 +228,10 @@ class ImplicitSystem:
 
     def _diffuse(self, level: _Level, x: NDArray[np.float64]) -> NDArray[np.float64]:
         field = x.reshape(self.components, *level.shape)
-        rate = divergence(face_fluxes(field, self.diffusivity, level.spacing, None), level.spacing)
-        return rate.reshape(self.components, -1)
+        fluxes = face_fluxes(
+            field, self.diffusivity, level.spacing, None, closed_top=self.closed_top
+        )
+        return divergence(fluxes, level.spacing).reshape(self.components, -1)
 
     def _apply(self, level: _Level, x: NDArray[np.float64]) -> NDArray[np.float64]:
         react = np.einsum("vjk,kv->jv", level.blocks, x)

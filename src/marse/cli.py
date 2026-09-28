@@ -143,12 +143,16 @@ def _summarise_in_space(result: ReactiveTransportResult) -> None:
         f"{substeps['limited']} limited to keep concentrations positive"
     )
     boundary = "the top and the substratum" if "surface" in outputs else "the top"
+    if "mouth" in outputs:
+        boundary = "the film and the substratum" if "surface" in outputs else "the film"
     print(f"{'final':<24}   mol per m2 of surface   entered through {boundary}")
     for name, value in outputs["totals_mol_per_m2"].items():
         entered = outputs["imported_mol_per_m2"][name]
         print(f"  {name:<24} {value:>12.6g}   {entered:>+12.4g}")
     if "surface" in outputs:
         _summarise_surface(result)
+    if "mouth" in outputs:
+        _summarise_mouth(result)
     if "ph" in outputs:
         ph = outputs["ph"]
         final = ph["final"]
@@ -160,6 +164,24 @@ def _summarise_in_space(result: ReactiveTransportResult) -> None:
     worst = max(q["largest_relative_residual"] for q in outputs["balance"].values())
     print(
         f"balance     {_listed(outputs['balance'])}, counting what crossed {boundary}, "
+        f"conserved to {worst:.1e}"
+    )
+
+
+def _summarise_mouth(result: ReactiveTransportResult) -> None:
+    mouth = result.manifest.outputs["mouth"]
+    worst = max(q["largest_relative_residual"] for q in mouth["balance"].values())
+    print(
+        f"mouth       {mouth['swallows']} swallows in {mouth['spans']} spans; "
+        f"{mouth['final_volume_ml']:.3g} mL at the end"
+    )
+    print(f"  {'saliva at the end':<24} mol per m3")
+    for name, value in mouth["final_mol_per_m3"].items():
+        print(f"  {name:<24} {value:>12.6g}")
+    if result.mouth is not None and "ph" in result.mouth:
+        print(f"  {'pH':<24} {result.mouth['ph'][-1]:>12.3f}")
+    print(
+        f"  box and mouth together, counting what was secreted and swallowed, "
         f"conserved to {worst:.1e}"
     )
 
@@ -276,6 +298,8 @@ def _run_in_space(
         written.append(result.write_surface(output_dir / "surface.csv"))
     if result.ph is not None:
         written.append(result.write_ph(output_dir / "ph.csv"))
+    if result.mouth is not None:
+        written.append(result.write_mouth(output_dir / "mouth.csv"))
     return result, (*written, index, pvd, manifest)
 
 
@@ -562,8 +586,11 @@ def _report_domain(config: ReactiveTransportConfig) -> None:
         f"\nspace       {grid.dimensions}-D, {voxels} voxels of {grid.voxel_um:g} um "
         f"({size} um), {grid.voxels:,} voxels, {megabytes:.3g} MB per state"
     )
-    bulk = ", ".join(f"{n} {v:g}" for n, v in domain.bulk_mol_per_m3.items() if v)
-    print(f"  bulk liquid above, mol per m3: {bulk or 'nothing'}")
+    if domain.film is not None and domain.mouth is not None:
+        _report_mouth(config)
+    else:
+        bulk = ", ".join(f"{n} {v:g}" for n, v in domain.bulk_mol_per_m3.items() if v)
+        print(f"  bulk liquid above, mol per m3: {bulk or 'nothing'}")
     moving = ", ".join(f"{n} {v * 1e12:g}" for n, v in domain.diffusivity_m2_per_s.items())
     print(f"  diffusivities, um2 per s: {moving or 'nothing diffuses'}")
     placed = len(domain.colonies) + sum(g.count for g in domain.random_colonies)
@@ -596,6 +623,41 @@ def _report_domain(config: ReactiveTransportConfig) -> None:
             f"time scales diffusion across the box {scales['diffusion_h'] * 3600:.3g} s, "
             f"fastest growth {scales['growth_h']:.3g} h (ratio {scales['ratio']:.2g})"
         )
+
+
+def _report_mouth(config: ReactiveTransportConfig) -> None:
+    from marse.oral import OralFluid, renewal_per_h
+
+    domain = config.domain
+    film, mouth = domain.film, domain.mouth
+    assert film is not None
+    assert mouth is not None
+    fluid = OralFluid(mouth, film, config.network.component_names)
+    rate = renewal_per_h(domain.grid, film)
+    layers = round(film.thickness_um / domain.grid.voxel_um)
+    mean = float(rate[..., -layers:].mean())
+    print(
+        f"  film        {film.thickness_um:g} um moving at {film.velocity_mm_per_min:g} mm per "
+        f"minute over {film.plaque_length_mm:g} mm of plaque: renewed every "
+        f"{60.0 / mean:.3g} min on average, {60.0 / rate.max():.3g} min at its surface"
+    )
+    cycle = (fluid.full_m3 - fluid.resting_m3) / fluid.unstimulated_m3_per_s / 60.0
+    stimulus = (
+        f"; up to {mouth.stimulated_flow_ml_per_min:g} more with {mouth.stimulus}"
+        if (mouth.stimulus)
+        else ""
+    )
+    print(
+        f"  mouth       {mouth.resting_volume_ml:g} to {mouth.swallow_volume_ml:g} mL at "
+        f"{mouth.unstimulated_flow_ml_per_min:g} mL per minute{stimulus}; at rest a swallow "
+        f"every {cycle:.3g} min"
+    )
+    print(
+        f"  plaque      {mouth.plaque_area_cm2:g} cm2 under {fluid.film_m3 * 1e6:.3g} mL of film; "
+        f"the pool holds {fluid.thickness_um(fluid.resting_m3):.4g} um over it at rest"
+    )
+    saliva = ", ".join(f"{n} {v:g}" for n, v in mouth.saliva_mol_per_m3.items() if v)
+    print(f"  saliva, mol per m3: {saliva or 'nothing'}")
 
 
 def _report_surface(config: ReactiveTransportConfig) -> None:
@@ -641,13 +703,19 @@ def _report_ph(config: RunConfig) -> None:
     names = network.component_names
     balance = ChargeBalance.of(network)
     if isinstance(config, ReactiveTransportConfig):
-        bulk = float(balance.ph(config.domain.bulk(names)))
         state = config.domain.initial_state(names, config.initial_mol_per_m3, config.seed)
         ph = balance.ph(state)
-        print(
-            f"pH          {bulk:.2f} in the bulk liquid; {ph.min():.2f} to {ph.max():.2f} "
-            "in the box at the start"
-        )
+        mouth = config.domain.mouth
+        if mouth is None:
+            liquid = f"{float(balance.ph(config.domain.bulk(names))):.2f} in the bulk liquid"
+        else:
+            saliva = np.array([mouth.saliva_mol_per_m3.get(n, 0.0) for n in names])
+            pool = np.array([mouth.initial_mol_per_m3.get(n, 0.0) for n in names])
+            liquid = (
+                f"{float(balance.ph(saliva)):.2f} in the saliva secreted; "
+                f"{float(balance.ph(pool)):.2f} in the mouth at the start"
+            )
+        print(f"pH          {liquid}; {ph.min():.2f} to {ph.max():.2f} in the box at the start")
     else:
         initial = np.array([config.initial_mol_per_m3[n] for n in names])
         print(f"\npH          {float(balance.ph(initial)):.2f} at the start")

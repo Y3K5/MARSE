@@ -14,6 +14,7 @@ import pytest
 
 from marse.core.framestore import FrameStore as CoreFrameStore
 from marse.ecosystem.framestore import FrameStore as EcosystemFrameStore
+from marse.spatial.column import ColumnSystem
 from marse.spatial.grid import Grid
 from marse.spatial.multigrid import ImplicitSystem, inverse
 from marse.spatial.transport import Diffusion
@@ -245,3 +246,57 @@ def test_the_footprint_counts_a_missing_lateral_axis_as_one_voxel_deep():
     assert Grid((10,), 2.0).footprint_um2 == 4.0
     assert Grid((5, 10), 2.0).footprint_um2 == 20.0
     assert Grid((5, 3, 10), 2.0).footprint_um2 == 60.0
+
+
+# --- a closed top, and the direct solve of a column ---------------------------------
+
+
+@pytest.mark.parametrize("dims", [1, 2, 3])
+def test_a_closed_top_keeps_everything_in_the_box(dims):
+    grid = Grid(SHAPES[dims], 1.5)
+    rng = np.random.default_rng(dims)
+    c = rng.uniform(0.0, 3.0, size=(3, *grid.shape))
+    diffusion = Diffusion(grid, np.array([2.0e6, 5.0e5, 0.0]), np.ones(3), closed_top=True)
+    assert np.all(diffusion.import_rate(c) == 0.0)
+    rate = diffusion.rate(c)
+    size = diffusion.amounts(np.abs(rate)).max()  # what the sum could lose to rounding
+    np.testing.assert_allclose(diffusion.amounts(rate), 0.0, atol=1e-13 * size)
+    # The diagonal is the rate's own derivative, closed face and all.
+    unit = np.zeros((3, *grid.shape))
+    corner = (0,) * (dims - 1) + (-1,)
+    unit[(0, *corner)] = 1.0
+    assert (
+        diffusion.rate(unit, homogeneous=True)[(0, *corner)] == diffusion.diagonal()[(0, *corner)]
+    )
+
+
+def _column_blocks(n, components, seed):
+    rng = np.random.default_rng(seed)
+    blocks = rng.normal(0.0, 50.0, size=(components, components, n))
+    diagonal = np.arange(components)
+    blocks[diagonal, diagonal] = -np.abs(blocks[diagonal, diagonal]) * 20
+    return blocks, rng
+
+
+@pytest.mark.parametrize("closed_top", [False, True])
+def test_a_column_is_solved_exactly_and_agrees_with_multigrid(closed_top):
+    n, components, a = 64, 4, 0.03
+    diffusivity = np.array([4.0e6, 1.0e6, 3.0e5, 0.0])
+    blocks, rng = _column_blocks(n, components, 2)
+    column = ColumnSystem((n,), (2.0,), diffusivity, a, blocks, closed_top=closed_top)
+    grid = ImplicitSystem((n,), (2.0,), diffusivity, a, blocks, closed_top=closed_top)
+    x = rng.normal(size=(components, n))
+    np.testing.assert_array_equal(column.apply(x), grid.apply(x))
+    b = rng.normal(size=(components, n))
+    solved, iterations = column.solve(b, scale=np.ones_like(b))
+    assert iterations == 1
+    np.testing.assert_allclose(column.apply(solved), b, rtol=0, atol=1e-12)
+    by_multigrid, _ = grid.solve(b, scale=np.ones_like(b), tolerance=1e-13)
+    np.testing.assert_allclose(solved, by_multigrid, rtol=1e-9, atol=1e-11)
+
+
+def test_a_column_is_solved_the_same_way_every_time():
+    blocks, rng = _column_blocks(32, 3, 5)
+    column = ColumnSystem((32,), (2.0,), np.array([1.0e6, 2.0e5, 0.0]), 0.1, blocks)
+    b = rng.normal(size=(3, 32))
+    np.testing.assert_array_equal(column.precondition(b), column.precondition(b))
