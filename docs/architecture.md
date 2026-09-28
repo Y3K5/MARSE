@@ -45,6 +45,7 @@ src/marse/
                    (how cells in the liquid reach a surface), surface.py (the materials of the
                    substratum), vtk.py (ParaView output); domain.py and diffusion.py (the 1-D
                    steady solver)
+  chemistry/       acid_base.py (pH from electroneutrality over acid-base totals and ions)
   microbes/        growth.py, resource_use.py, adhesion.py, phenotype.py, interactions.py
   biofilm/         biomass.py, matrix.py, maturation.py
   ecosystem/       the 2-D multispecies engine (model.py, providers.py, framestore.py, viewer.py)
@@ -62,6 +63,7 @@ Implemented so far (the rest of the layout above is planned):
 |---|---|
 | `core/` | `config`, `state`, `seeds`, `provenance`, `simulation`, `integrators`, `ledger`, `well_mixed`, `framestore`, `implicit`, `reactive_transport` |
 | `spatial/` | `grid`, `transport`, `multigrid`, `colloids`, `surface`, `vtk`, `domain`, `diffusion`, `solutes` |
+| `chemistry/` | `acid_base` |
 | `microbes/` | `growth`, `cardinal`, `kinetics`, `adhesion`, `niche`, `genotype`, `additives` |
 | `schemas/` | `formula`, `network`, `experiment`, `domain`: configuration schema v2 (reaction networks checked for continuity, with rates, run settings and space) |
 | `biofilm/` | `biomass` |

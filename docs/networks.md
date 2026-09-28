@@ -88,13 +88,14 @@ key is an error, not a silently ignored typo.
 | `description` | text | no | What the network represents, and where its numbers come from. |
 | `components` | list of components | yes | At least one. |
 | `processes` | list of processes | yes | May be empty. |
+| `pkw` | number | no, default `14` | Water's ion product, −log₁₀ K<sub>w</sub>, for a network whose charges set a pH: 14.0 at 25 °C, 13.6 at 37 °C. Only with an `acid_base` component or a `ph` factor. |
 | `experiment_id` | text | to run | Names the run in its manifest. |
 | `initial_mol_per_m3` | object of numbers | no, default `0` each | The starting concentration of each component, in mol per m³ (mmol per litre). Components left out start at zero. |
 | `duration_h` | number | to run | How long to run. |
 | `timestep_h` | number | to run | The longest substep, and the unit of recording. Accuracy comes from the tolerances, not from this. |
 | `record_interval_h` | number | no, default `timestep_h` | How often the trajectory records a row, rounded to a whole number of timesteps. The final state is always recorded. |
 | `relative_tolerance` | number | no, default `1e-6`, or `1e-4` in space | The accepted local error, as a fraction of each component's largest value. In space that is its largest value anywhere in the box. |
-| `absolute_tolerance_mol_per_m3` | number | no, default `1e-9` | The accepted local error for traces (picomolar). |
+| `absolute_tolerance_mol_per_m3` | number, or object of numbers | no, default `1e-9` | The accepted local error for traces (picomolar). An object gives each component named its own, and the rest the default, so a component far below the others is held to its own scale. |
 | `seed` | integer | no, default `0` | Places `random_colonies`, and is recorded in the manifest. Nothing else draws random numbers. |
 | `domain` | domain | no | Runs the network in space instead of a closed box; see [Running a network in space](#running-a-network-in-space). |
 
@@ -106,14 +107,21 @@ key is an error, not a silently ignored typo.
 | `phase` | `dissolved` or `particulate` | yes | Dissolved components are carried by the liquid. Particulate ones, such as biomass, move only with the biofilm. |
 | `formula` | text | yes | The chemical formula of one unit of the component, such as `C6H12O6` or `CH1.8O0.5N0.2`. |
 | `charge` | number | no, default `0` | The charge of one formula unit, in elementary charges: `1` for ammonium, `-1` for lactate. |
+| `acid_base` | object | no | Makes the component an acid–base total, such as lactic acid and lactate together; see [Acids, bases and pH](#acids-bases-and-ph). |
 
 A component is counted in mol of its formula unit. Biomass written per carbon
 atom, as `CH1.8O0.5N0.2`, is therefore counted in C-mol. The formula rules:
 
-- **Elements** may be C, H, O and N, each followed by an optional count. A
-  count may be a decimal, for a lumped composition such as biomass. A symbol
-  may repeat (`CH3COOH`) and its counts are summed. Sulphur and phosphorus
-  arrive in Stage 3; parentheses are not supported.
+- **Elements** may be C, H, N and O, and P, K, Cl and Na, each followed by an
+  optional count. A count may be a decimal, for a lumped composition such as
+  biomass. A symbol may repeat (`CH3COOH`) and its counts are summed. Other
+  elements, such as sulphur and calcium, arrive when they are balanced;
+  parentheses are not supported.
+- **Every element present is balanced.** Carbon, nitrogen and electrons are
+  balanced in every network, and phosphorus, potassium, chlorine and sodium in
+  a network whose components contain them. The degree of reduction takes P at
+  +5, K and Na at +1 and Cl at −1, so phosphate and the salt ions hold no
+  electrons ([theory.md §3.6](theory.md#36-composition-continuity-and-the-degree-of-reduction)).
 - **The charge goes in its own field.** A formula whose counts are whole
   numbers must have an even number of electrons. An odd number almost always
   means an ion written without its charge: `NH4` without `"charge": 1` would
@@ -123,6 +131,49 @@ atom, as `CH1.8O0.5N0.2`, is therefore counted in C-mol. The formula rules:
 - **Water, protons and hydroxide are refused.** They hold no carbon, nitrogen
   or electrons, so no balance could constrain them; they are closed implicitly
   instead.
+
+### Acid base fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `pka` | list of numbers | yes | The acid's pKa values, rising strictly, one for each proton it gives up in turn, as conditional values for the liquid's temperature and ionic strength. |
+
+## Acids, bases and pH
+
+A network sets a pH when one of its components is an acid–base total or one
+of its rates has a `ph` factor. Protons are never components. In every voxel,
+the concentration of hydrogen ions is the one that makes the liquid
+electrically neutral (theory.md §3.8):
+
+$$
+[\mathrm{H^+}] - \frac{K_w}{[\mathrm{H^+}]}
++ \sum_{\text{totals}} T_k\,\bar z_k([\mathrm{H^+}])
++ \sum_{\text{ions}} z_s\,c_s = 0 .
+$$
+
+- **An acid–base total** holds every protonation state of one acid, such as
+  lactic acid and lactate. Its `formula` and `charge` are those of the most
+  protonated form: lactic acid `C3H6O3` with charge 0, carbonic acid `H2CO3`
+  for dissolved carbon dioxide, bicarbonate and carbonate together, `H3PO4`
+  for phosphate, `NH4` with charge 1 for ammonium. Its mean charge, z̄,
+  follows from its pKa values.
+- **Any other charged component** is an ion that keeps its charge at any pH,
+  such as K⁺ or Cl⁻.
+- **The liquid must be neutral as given.** A saliva of bicarbonate and
+  phosphate needs the potassium, sodium and chloride that balance their
+  charge at its pH; `marse check` prints the pH that each composition
+  implies.
+- **Fixed charges need their counter-ions.** Groups on bacteria or in the
+  matrix are particulate totals; the cations bound to them can be a
+  particulate ion, such as bound potassium.
+- **What a run records.** A well-mixed run adds a `ph` column to
+  `trajectory.csv`. A run in space writes `ph.csv`, with the pH over the
+  substratum (its mean, minimum and maximum) and its range in the box at
+  every recorded time, and a `ph` field in every ParaView frame. Both put a
+  summary in the manifest.
+
+A `ph` factor in a rate (below) uses the pH of the voxel the rate is evaluated
+in.
 
 ### Growth process fields
 
@@ -188,10 +239,13 @@ formed. Each factor f is dimensionless. The equations are in
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `component` | component name | yes | The component the factor responds to. |
-| `form` | `monod`, `inhibition` or `haldane` | yes | `monod`: S/(K+S). `inhibition`: K_I/(K_I+S). `haldane`: S/(K+S+S²/K_I). |
+| `component` | component name | monod, inhibition, haldane | The component the factor responds to. |
+| `form` | `monod`, `inhibition`, `haldane` or `ph` | yes | `monod`: S/(K+S). `inhibition`: K_I/(K_I+S). `haldane`: S/(K+S+S²/K_I). `ph`: the cardinal pH model of Rosso et al. (1995), 1 at the optimum and 0 at the limits and beyond. |
 | `half_saturation_mol_per_m3` | number | monod, haldane | K, positive. |
 | `inhibition_mol_per_m3` | number | inhibition, haldane | K_I, positive. |
+| `ph_min` | number | ph | The lowest pH at which the process runs. |
+| `ph_optimum` | number | ph | The pH at which it runs fastest; between `ph_min` and `ph_max`. |
+| `ph_max` | number | ph | The highest pH at which it runs. |
 
 Two rules are checked when the file is read:
 

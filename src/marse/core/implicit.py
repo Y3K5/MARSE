@@ -90,6 +90,18 @@ _LINEAR_TOLERANCE = 1e-4
 
 type Field = NDArray[np.float64]
 type Transfers = tuple[Field, ...]
+type Tolerance = float | NDArray[np.float64]
+
+
+def _tolerance(absolute: Tolerance, dims: int) -> Tolerance:
+    """An absolute tolerance per component shaped to broadcast against a field.
+
+    One number stays that number, so a run with a single tolerance computes
+    exactly what it computed before tolerances could be given per component.
+    """
+    if np.ndim(absolute) == 0:
+        return absolute
+    return np.asarray(absolute, dtype=float).reshape((-1,) + (1,) * dims)
 
 
 def _magnitude(*fields: Field) -> Field:
@@ -193,7 +205,7 @@ class ReactionTransport:
         guess: Field,
         system: ImplicitSystem,
         reference: Field,
-        atol: float,
+        atol: Tolerance,
         rtol: float,
     ) -> tuple[Field, ImplicitSystem, int]:
         y = guess.copy()
@@ -319,15 +331,15 @@ class ReactionTransport:
     # -- one step and an adaptive span ----------------------------------------------------
 
     def step(
-        self, y: Field, h: float, reference: Field, atol: float, rtol: float
+        self, y: Field, h: float, reference: Field, atol: Tolerance, rtol: float
     ) -> tuple[Field, NDArray[np.float64], Field, int, int]:
         """One SDIRK2 step: new state, imports, error estimate, limiter rounds, Newton steps."""
         # Traces far below any tolerance may underflow to zero; that loses nothing.
         with np.errstate(under="ignore"):
-            return self._step(y, h, reference, atol, rtol)
+            return self._step(y, h, reference, _tolerance(atol, y.ndim - 1), rtol)
 
     def _step(
-        self, y: Field, h: float, reference: Field, atol: float, rtol: float
+        self, y: Field, h: float, reference: Field, atol: Tolerance, rtol: float
     ) -> tuple[Field, NDArray[np.float64], Field, int, int]:
         g = GAMMA
         reference = _magnitude(reference)
@@ -355,7 +367,7 @@ class ReactionTransport:
             imports = imports + substratum.reshape(top.shape[0], -1).sum(axis=1) / self.spacing[-1]
         return new, imports, estimate, rounds, n1 + n2
 
-    def starting_step(self, y: Field, reference: Field, atol: float, rtol: float) -> float:
+    def starting_step(self, y: Field, reference: Field, atol: Tolerance, rtol: float) -> float:
         """A first step from the rates and their change over a trial Euler step.
 
         The algorithm of Hairer, Norsett and Wanner (1993, section II.4) for a
@@ -364,9 +376,9 @@ class ReactionTransport:
         change in the rates, a hundredth of the tolerance.
         """
         with np.errstate(under="ignore"):
-            return self._starting_step(y, reference, atol, rtol)
+            return self._starting_step(y, reference, _tolerance(atol, y.ndim - 1), rtol)
 
-    def _starting_step(self, y: Field, reference: Field, atol: float, rtol: float) -> float:
+    def _starting_step(self, y: Field, reference: Field, atol: Tolerance, rtol: float) -> float:
         scale = atol + rtol * np.maximum(_magnitude(reference), _magnitude(y))
         rate = self.evaluate(y).rate
         size = float(np.max(np.abs(y) / scale))
@@ -384,7 +396,7 @@ class ReactionTransport:
         span: float,
         *,
         relative_tolerance: float,
-        absolute_tolerance: float,
+        absolute_tolerance: Tolerance,
         first_step: float | None = None,
         peak: Field | None = None,
     ) -> tuple[Field, NDArray[np.float64], StepStats]:
@@ -392,8 +404,10 @@ class ReactionTransport:
 
         Without ``first_step``, the first step comes from :meth:`starting_step`.
         Imports are in the units the ledger sums: concentration summed over
-        voxels, per component.
+        voxels, per component. ``absolute_tolerance`` is one number, or one per
+        component.
         """
+        absolute_tolerance = _tolerance(absolute_tolerance, y.ndim - 1)
         reference = _magnitude(y if peak is None else peak)
         if first_step is None:
             first_step = self.starting_step(y, reference, absolute_tolerance, relative_tolerance)

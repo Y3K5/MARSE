@@ -431,6 +431,43 @@ On one machine (4 cores, Python 3.12):
 The times are the same at 1 and 4 BLAS threads, to within a few percent, and
 so are the results, bit for bit.
 
+## pH from electroneutrality
+
+A network whose components include acids and bases sets a pH in every voxel,
+from the charge balance over them
+([theory.md §3.8](theory.md#38-acidbase-equilibria-and-ph)). These criteria
+were set before Stage S1 was built, and are checked in `tests/test_acid_base.py`:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| G1 | The hydrogen ion concentration against an independent bisection of the charge balance, for lactate, carbonate, phosphate and ammonium, 500 random compositions each | 1e-10 relative | 2.4e-12 |
+| G2 | The charge left in 2,000 random plaque-like voxels, pH 1 to 13 | 1e-12 of the potassium, chloride and hydrogen ions | 8.1e-14 |
+| G4 | The rate Jacobian of a process with a pH factor, through dh/dc, against finite differences | 1e-6 relative | 2.1e-7 |
+
+Other checks:
+
+- **Closed forms.** A weak acid, with the potassium that neutralises it at a
+  chosen pH, gives back that pH to 1e-12, from pH 3 to 8.5. A half-neutralised
+  acid sits at its pKa. Pure water sits at half of pKw.
+- **The slopes.** dh/dc agrees with Richardson-extrapolated finite
+  differences to 1e-7. Acids and anions raise h, cations lower it, and
+  uncharged components do not move it.
+- **Convergence to the last bit.** The solve stops where the balance reaches
+  its own rounding floor. Without that test, Newton's method stepped for ever
+  between two neighbouring values of h in a lactate buffer at pH 7.
+- **The cardinal pH slope** agrees with finite differences of the factor.
+- **Runs.**
+  - A fermenting well-mixed box acidifies at every record and writes its pH.
+  - A plaque column writes `ph.csv`, from pH 7.00 at the start.
+  - `marse check` prints the pH each starting composition implies.
+- **The elements.** Phosphate and the salt ions hold no electrons. A process
+  that makes potassium from chloride is refused. `balanced_by` closes an
+  element.
+- **Nothing else changes.** The examples' final digests are bit-identical to
+  those before pH existed, and one absolute tolerance given per component
+  reproduces the run with a single tolerance, bit for bit, in a box and in
+  space.
+
 ## Running the suite
 
 `python -m pytest` runs the pull-request suite, which leaves out tests marked

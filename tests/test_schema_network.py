@@ -553,3 +553,64 @@ def test_marse_check_points_a_version_one_file_at_marse_ecosystem(capsys):
     experiment = ROOT / "examples" / "experiments" / "two_species_ecosystem.json"
     assert main(["check", str(experiment)]) == 2
     assert "marse ecosystem" in capsys.readouterr().out
+
+
+# --- networks with phosphorus, potassium, chlorine and sodium --------------------------
+
+
+SALTS = [
+    {"name": "glucose", "phase": "dissolved", "formula": "C6H12O6"},
+    {"name": "phosphate", "phase": "dissolved", "formula": "H3PO4"},
+    {"name": "potassium", "phase": "dissolved", "formula": "K", "charge": 1},
+    {"name": "chloride", "phase": "dissolved", "formula": "Cl", "charge": -1},
+    {"name": "salt", "phase": "particulate", "formula": "KCl"},
+]
+
+
+def test_every_element_present_is_a_conserved_quantity():
+    network = network_from_dict({"schema_version": 2, "components": SALTS, "processes": []})
+    assert network.quantities == (
+        "carbon",
+        "nitrogen",
+        "electrons",
+        "phosphorus",
+        "potassium",
+        "chlorine",
+    )
+    matrix = network.composition_matrix()
+    assert matrix.shape == (5, 6)
+    assert matrix[network.component_names.index("salt")].tolist() == [0, 0, 0, 0, 1, 1]
+
+
+def test_a_process_that_makes_potassium_is_refused_naming_it():
+    process = {
+        "name": "alchemy",
+        "kind": "reaction",
+        "stoichiometry_mol_per_mol": {"chloride": -1, "potassium": 1},
+    }
+    raw = {"schema_version": 2, "components": SALTS, "processes": [process]}
+    with pytest.raises(ContinuityError, match="creates 1 mol K and destroys 1 mol Cl"):
+        network_from_dict(raw)
+
+
+def test_the_balances_close_an_element_too():
+    process = {
+        "name": "dissolution",
+        "kind": "reaction",
+        "stoichiometry_mol_per_mol": {"salt": -1},
+        "balanced_by": ["potassium", "chloride"],
+    }
+    network = network_from_dict({"schema_version": 2, "components": SALTS, "processes": [process]})
+    dissolution = network.process("dissolution")
+    assert dissolution.coefficient("potassium") == dissolution.coefficient("chloride") == 1
+    assert dissolution.protons == 0
+    assert dissolution.water == 0
+
+
+def test_the_example_keeps_its_three_quantities_and_its_written_form():
+    network = load_network(EXAMPLE)
+    assert network.quantities == ("carbon", "nitrogen", "electrons")
+    written = network.to_dict()
+    assert "pkw" not in written
+    assert all("acid_base" not in c for c in written["components"])
+    assert not network.has_ph

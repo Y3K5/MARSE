@@ -149,7 +149,7 @@ def integrate(
     *,
     first_step: float,
     relative_tolerance: float,
-    absolute_tolerance: float,
+    absolute_tolerance: float | NDArray[np.float64],
     peak: NDArray[np.float64] | None = None,
     guard: Callable[[NDArray[np.float64]], None] | None = None,
 ) -> tuple[NDArray[np.float64], IntegrationStats]:

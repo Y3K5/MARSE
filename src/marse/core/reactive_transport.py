@@ -26,6 +26,9 @@ a 1-D column and a 3-D box of the same chemistry report the same numbers.
 Where the domain says what its substratum is made of, cells in the liquid bind
 to it as the run goes (:mod:`marse.microbes.adhesion`). The run then also
 records bound cells per cm² of each material, and the area each has covered.
+
+Where the network's charges set a pH (:mod:`marse.chemistry.acid_base`), the
+run records the pH over the substratum and its range in the box.
 """
 
 from __future__ import annotations
@@ -42,13 +45,13 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from marse.chemistry import ChargeBalance
 from marse.core.implicit import ReactionTransport
 from marse.core.ledger import Ledger
 from marse.core.provenance import Manifest
 from marse.microbes.adhesion import AttachingSpecies, SurfaceExchange
 from marse.microbes.kinetics import compile_rates, process_rates, rate_jacobian
 from marse.schemas.experiment import ReactiveTransportConfig
-from marse.schemas.formula import QUANTITIES
 from marse.spatial.colloids import leveque_transfer_um_per_s, stokes_einstein_um2_per_s
 from marse.spatial.transport import Diffusion
 
@@ -74,6 +77,7 @@ class ReactiveTransportResult:
     imported_mol_per_m2: NDArray[np.float64]  # (records, components), since the start
     final_state: NDArray[np.float64]  # (components, *voxels)
     surface: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
+    ph: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
 
     @property
     def component_names(self) -> tuple[str, ...]:
@@ -90,6 +94,19 @@ class ReactiveTransportResult:
             writer.writerow(["time_h", *columns])
             for i, t in enumerate(self.times_h):
                 writer.writerow([f"{t:.6f}"] + [f"{self.surface[c][i]:.10g}" for c in columns])
+        return destination
+
+    def write_ph(self, path: str | Path) -> Path:
+        """Write the pH at the substratum and its range in the box, at every recorded time."""
+        if self.ph is None:
+            raise ValueError("this run's network sets no pH")
+        destination = Path(path)
+        columns = list(self.ph)
+        with destination.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["time_h", *columns])
+            for i, t in enumerate(self.times_h):
+                writer.writerow([f"{t:.6f}"] + [f"{self.ph[c][i]:.6f}" for c in columns])
         return destination
 
     def write_totals(self, path: str | Path) -> Path:
@@ -230,6 +247,19 @@ def _surface_record(
     return record
 
 
+def _ph_record(balance: ChargeBalance, state: NDArray[np.float64]) -> dict[str, float]:
+    """The pH over the substratum, the bottom layer of voxels, and its range in the whole box."""
+    ph = balance.ph(state)
+    bottom = ph[..., 0]
+    return {
+        "substratum_mean": float(bottom.mean()),
+        "substratum_min": float(bottom.min()),
+        "substratum_max": float(bottom.max()),
+        "box_min": float(ph.min()),
+        "box_max": float(ph.max()),
+    }
+
+
 def run(
     config: ReactiveTransportConfig, *, frames: FrameWriter | None = None
 ) -> ReactiveTransportResult:
@@ -246,7 +276,9 @@ def run(
     grid = config.domain.grid
     model = build_model(config)
     state = config.domain.initial_state(names, config.initial_mol_per_m3, config.seed)
-    ledger = Ledger(network.composition_matrix(), state, QUANTITIES)
+    ledger = Ledger(network.composition_matrix(), state, network.quantities)
+    balance = ChargeBalance.of(network) if network.has_ph else None
+    ph_rows = [] if balance is None else [_ph_record(balance, state)]
     areal = grid.voxel_volume_um3 / grid.footprint_um2 * _AMOL_PER_UM2_TO_MOL_PER_M2
     peak = state.copy()
     imported = np.zeros(len(names))
@@ -266,7 +298,7 @@ def run(
             target - now,
             first_step=substep,
             relative_tolerance=config.relative_tolerance,
-            absolute_tolerance=config.absolute_tolerance_mol_per_m3,
+            absolute_tolerance=config.absolute_tolerances(),
             peak=peak,
         )
         substep, now = stats.next_step, target
@@ -285,6 +317,8 @@ def run(
             imports.append(imported * areal)
             if exchange is not None:
                 surface_rows.append(_surface_record(config, exchange, state))
+            if balance is not None:
+                ph_rows.append(_ph_record(balance, state))
             if frames is not None:
                 frames(len(times) - 1, now, state)
 
@@ -312,6 +346,15 @@ def run(
             "transfer_um_per_s": transfer_velocities_um_per_s(config),
             "final": dict(surface_rows[-1]),
         }
+    ph = None
+    if balance is not None:
+        ph = {key: np.array([row[key] for row in ph_rows]) for key in ph_rows[0]}
+        lowest = int(np.argmin(ph["substratum_min"]))
+        outputs["ph"] = {
+            "final": dict(ph_rows[-1]),
+            "lowest_at_substratum": float(ph["substratum_min"][lowest]),
+            "lowest_at_substratum_h": float(times[lowest]),
+        }
     manifest = Manifest.build(
         config=config,
         models={"engine": ENGINE_VERSION, "integrator": INTEGRATOR_VERSION},
@@ -329,4 +372,5 @@ def run(
         imported_mol_per_m2=np.array(imports),
         final_state=state,
         surface=surface,
+        ph=ph,
     )

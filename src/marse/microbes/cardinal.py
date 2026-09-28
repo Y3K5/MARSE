@@ -14,7 +14,7 @@ from numpy.typing import ArrayLike
 
 from marse._numeric import FloatOrArray, as_array, require, unwrap
 
-__all__ = ["cardinal_ph", "cardinal_temperature", "ratkowsky"]
+__all__ = ["cardinal_ph", "cardinal_ph_slope", "cardinal_temperature", "ratkowsky"]
 
 
 def cardinal_temperature(
@@ -55,6 +55,25 @@ def cardinal_ph(ph: ArrayLike, ph_min: float, ph_opt: float, ph_max: float) -> F
     x = np.where(inside, value, ph_opt)
     numerator = (x - ph_min) * (x - ph_max)
     return unwrap(np.where(inside, numerator / (numerator - (x - ph_opt) ** 2), 0.0))
+
+
+def cardinal_ph_slope(ph: ArrayLike, ph_min: float, ph_opt: float, ph_max: float) -> FloatOrArray:
+    """How :func:`cardinal_ph` changes with pH, d gamma_pH / d pH.
+
+    Zero at and beyond ``ph_min`` and ``ph_max``, where the factor is held at
+    zero, and at ``ph_opt``, its maximum. The rate Jacobian of a process with a
+    pH factor needs it (docs/theory.md, section 3.8).
+    """
+    require(ph_min < ph_opt < ph_max, "cardinal pH values must satisfy ph_min < ph_opt < ph_max")
+    value = as_array(ph)
+    inside = (value > ph_min) & (value < ph_max)
+    x = np.where(inside, value, ph_opt)
+    numerator = (x - ph_min) * (x - ph_max)
+    denominator = numerator - (x - ph_opt) ** 2
+    d_numerator = (x - ph_min) + (x - ph_max)
+    d_denominator = d_numerator - 2.0 * (x - ph_opt)
+    slope = (d_numerator * denominator - numerator * d_denominator) / denominator**2
+    return unwrap(np.where(inside, slope, 0.0))
 
 
 def ratkowsky(

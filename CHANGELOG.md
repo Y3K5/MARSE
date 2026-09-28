@@ -281,6 +281,40 @@ results for the same manifest is always called out.
     materials that data support, titanium against zirconia, is a calibration.
     Every binding rate is illustrative.
 
+- **pH, and the elements of saliva: Stage S, increment S1, part one**
+  (`marse.chemistry`, [docs/networks.md](docs/networks.md#acids-bases-and-ph)).
+  A network can now set a pH in every voxel, and rates can depend on it. The
+  equations are in docs/theory.md §3.8.
+  - **Acids and bases.** A component with `acid_base: {"pka": [...]}` is an
+    acid-base total, such as lactic acid and lactate together, written in its
+    most protonated form. Protons are never components. The hydrogen ion
+    concentration in each voxel is the unique root of the charge balance over
+    the totals and the ions of fixed charge, found by a bracketed Newton
+    method in log h. `pkw` sets water's ion product.
+  - **pH in rates.** A `ph` factor is the cardinal pH model of Rosso et al.
+    (1995) at the local pH. Its Jacobian runs through every charged component,
+    with dh/dc from the implicit function theorem.
+  - **Four more elements.** Formulas may hold P, K, Cl and Na. Each is
+    balanced in every network that contains it, and the degree of reduction
+    counts them at their valence in phosphate and the salt ions, so those hold
+    no electrons.
+  - **An absolute tolerance per component.** `absolute_tolerance_mol_per_m3`
+    may be an object by component; the rest keep the default.
+  - **Outputs.** A run whose network sets a pH records it: a `ph` column in
+    `trajectory.csv`, `ph.csv` in space (the substratum and the box), a pH
+    field in every ParaView frame, and a summary in the manifest. `marse
+    check` prints the pKa values and the pH each starting composition implies.
+  - **Verified:**
+    - the hydrogen ion concentration against bisection of the charge balance
+      (2.4e-12 relative);
+    - every voxel left neutral to 1e-12 of the charges present;
+    - dh/dc and the rate Jacobian against finite differences;
+    - a weak acid and its salt giving back the pH they were made at.
+
+    A network without acids, bases or the new elements runs exactly as
+    before: the examples' final digests are unchanged. See docs/validation.md,
+    "pH from electroneutrality".
+
 - **Ecosystem runs are reproducible.** `marse ecosystem` writes a
   `manifest.json` beside its frames and viewer, and `marse replay` reproduces
   the run exactly, as it already did for batch and biofilm runs. The manifest

@@ -22,6 +22,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+from numpy.typing import NDArray
+
 from marse.core.config import ConfigError
 from marse.schemas._reading import load_json, plain
 from marse.schemas.domain import Domain, read_domain
@@ -47,6 +50,15 @@ DEFAULT_ABSOLUTE_TOLERANCE_MOL_PER_M3 = 1e-9
 With a femtomolar default, the controller demanded relative accuracy of
 products still near zero and took thousands of needless substeps."""
 
+type Tolerance = float | dict[str, float]
+"""One absolute tolerance for every component, or one for each, by name."""
+
+
+def _per_component(tolerance: Tolerance, names: tuple[str, ...]) -> float | NDArray[np.float64]:
+    if isinstance(tolerance, dict):
+        return np.array([tolerance[n] for n in names], dtype=float)
+    return tolerance
+
 
 @dataclass(frozen=True, slots=True)
 class WellMixedConfig:
@@ -64,11 +76,15 @@ class WellMixedConfig:
     record_interval_h: float
     seed: int = 0
     relative_tolerance: float = DEFAULT_RELATIVE_TOLERANCE
-    absolute_tolerance_mol_per_m3: float = DEFAULT_ABSOLUTE_TOLERANCE_MOL_PER_M3
+    absolute_tolerance_mol_per_m3: Tolerance = DEFAULT_ABSOLUTE_TOLERANCE_MOL_PER_M3
 
     @property
     def kind(self) -> str:
         return "well_mixed"
+
+    def absolute_tolerances(self) -> float | NDArray[np.float64]:
+        """The absolute tolerance the engine takes: one number, or one per component in order."""
+        return _per_component(self.absolute_tolerance_mol_per_m3, self.network.component_names)
 
     @property
     def steps(self) -> int:
@@ -94,7 +110,7 @@ class WellMixedConfig:
             "timestep_h": self.timestep_h,
             "record_interval_h": self.record_interval_h,
             "relative_tolerance": self.relative_tolerance,
-            "absolute_tolerance_mol_per_m3": self.absolute_tolerance_mol_per_m3,
+            "absolute_tolerance_mol_per_m3": _written(self.absolute_tolerance_mol_per_m3),
             "seed": self.seed,
         }
 
@@ -112,11 +128,15 @@ class ReactiveTransportConfig:
     record_interval_h: float
     seed: int = 0
     relative_tolerance: float = DEFAULT_RELATIVE_TOLERANCE_IN_SPACE
-    absolute_tolerance_mol_per_m3: float = DEFAULT_ABSOLUTE_TOLERANCE_MOL_PER_M3
+    absolute_tolerance_mol_per_m3: Tolerance = DEFAULT_ABSOLUTE_TOLERANCE_MOL_PER_M3
 
     @property
     def kind(self) -> str:
         return "reactive_transport"
+
+    def absolute_tolerances(self) -> float | NDArray[np.float64]:
+        """The absolute tolerance the engine takes: one number, or one per component in order."""
+        return _per_component(self.absolute_tolerance_mol_per_m3, self.network.component_names)
 
     @property
     def steps(self) -> int:
@@ -137,13 +157,17 @@ class ReactiveTransportConfig:
             "timestep_h": self.timestep_h,
             "record_interval_h": self.record_interval_h,
             "relative_tolerance": self.relative_tolerance,
-            "absolute_tolerance_mol_per_m3": self.absolute_tolerance_mol_per_m3,
+            "absolute_tolerance_mol_per_m3": _written(self.absolute_tolerance_mol_per_m3),
             "seed": self.seed,
             "domain": self.domain.to_dict(),
         }
 
 
 type RunConfig = WellMixedConfig | ReactiveTransportConfig
+
+
+def _written(tolerance: Tolerance) -> float | dict[str, float]:
+    return dict(tolerance) if isinstance(tolerance, dict) else tolerance
 
 
 def experiment_from_dict(raw: Any) -> RunConfig:
@@ -190,11 +214,7 @@ def experiment_from_dict(raw: Any) -> RunConfig:
     relative = float(values.get("relative_tolerance", default_relative))
     if not 0 < relative < 1:
         raise ConfigError("experiment.relative_tolerance: must lie between 0 and 1")
-    absolute = float(
-        values.get("absolute_tolerance_mol_per_m3", DEFAULT_ABSOLUTE_TOLERANCE_MOL_PER_M3)
-    )
-    if not absolute > 0:
-        raise ConfigError("experiment.absolute_tolerance_mol_per_m3: must be positive")
+    absolute = _absolute_tolerance(values, network)
     initial = {
         c.name: float(plain(given[c.name])) if c.name in given else 0.0 for c in network.components
     }
@@ -212,6 +232,28 @@ def experiment_from_dict(raw: Any) -> RunConfig:
     if in_space:
         return ReactiveTransportConfig(domain=read_domain(values["domain"], network), **settings)
     return WellMixedConfig(**settings)
+
+
+def _absolute_tolerance(values: dict[str, Any], network: Network) -> Tolerance:
+    """One number, or, from an object by component, one per component, the rest at the default.
+
+    The object is written back complete, every component named, so a manifest
+    states the tolerance each was held to.
+    """
+    where = "experiment.absolute_tolerance_mol_per_m3"
+    given = values.get("absolute_tolerance_mol_per_m3", DEFAULT_ABSOLUTE_TOLERANCE_MOL_PER_M3)
+    if not isinstance(given, dict):
+        if not given > 0:
+            raise ConfigError(f"{where}: must be positive")
+        return float(given)
+    _known(list(given), {c.name: c for c in network.components}, where)
+    for name, amount in given.items():
+        if not amount > 0:
+            raise ConfigError(f"{where}.{name}: must be positive")
+    return {
+        c.name: float(given[c.name]) if c.name in given else DEFAULT_ABSOLUTE_TOLERANCE_MOL_PER_M3
+        for c in network.components
+    }
 
 
 def load_experiment(path: str | Path) -> RunConfig:

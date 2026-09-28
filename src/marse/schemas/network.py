@@ -7,10 +7,12 @@ content, and the *processes* that turn components into one another, each a
 row of a stoichiometric (Gujer) matrix.
 
 Every process is checked as it is read: along its row, carbon, nitrogen and
-electrons must balance exactly (docs/theory.md, section 3.6). A process that
-would create or destroy any of them is refused with a :class:`ContinuityError`
-naming the process and the quantity. A network MARSE accepts therefore cannot
-make matter from nothing, whichever engine later runs it.
+electrons must balance exactly (docs/theory.md, section 3.6), and so must
+phosphorus, potassium, chlorine and sodium in a network that contains them. A
+process that would create or destroy any of them is refused with a
+:class:`ContinuityError` naming the process and the quantity. A network MARSE
+accepts therefore cannot make matter from nothing, whichever engine later runs
+it.
 
 Rows are rarely written out in full. A growth process gives its yield and lists
 in ``balanced_by`` the components whose coefficients the balances determine,
@@ -30,6 +32,7 @@ import difflib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, Literal
 
@@ -38,7 +41,13 @@ from numpy.typing import NDArray
 
 from marse.core.config import ConfigError
 from marse.schemas._reading import Field, load_json, plain, read_object
-from marse.schemas.formula import QUANTITIES, QUANTITY_UNITS, Formula, parse_formula
+from marse.schemas.formula import (
+    ELEMENT_QUANTITIES,
+    QUANTITIES,
+    QUANTITY_UNITS,
+    Formula,
+    parse_formula,
+)
 
 __all__ = [
     "SCHEMA",
@@ -57,7 +66,7 @@ __all__ = [
 SCHEMA_VERSION = 2
 PHASES = ("dissolved", "particulate")
 KINDS = ("growth", "reaction")
-FORMS = ("monod", "inhibition", "haldane")
+FORMS = ("monod", "inhibition", "haldane", "ph")
 
 RUN_FIELDS = {
     "experiment_id": Field("text", required=False),
@@ -66,7 +75,7 @@ RUN_FIELDS = {
     "timestep_h": Field("number", required=False),
     "record_interval_h": Field("number", required=False),
     "relative_tolerance": Field("number", required=False),
-    "absolute_tolerance_mol_per_m3": Field("number", required=False),
+    "absolute_tolerance_mol_per_m3": Field("number_or_numbers", required=False),
     "seed": Field("integer", required=False),
     "domain": Field("object", required=False),
 }
@@ -136,6 +145,7 @@ NETWORK_FIELDS = {
     "description": Field("text", required=False),
     "components": Field("objects"),
     "processes": Field("objects"),
+    "pkw": Field("number", required=False),
     **RUN_FIELDS,
 }
 COMPONENT_FIELDS = {
@@ -143,6 +153,10 @@ COMPONENT_FIELDS = {
     "phase": Field("choice", choices=PHASES),
     "formula": Field("text"),
     "charge": Field("number", required=False),
+    "acid_base": Field("object", required=False),
+}
+ACID_BASE_FIELDS = {
+    "pka": Field("vector"),
 }
 GROWTH_FIELDS = {
     "name": Field("name"),
@@ -168,14 +182,18 @@ RATE_FIELDS = {
     "assumed_in_excess": Field("names", required=False),
 }
 FACTOR_FIELDS = {
-    "component": Field("name"),
+    "component": Field("name", required=False),
     "form": Field("choice", choices=FORMS),
     "half_saturation_mol_per_m3": Field("number", required=False),
     "inhibition_mol_per_m3": Field("number", required=False),
+    "ph_min": Field("number", required=False),
+    "ph_optimum": Field("number", required=False),
+    "ph_max": Field("number", required=False),
 }
 SCHEMA = {
     "network": NETWORK_FIELDS,
     "component": COMPONENT_FIELDS,
+    "acid base": ACID_BASE_FIELDS,
     "growth process": GROWTH_FIELDS,
     "reaction process": REACTION_FIELDS,
     "rate": RATE_FIELDS,
@@ -218,43 +236,71 @@ class Component:
     Biomass written per carbon atom, such as CH1.8O0.5N0.2, is therefore
     counted in C-mol. ``dissolved`` components are carried by the liquid;
     ``particulate`` ones, such as biomass, move only with the biofilm.
+
+    A component with ``pka`` values is an acid-base total, such as lactic acid
+    and lactate together. Its formula is then its most protonated form, and each
+    pKa, in ascending order, removes one proton from it (docs/theory.md, section
+    3.8). Any other charged component keeps its charge whatever the pH.
     """
 
     name: str
     phase: Literal["dissolved", "particulate"]
     formula: Formula
+    pka: tuple[Fraction, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        written = {
             "name": self.name,
             "phase": self.phase,
             "formula": self.formula.text,
             "charge": plain(self.formula.charge),
         }
+        if self.pka:
+            written["acid_base"] = {"pka": [plain(k) for k in self.pka]}
+        return written
 
 
 @dataclass(frozen=True, slots=True)
 class Factor:
-    """One dimensionless term of a rate: how a component speeds a process or slows it.
+    """One dimensionless term of a rate: how a component, or the pH, speeds a process or slows it.
 
     ``monod`` is S/(K+S), ``inhibition`` K_I/(K_I+S) and ``haldane``
-    S/(K+S+S^2/K_I), with S the concentration of ``component``.
+    S/(K+S+S^2/K_I), with S the concentration of ``component``. ``ph`` is the
+    cardinal pH model of Rosso et al. (1995), 1 at ``ph_optimum`` and 0 at and
+    beyond ``ph_min`` and ``ph_max``, of the pH the network's charges set
+    (docs/theory.md, section 3.8); it names no component.
     """
 
-    component: str
-    form: Literal["monod", "inhibition", "haldane"]
+    component: str | None
+    form: Literal["monod", "inhibition", "haldane", "ph"]
     half_saturation_mol_per_m3: Fraction | None = None
     inhibition_mol_per_m3: Fraction | None = None
+    ph_min: Fraction | None = None
+    ph_optimum: Fraction | None = None
+    ph_max: Fraction | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        written: dict[str, Any] = {"component": self.component, "form": self.form}
-        if self.half_saturation_mol_per_m3 is not None:
-            written["half_saturation_mol_per_m3"] = plain(self.half_saturation_mol_per_m3)
-        if self.inhibition_mol_per_m3 is not None:
-            written["inhibition_mol_per_m3"] = plain(self.inhibition_mol_per_m3)
+        written: dict[str, Any] = {} if self.component is None else {"component": self.component}
+        written["form"] = self.form
+        for key in (
+            "half_saturation_mol_per_m3",
+            "inhibition_mol_per_m3",
+            "ph_min",
+            "ph_optimum",
+            "ph_max",
+        ):
+            value = getattr(self, key)
+            if value is not None:
+                written[key] = plain(value)
         return written
 
     def describe(self) -> str:
+        if self.form == "ph":
+            assert self.ph_min is not None
+            assert self.ph_optimum is not None
+            assert self.ph_max is not None
+            cardinal = (self.ph_min, self.ph_optimum, self.ph_max)
+            return f"ph({', '.join(_decimal(v) for v in cardinal)})"
         constants = [
             f"{label} {_decimal(value)}"
             for label, value in (
@@ -372,15 +418,32 @@ class Process:
 
 @dataclass(frozen=True, slots=True)
 class Network:
-    """Components and the processes between them: a checked Gujer matrix."""
+    """Components and the processes between them: a checked Gujer matrix.
+
+    ``pkw`` is water's ion product, -log10(Kw / (mol/L)^2), for a network
+    whose charges set a pH; None leaves the default of 14, water at 25 C.
+    """
 
     components: tuple[Component, ...]
     processes: tuple[Process, ...]
     description: str = ""
+    pkw: Fraction | None = None
 
     @property
     def component_names(self) -> tuple[str, ...]:
         return tuple(c.name for c in self.components)
+
+    @property
+    def quantities(self) -> tuple[str, ...]:
+        """What every process conserves: carbon, nitrogen, electrons, then each element present."""
+        return _quantities(self.components)
+
+    @property
+    def has_ph(self) -> bool:
+        """Whether the network's charges set a pH: it has an acid-base total, or a pH factor."""
+        return any(c.pka for c in self.components) or any(
+            f.form == "ph" for p in self.processes if p.rate for f in p.rate.factors
+        )
 
     def component(self, name: str) -> Component:
         for component in self.components:
@@ -401,17 +464,26 @@ class Network:
         return np.array(rows, dtype=float).reshape(len(self.processes), len(names))
 
     def composition_matrix(self) -> NDArray[np.float64]:
-        """Components by quantities: carbon, nitrogen and electrons per mol."""
-        rows = [[float(q) for q in c.formula.composition] for c in self.components]
-        return np.array(rows, dtype=float).reshape(len(self.components), len(QUANTITIES))
+        """Components by quantities: each of :attr:`quantities` per mol."""
+        quantities = self.quantities
+        rows = [[float(c.formula.content(q)) for q in quantities] for c in self.components]
+        return np.array(rows, dtype=float).reshape(len(self.components), len(quantities))
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        written = {
             "schema_version": SCHEMA_VERSION,
             "description": self.description,
             "components": [c.to_dict() for c in self.components],
             "processes": [p.to_dict() for p in self.processes],
         }
+        if self.pkw is not None:
+            written["pkw"] = plain(self.pkw)
+        return written
+
+
+def _quantities(components: Sequence[Component]) -> tuple[str, ...]:
+    present = [q for q in ELEMENT_QUANTITIES if any(c.formula.content(q) for c in components)]
+    return QUANTITIES + tuple(present)
 
 
 def _decimal(value: Fraction) -> str:
@@ -441,20 +513,42 @@ def _component(raw: Any, index: int) -> Component:
     where = _label("components", index, raw)
     values = read_object(raw, where, COMPONENT_FIELDS)
     formula = parse_formula(values["formula"], values.get("charge", 0), f"{where}.formula")
-    if not any(formula.composition):
+    if not any(formula.content(q) for q in (*QUANTITIES, *ELEMENT_QUANTITIES)):
         raise ConfigError(
-            f"{where}: {formula.label()} holds no carbon, nitrogen or electrons, so no "
-            "balance could constrain it. Water and protons are never listed as components: "
-            "they close the oxygen, hydrogen and charge balances implicitly"
+            f"{where}: {formula.label()} holds no carbon, nitrogen, electrons or balanced "
+            "element, so no balance could constrain it. Water and protons are never listed as "
+            "components: they close the oxygen, hydrogen and charge balances implicitly"
         )
-    return Component(values["name"], values["phase"], formula)
+    pka: tuple[Fraction, ...] = ()
+    if "acid_base" in values:
+        pka = _acid_base(values["acid_base"], f"{where}.acid_base", formula)
+    return Component(values["name"], values["phase"], formula, pka)
 
 
-def _net(row: Mapping[str, Fraction], composition: Composition) -> dict[str, Fraction]:
+def _acid_base(raw: Any, where: str, formula: Formula) -> tuple[Fraction, ...]:
+    values = read_object(raw, where, ACID_BASE_FIELDS)
+    pka: tuple[Fraction, ...] = values["pka"]
+    if not pka:
+        raise ConfigError(f"{where}.pka: list at least one pKa")
+    if any(b <= a for a, b in pairwise(pka)):
+        raise ConfigError(f"{where}.pka: must rise strictly, one value per proton removed in turn")
+    if any(not -2 <= k <= 16 for k in pka):
+        raise ConfigError(f"{where}.pka: each value must lie between -2 and 16")
+    if len(pka) > formula.hydrogen:
+        raise ConfigError(
+            f"{where}.pka: {len(pka)} protons cannot leave {formula.label()}, which holds "
+            f"{_decimal(formula.hydrogen)} hydrogen; give the formula of the most protonated form"
+        )
+    return pka
+
+
+def _net(
+    row: Mapping[str, Fraction], composition: Composition, quantities: tuple[str, ...]
+) -> dict[str, Fraction]:
     """Per quantity, how much more the products hold than the reactants."""
     return {
         quantity: sum((c * composition[name][k] for name, c in row.items()), Fraction(0))
-        for k, quantity in enumerate(QUANTITIES)
+        for k, quantity in enumerate(quantities)
     }
 
 
@@ -471,6 +565,10 @@ _CARRIERS = {
     "carbon": "carbon dioxide",
     "nitrogen": "the nitrogen source, such as ammonium",
     "electrons": "the electron acceptor, such as oxygen, or a reduced product",
+    "phosphorus": "phosphate",
+    "potassium": "potassium ions",
+    "chlorine": "chloride",
+    "sodium": "sodium ions",
 }
 
 
@@ -479,6 +577,7 @@ def _solve(
     closers: tuple[str, ...],
     composition: Composition,
     where: str,
+    quantities: tuple[str, ...],
 ) -> dict[str, Fraction]:
     """The closers' coefficients that make every quantity balance, found exactly.
 
@@ -487,11 +586,11 @@ def _solve(
     unbalanced. A closer the balances cannot pin down is refused as ambiguous;
     a system with no solution is left for the caller to report.
     """
-    size = len(QUANTITIES)
-    left = _net(given, composition)
+    size = len(quantities)
+    left = _net(given, composition, quantities)
     rows = [
         [composition[name][k] for name in closers] + [-left[quantity]]
-        for k, quantity in enumerate(QUANTITIES)
+        for k, quantity in enumerate(quantities)
     ]
     pivots: list[int] = []
     for column in range(len(closers)):
@@ -501,8 +600,8 @@ def _solve(
             partners = [closers[pivots[i]] for i in range(row) if rows[i][column] != 0]
             same = _join([f"'{p}'" for p in partners]) if partners else "the others"
             raise ConfigError(
-                f"{where}.balanced_by: '{closers[column]}' holds carbon, nitrogen and "
-                f"electrons in the same proportions as {same}, so the balances cannot decide "
+                f"{where}.balanced_by: '{closers[column]}' holds {_join(list(quantities))} "
+                f"in the same proportions as {same}, so the balances cannot decide "
                 "between them; keep one in balanced_by and give the other a coefficient"
             )
         rows[row], rows[found] = rows[found], rows[row]
@@ -523,24 +622,25 @@ def _balance(
     given: Mapping[str, Fraction],
     closers: tuple[str, ...],
     composition: Composition,
+    quantities: tuple[str, ...],
 ) -> dict[str, Fraction]:
-    solved = _solve(given, closers, composition, where) if closers else {}
-    net = _net({**given, **solved}, composition)
+    solved = _solve(given, closers, composition, where, quantities) if closers else {}
+    net = _net({**given, **solved}, composition, quantities)
     if not any(net.values()):
         return solved
     unbalanced = [q for q, amount in net.items() if amount]
     if not closers:
         raise ContinuityError(
-            f"{where}: {_changes(net)} per {per}. A process may only rearrange carbon, "
-            "nitrogen and electrons, never create or destroy them. List in balanced_by the "
+            f"{where}: {_changes(net)} per {per}. A process may only rearrange "
+            f"{_join(list(quantities))}, never create or destroy them. List in balanced_by the "
             "components whose coefficients the balances should determine (docs/networks.md)",
             process,
             net,
         )
-    carried = {q for k, q in enumerate(QUANTITIES) if any(composition[n][k] for n in closers)}
+    carried = {q for k, q in enumerate(quantities) if any(composition[n][k] for n in closers)}
     missing = [q for q in unbalanced if q not in carried]
     if missing:
-        leftover = _net(given, composition)
+        leftover = _net(given, composition, quantities)
         amounts = _join([f"{_decimal(abs(leftover[q]))} {QUANTITY_UNITS[q]}" for q in missing])
         raise ContinuityError(
             f"{where}: the given coefficients leave {amounts} per {per} unbalanced, and "
@@ -551,7 +651,7 @@ def _balance(
         )
     raise ContinuityError(
         f"{where}: no choice of coefficients for {_join([f"'{n}'" for n in closers])} "
-        f"balances carbon, nitrogen and electrons together ({_join(unbalanced)} would stay "
+        f"balances {_join(list(quantities))} together ({_join(unbalanced)} would stay "
         "unbalanced); change what balanced_by lists",
         process,
         net,
@@ -616,10 +716,40 @@ def _reaction_row(
     return dict(given)
 
 
+_CARDINAL = ("ph_min", "ph_optimum", "ph_max")
+
+
+def _ph_factor(values: Mapping[str, Any], where: str) -> Factor:
+    if "component" in values:
+        raise ConfigError(
+            f"{where}: a ph factor responds to the pH, which all the network's charges set "
+            "together, not to one component; remove component"
+        )
+    for constant in ("half_saturation_mol_per_m3", "inhibition_mol_per_m3"):
+        if constant in values:
+            raise ConfigError(f"{where}: {constant} does not apply to a ph factor")
+    missing = [key for key in _CARDINAL if key not in values]
+    if missing:
+        raise ConfigError(f"{where}: a ph factor needs {_join(missing)}")
+    low, optimum, high = (values[key] for key in _CARDINAL)
+    if not low < optimum < high:
+        raise ConfigError(
+            f"{where}: the cardinal pH values must satisfy ph_min < ph_optimum < ph_max"
+        )
+    return Factor(component=None, form="ph", ph_min=low, ph_optimum=optimum, ph_max=high)
+
+
 def _factor(raw: Any, where: str, components: Mapping[str, Component]) -> Factor:
     values = read_object(raw, where, FACTOR_FIELDS)
-    _known([values["component"]], components, f"{where}.component")
     form = values["form"]
+    if form == "ph":
+        return _ph_factor(values, where)
+    if "component" not in values:
+        raise ConfigError(f"{where}: a {form} factor needs component, the component it responds to")
+    for key in _CARDINAL:
+        if key in values:
+            raise ConfigError(f"{where}: {key} applies only to a ph factor")
+    _known([values["component"]], components, f"{where}.component")
     needs = {
         "monod": ("half_saturation_mol_per_m3",),
         "inhibition": ("inhibition_mol_per_m3",),
@@ -663,16 +793,20 @@ def _rate(
         _factor(item, f"{where}.factors[{i}]", components)
         for i, item in enumerate(values.get("factors", []))
     )
-    named = [f.component for f in factors]
+    named = [f.component for f in factors if f.component is not None]
     twice = sorted({n for n in named if named.count(n) > 1})
     if twice:
         raise ConfigError(
             f"{where}.factors: '{twice[0]}' appears more than once; each component limits a "
             "process at most once (a substrate that also inhibits takes one haldane factor)"
         )
+    if sum(f.form == "ph" for f in factors) > 1:
+        raise ConfigError(f"{where}.factors: a rate takes at most one ph factor")
     in_excess: tuple[str, ...] = values.get("assumed_in_excess", ())
     _known(in_excess, components, f"{where}.assumed_in_excess")
-    limiting = {proportional_to} | {f.component for f in factors if f.form != "inhibition"}
+    limiting = {proportional_to} | {
+        f.component for f in factors if f.component is not None and f.form != "inhibition"
+    }
     for name in in_excess:
         if coefficients.get(name, 0) >= 0:
             raise ConfigError(
@@ -694,7 +828,9 @@ def _rate(
     return RateLaw(maximum, proportional_to, factors, in_excess)
 
 
-def _process(raw: Any, index: int, components: Mapping[str, Component]) -> Process:
+def _process(
+    raw: Any, index: int, components: Mapping[str, Component], quantities: tuple[str, ...]
+) -> Process:
     where = _label("processes", index, raw)
     if not isinstance(raw, dict):
         raise ConfigError(f"{where}: expected an object")
@@ -717,19 +853,21 @@ def _process(raw: Any, index: int, components: Mapping[str, Component]) -> Proce
             f"{where}.balanced_by: {_join([f"'{n}'" for n in overlap])} already given a "
             "coefficient here; list only components the balances should determine"
         )
-    if len(closers) > len(QUANTITIES):
+    if len(closers) > len(quantities):
         raise ConfigError(
             f"{where}.balanced_by: lists {len(closers)} components, but only "
-            f"{len(QUANTITIES)} balances ({_join(list(QUANTITIES))}) can determine them"
+            f"{len(quantities)} balances ({_join(list(quantities))}) can determine them"
         )
-    composition = {name: c.formula.composition for name, c in components.items()}
-    row = given | _balance(values["name"], per, where, given, closers, composition)
+    composition = {
+        name: tuple(c.formula.content(q) for q in quantities) for name, c in components.items()
+    }
+    row = given | _balance(values["name"], per, where, given, closers, composition, quantities)
     coefficients = {name: row[name] for name in components if row.get(name, 0) != 0}
     formulas = {name: components[name].formula for name in coefficients}
     water = -sum((c * formulas[n].oxygen for n, c in coefficients.items()), Fraction(0))
     protons = -sum((c * formulas[n].charge for n, c in coefficients.items()), Fraction(0))
     hydrogen = sum((c * formulas[n].hydrogen for n, c in coefficients.items()), Fraction(0))
-    if hydrogen + 2 * water + protons != 0:  # implied by the three balances (theory.md 3.6)
+    if hydrogen + 2 * water + protons != 0:  # implied by the balances (theory.md 3.6)
         raise ArithmeticError(f"{where}: hydrogen does not close; this is a bug in MARSE")
     rate = (
         _rate(values["rate"], f"{where}.rate", growth, coefficients, components)
@@ -778,9 +916,28 @@ def read_document(raw: Any) -> tuple[Network, dict[str, Any]]:
         raise ConfigError("network.components: at least one component is required")
     _require_unique([c.name for c in components], "network.components")
     by_name = {c.name: c for c in components}
-    processes = tuple(_process(item, i, by_name) for i, item in enumerate(values["processes"]))
+    quantities = _quantities(components)
+    processes = tuple(
+        _process(item, i, by_name, quantities) for i, item in enumerate(values["processes"])
+    )
     _require_unique([p.name for p in processes], "network.processes")
-    return Network(components, processes, values.get("description", "")), values
+    network = Network(components, processes, values.get("description", ""), values.get("pkw"))
+    if network.has_ph and not any(c.formula.charge or c.pka for c in components):
+        raise ConfigError(
+            "network: a ph factor needs charged components, whose balance sets the pH; "
+            "declare the acids, bases and ions the liquid holds"
+        )
+    if network.pkw is not None:
+        if not network.has_ph:
+            raise ConfigError(
+                "network.pkw: applies only to a network whose charges set a pH, with an "
+                "acid_base component or a ph factor"
+            )
+        if not 11 <= network.pkw <= 16:
+            raise ConfigError(
+                "network.pkw: must lie between 11 and 16 (14.0 at 25 C, 13.6 at 37 C)"
+            )
+    return network, values
 
 
 def load_network(path: str | Path) -> Network:

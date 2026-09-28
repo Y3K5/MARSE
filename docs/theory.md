@@ -357,12 +357,25 @@ $\mathrm{pH}_{\mathrm{opt}}$, unlike the temperature model.
 
 A caution that matters for biofilms specifically: pH is a *local* variable. In
 a metabolically active biofilm producing organic acids, local pH can differ
-from bulk pH by more than a unit. Applying a bulk-pH $\gamma$ factor uniformly
-across a biofilm is an approximation that MARSE makes explicit; modelling the
-acid as a diffusing solute with local pH is the more defensible route once
-Phase 3 lands.
+from bulk pH by more than a unit. MARSE therefore evaluates a `ph` factor at
+the pH of each voxel, which the acids, bases and ions there set (§3.8), not at
+the pH of the bulk.
 
-Implemented as `marse.microbes.cardinal.cardinal_ph`.
+Its slope, which the rate Jacobian needs, is
+
+$$
+\frac{d\gamma_{\mathrm{pH}}}{d\,\mathrm{pH}} = \frac{n'd - n d'}{d^2},
+\qquad
+n = (\mathrm{pH} - \mathrm{pH}_{\min})(\mathrm{pH} - \mathrm{pH}_{\max}),
+\quad
+d = n - (\mathrm{pH} - \mathrm{pH}_{\mathrm{opt}})^2,
+$$
+
+with $n' = 2\,\mathrm{pH} - \mathrm{pH}_{\min} - \mathrm{pH}_{\max}$ and
+$d' = n' - 2(\mathrm{pH} - \mathrm{pH}_{\mathrm{opt}})$, and zero outside the
+limits.
+
+Implemented as `marse.microbes.cardinal.cardinal_ph` and `cardinal_ph_slope`.
 
 ### 2.4 Ratkowsky square-root model
 
@@ -498,21 +511,29 @@ components and processes. It follows the continuity check of the IWA
 activated-sludge and biofilm models (Henze et al. 2000).
 
 Each component $j$ has a chemical formula
-$\mathrm{C}_{c_j}\mathrm{H}_{h_j}\mathrm{O}_{o_j}\mathrm{N}_{n_j}$ with charge
-$z_j$, counted per mol of that formula unit (per C-mol for biomass written per
-carbon atom). Its composition in the three conserved quantities is
+$\mathrm{C}_{c_j}\mathrm{H}_{h_j}\mathrm{O}_{o_j}\mathrm{N}_{n_j}$, which may
+also hold phosphorus, potassium, chlorine and sodium ($p_j$, $k_j$, $l_j$,
+$s_j$ atoms), with charge $z_j$, counted per mol of that formula unit (per
+C-mol for biomass written per carbon atom). Its composition in the conserved
+quantities is
 
 $$
 I_{j,\mathrm{C}} = c_j,
 \qquad
 I_{j,\mathrm{N}} = n_j,
 \qquad
-I_{j,e} = \gamma_j = 4c_j + h_j - 2o_j - 3n_j - z_j .
+I_{j,e} = \gamma_j = 4c_j + h_j - 2o_j - 3n_j + 5p_j + k_j - l_j + s_j - z_j ,
 $$
 
+and $I_{j,\mathrm{P}} = p_j$, $I_{j,\mathrm{K}} = k_j$, $I_{j,\mathrm{Cl}} = l_j$,
+$I_{j,\mathrm{Na}} = s_j$ for each of those elements that a network contains.
+
 $\gamma_j$ is the **degree of reduction** (Roels 1983): the electrons released
-when the component is oxidised completely to CO₂, H₂O, NH₄⁺ and H⁺, the
-reference state in which it is zero. Glucose has 24, biomass
+when the component is oxidised completely to CO₂, H₂O, NH₄⁺, phosphate, K⁺,
+Cl⁻, Na⁺ and H⁺, the reference state in which it is zero. Phosphorus counts
+at its valence in phosphate, +5, so H₃PO₄, H₂PO₄⁻ and the salt ions all hold
+no electrons, and a phosphorylated sugar holds exactly the electrons of the
+sugar. Glucose has 24, biomass
 CH<sub>1.8</sub>O<sub>0.5</sub>N<sub>0.2</sub> has 4.2 (Heijnen and van Dijken
 1992), and O₂, which accepts electrons, has −4. Protonation leaves it
 unchanged: acetic acid and acetate both have 8. Because one mol of electrons
@@ -525,7 +546,8 @@ negative for what it consumes and positive for what it produces. It conserves
 matter if and only if
 
 $$
-\sum_j \nu_{pj}\, I_{jk} = 0 \qquad \text{for } k = \mathrm{C},\ \mathrm{N},\ e .
+\sum_j \nu_{pj}\, I_{jk} = 0 \qquad \text{for } k = \mathrm{C},\ \mathrm{N},\ e,
+\text{ and each element present} .
 $$
 
 MARSE refuses at load time any process that fails this, naming the process
@@ -541,27 +563,28 @@ $$
 \nu_{\mathrm{H^+}} = -\sum_j \nu_{pj}\, z_j .
 $$
 
-The hydrogen balance then holds automatically. The three conditions give
-$\sum_j \nu_{pj}(4c_j + h_j - 2o_j - 3n_j - z_j) = 0$ with
-$\sum_j \nu_{pj} c_j = \sum_j \nu_{pj} n_j = 0$, so
+The hydrogen balance then holds automatically. The conditions give
+$\sum_j \nu_{pj}\gamma_j = 0$ with the carbon, nitrogen and element sums all
+zero, so
 
 $$
 \sum_j \nu_{pj}\, h_j = \sum_j \nu_{pj}\,(2o_j + z_j) = -2\nu_{\mathrm{H_2O}} - \nu_{\mathrm{H^+}} .
 $$
 
 That is exactly the hydrogen balance with water and protons included. So every
-row that satisfies the three conditions is a complete chemical equation once
-H₂O and H⁺ are added, and no row that fails them can be completed. This is why
-three quantities suffice, and why water and protons must never be listed as
-components: they hold no carbon, nitrogen or electrons, so no balance would
-constrain them.
+row that satisfies the conditions is a complete chemical equation once H₂O and
+H⁺ are added, and no row that fails them can be completed. This is why these
+quantities suffice, and why water and protons must never be listed as
+components: they hold no carbon, nitrogen, electrons or other element, so no
+balance would constrain them.
 
 **Balancing.** A process gives some coefficients and names a set $B$ of at most
-three components whose coefficients $x_b$ the balances determine:
+as many components as there are quantities, whose coefficients $x_b$ the
+balances determine:
 
 $$
 \sum_{b \in B} x_b\, I_{bk} = -\sum_{j \notin B} \nu_{pj}\, I_{jk}
-\qquad \text{for } k = \mathrm{C},\ \mathrm{N},\ e .
+\qquad \text{for every quantity } k .
 $$
 
 MARSE requires exactly one solution and finds it by Gauss–Jordan elimination
@@ -623,6 +646,94 @@ models make for ammonium. A run in which it runs out stops with an error.
 
 Implemented as `marse.microbes.kinetics`; the switching functions are those of
 §1.3 and §1.5 (`marse.microbes.growth`).
+
+### 3.8 Acid–base equilibria and pH
+
+A network sets a pH when one of its components is an acid–base total
+([networks.md](networks.md#acids-bases-and-ph)). Protons are never components.
+In every voxel, the hydrogen ion concentration $h$ is the one that makes the
+liquid electrically neutral.
+
+**Totals.** A total $T_k$ holds every protonation state of one acid: lactic
+acid and lactate, or carbonic acid, bicarbonate and carbonate. It is written in
+its most protonated form, of charge $z_{k0}$, with pKa values
+$pK_1 < \dots < pK_n$. These are conditional constants, for the liquid's
+temperature and ionic strength. The fraction that has lost $j$ protons is
+
+$$
+\alpha_j(h) = \frac{K_1 \cdots K_j / h^j}{\sum_{i=0}^{n} K_1 \cdots K_i / h^i}
+$$
+
+(Stumm and Morgan 1996, ch. 3), so the total's mean charge is
+$\bar z_k(h) = z_{k0} - \sum_j j\,\alpha_j(h)$.
+
+**The charge balance.** With ions of fixed charge $z_s$, which are the charged
+components without pKa values,
+
+$$
+F(h) = h - \frac{K_w}{h} + \sum_k T_k\, \bar z_k(h) + \sum_s z_s\, c_s = 0 .
+$$
+
+Every term rises with $h$: $d\bar z_k/dh = \sigma_k^2(h)/h$, where $\sigma_k^2$
+is the variance of the number of protons lost. So $F$ rises from $-\infty$ as
+$h \to 0$ to $+\infty$, and has exactly one root.
+
+**Solving it.** Newton's method runs in $\log h$, from pH 7, inside a bracket
+from pH −1 to pH 17 that every evaluation narrows. A step that would leave the
+bracket bisects it instead. A voxel is done when its step falls below
+$10^{-13}$ in $\log h$, or when $|F|$ reaches the rounding floor of its own
+terms, $16\,\varepsilon \sum |\text{terms}|$.
+
+The second test matters near the root. There, rounding in $F$ can be larger
+than a step of $10^{-13}$ resolves, and Newton's method would step between two
+neighbouring values of $h$ for ever. In plaque-like compositions the solve
+takes about 5 to 20 iterations.
+
+**How h responds.** Rates that depend on pH need $\partial h/\partial c$. The
+implicit function theorem gives it exactly:
+
+$$
+\frac{\partial h}{\partial c_k} = -\frac{\partial F/\partial c_k}{\partial F/\partial h},
+\qquad
+\frac{\partial F}{\partial h} = 1 + \frac{K_w}{h^2} + \sum_k \frac{T_k\,\sigma_k^2}{h} ,
+$$
+
+where $\partial F/\partial c_k$ is the charge a component carries at $h$: $\bar z_k$
+for a total, $z_s$ for an ion. Acids and anions raise $h$, cations lower it,
+and uncharged components leave it where it is. Concentrations below zero count
+as zero, as they do in the rates, and have no slope.
+
+**pH in rates.** A `ph` factor is the CPM of §2.3 at the local
+$\mathrm{pH} = -\log_{10}(h / 1000\ \mathrm{mol\,m^{-3}})$. In the rate
+Jacobian it responds to every charged component at once:
+
+$$
+\frac{\partial \gamma_{\mathrm{pH}}}{\partial c_k}
+= \frac{d\gamma_{\mathrm{pH}}}{d\,\mathrm{pH}} \cdot \frac{-1}{h \ln 10} \cdot
+\frac{\partial h}{\partial c_k} .
+$$
+
+**Conservation.** Totals are components like any other, so every process still
+conserves carbon, nitrogen, electrons and each element present (§3.6).
+Protonation changes none of them. The protons a process releases or takes up
+are whatever the charge balance then requires. They need no bookkeeping,
+because $h$ is not part of the state but a function of it.
+
+**Assumptions.**
+
+- **Local electroneutrality.** Totals and ions diffuse independently, each at
+  its own diffusivity, and $h$ makes every voxel neutral. This treats H⁺, the
+  fastest ion, as moving at once wherever neutrality needs it. It neglects the
+  diffusion potential that couples the other ions. Ions of one salt that
+  diffused at different rates would separate and show as a pH artifact, so the
+  strong ions of one pair should share a diffusivity.
+- **Conditional constants.** pKa and pKw are for the liquid's temperature and
+  ionic strength. Activities are not computed.
+- **Instant equilibria.** Protonation is far faster than diffusion across a
+  voxel or any metabolism.
+
+Implemented as `marse.chemistry.acid_base`, and the factor in
+`marse.microbes.kinetics`.
 
 ---
 
@@ -1532,12 +1643,16 @@ cannot do:
    of a soil or marine community ([`modeling-landscape.md` §3](modeling-landscape.md#3-natural-states-versus-laboratory-states)).
 8. **No host.** No immune cells, no tissue, no clinical inference (see
    [`docs/specification.md`](specification.md)).
-9. **Carbon, nitrogen and electrons only.** Reaction networks (§3.6) balance
-   these three; sulphur, phosphorus and metals are not yet balanced, and
-   formulas containing them are refused rather than half-checked.
+9. **Carbon, nitrogen, electrons, P, K, Cl and Na only.** Reaction networks
+   (§3.6) balance these. Sulphur, calcium, magnesium and other metals are not
+   yet balanced, and formulas containing them are refused rather than
+   half-checked.
 10. **Binding from a stated efficiency.** Cells bind to a surface with an
     attachment efficiency stated per species and material, from a suspension
     that binding does not deplete, and never to cells already bound (§6.4).
+11. **pH from local electroneutrality.** The hydrogen ion concentration keeps
+    every voxel neutral while ions diffuse independently, with conditional
+    constants and no activities (§3.8).
 
 **Simulation output is not experimental evidence.** MARSE produces
 consequences of stated assumptions. Conclusions are phrased as "under these
@@ -1610,8 +1725,9 @@ tabulated in [`docs/parameters.md`](parameters.md).
 40. Shu, C.-W. & Osher, S. (1988) Efficient implementation of essentially non-oscillatory shock-capturing schemes. *Journal of Computational Physics* **77**:439–471. [doi:10.1016/0021-9991(88)90177-5](https://doi.org/10.1016/0021-9991(88)90177-5)
 41. Stewart, P.S. (1998) A review of experimental measurements of effective diffusive permeabilities and effective diffusion coefficients in biofilms. *Biotechnology and Bioengineering* **59**:261–272. [doi:10.1002/(SICI)1097-0290(19980805)59:3<261::AID-BIT1>3.0.CO;2-9](https://doi.org/10.1002/(SICI)1097-0290(19980805)59:3%3C261::AID-BIT1%3E3.0.CO;2-9)
 42. Stewart, P.S. (2003) Diffusion in biofilms. *Journal of Bacteriology* **185**:1485–1491. [doi:10.1128/jb.185.5.1485-1491.2003](https://doi.org/10.1128/jb.185.5.1485-1491.2003)
-43. Walters, M.C., Roe, F., Bugnicourt, A., Franklin, M.J. & Stewart, P.S. (2003) Contributions of antibiotic penetration, oxygen limitation, and low metabolic activity to tolerance of *Pseudomonas aeruginosa* biofilms. *Antimicrobial Agents and Chemotherapy* **47**:317–323. [doi:10.1128/aac.47.1.317-323.2003](https://doi.org/10.1128/aac.47.1.317-323.2003)
-44. Wanner, O. & Gujer, W. (1986) A multispecies biofilm model. *Biotechnology and Bioengineering* **28**:314–328. [doi:10.1002/bit.260280304](https://doi.org/10.1002/bit.260280304)
-45. Werner, E., Roe, F., Bugnicourt, A. *et al.* (2004) Stratified growth in *Pseudomonas aeruginosa* biofilms. *Applied and Environmental Microbiology* **70**:6188–6196. [doi:10.1128/aem.70.10.6188-6196.2004](https://doi.org/10.1128/aem.70.10.6188-6196.2004)
-46. Zwietering, M.H., Jongenburger, I., Rombouts, F.M. & van 't Riet, K. (1990) Modeling of the bacterial growth curve. *Applied and Environmental Microbiology* **56**:1875–1881. [doi:10.1128/aem.56.6.1875-1881.1990](https://doi.org/10.1128/aem.56.6.1875-1881.1990)
-47. Zwietering, M.H., Wijtzes, T., de Wit, J.C. & van 't Riet, K. (1992) A decision support system for prediction of the microbial spoilage in foods. *Journal of Food Protection* **55**:973–979. [doi:10.4315/0362-028X-55.12.973](https://doi.org/10.4315/0362-028X-55.12.973)
+43. Stumm, W. & Morgan, J.J. (1996) *Aquatic Chemistry: Chemical Equilibria and Rates in Natural Waters*, 3rd edn. Wiley, New York. ISBN 978-0-471-51185-4.
+44. Walters, M.C., Roe, F., Bugnicourt, A., Franklin, M.J. & Stewart, P.S. (2003) Contributions of antibiotic penetration, oxygen limitation, and low metabolic activity to tolerance of *Pseudomonas aeruginosa* biofilms. *Antimicrobial Agents and Chemotherapy* **47**:317–323. [doi:10.1128/aac.47.1.317-323.2003](https://doi.org/10.1128/aac.47.1.317-323.2003)
+45. Wanner, O. & Gujer, W. (1986) A multispecies biofilm model. *Biotechnology and Bioengineering* **28**:314–328. [doi:10.1002/bit.260280304](https://doi.org/10.1002/bit.260280304)
+46. Werner, E., Roe, F., Bugnicourt, A. *et al.* (2004) Stratified growth in *Pseudomonas aeruginosa* biofilms. *Applied and Environmental Microbiology* **70**:6188–6196. [doi:10.1128/aem.70.10.6188-6196.2004](https://doi.org/10.1128/aem.70.10.6188-6196.2004)
+47. Zwietering, M.H., Jongenburger, I., Rombouts, F.M. & van 't Riet, K. (1990) Modeling of the bacterial growth curve. *Applied and Environmental Microbiology* **56**:1875–1881. [doi:10.1128/aem.56.6.1875-1881.1990](https://doi.org/10.1128/aem.56.6.1875-1881.1990)
+48. Zwietering, M.H., Wijtzes, T., de Wit, J.C. & van 't Riet, K. (1992) A decision support system for prediction of the microbial spoilage in foods. *Journal of Food Protection* **55**:973–979. [doi:10.4315/0362-028X-55.12.973](https://doi.org/10.4315/0362-028X-55.12.973)
