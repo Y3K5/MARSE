@@ -83,7 +83,7 @@ BALANCE = ChargeBalance.of(NETWORK)
 TYPICAL = np.array([30, 40, 5, 10, 3, 25, 25, 120, 50, 800], dtype=float)  # plaque, mol/m3
 
 
-def _column(values):
+def _voxel(values):
     return np.asarray(values, dtype=float)[:, None]
 
 
@@ -194,6 +194,73 @@ def test_the_slopes_of_h_are_those_of_finite_differences():
         np.testing.assert_allclose(slopes[k], numeric, rtol=1e-7, atol=noise.max())
 
 
+def test_newtons_method_cannot_cycle_between_the_ends_of_its_bracket():
+    """A plaque voxel in which every Newton step once landed on the other end of the bracket.
+
+    Found in an oral scene: the solve never finished, stepping between pH 3.00 and 5.76
+    for ever. A step that does not halve the one before now bisects the bracket.
+    """
+    components = [
+        {
+            "name": "lactate",
+            "phase": "dissolved",
+            "formula": "C3H6O3",
+            "acid_base": {"pka": [3.86]},
+        },
+        {
+            "name": "carbonate",
+            "phase": "dissolved",
+            "formula": "H2CO3",
+            "acid_base": {"pka": [6.1, 10.0]},
+        },
+        {
+            "name": "phosphate",
+            "phase": "dissolved",
+            "formula": "H3PO4",
+            "acid_base": {"pka": [2.1, 7.2, 12.3]},
+        },
+        {
+            "name": "ammonium",
+            "phase": "dissolved",
+            "formula": "NH4",
+            "charge": 1,
+            "acid_base": {"pka": [9.25]},
+        },
+        {"name": "sodium", "phase": "dissolved", "formula": "Na", "charge": 1},
+        {"name": "potassium", "phase": "dissolved", "formula": "K", "charge": 1},
+        {"name": "chloride", "phase": "dissolved", "formula": "Cl", "charge": -1},
+        {
+            "name": "carboxyl_groups",
+            "phase": "particulate",
+            "formula": "CH2O2",
+            "acid_base": {"pka": [4.8]},
+        },
+        {"name": "bound_potassium", "phase": "particulate", "formula": "K", "charge": 1},
+    ]
+    balance = ChargeBalance.of(
+        network_from_dict(
+            {"schema_version": 2, "pkw": 13.6, "components": components, "processes": []}
+        )
+    )
+    c = _voxel(
+        [
+            5.729045943422703,
+            5.3492567435640845,
+            4.474721252280909,
+            1.992846199362271,
+            5.24447824938286,
+            20.40142245582866,
+            18.890021372295145,
+            60.0,
+            14.834360831190617,
+        ]
+    )
+    h = balance.hydrogen(c)
+    assert h == pytest.approx(_bisect(balance, c), rel=1e-10)
+    net, _ = balance.residual(c, h)
+    assert abs(net[0]) < 1e-12
+
+
 def test_acid_raises_h_and_base_lowers_it():
     h = BALANCE.hydrogen(TYPICAL[:, None])
     slopes = BALANCE.hydrogen_slopes(TYPICAL[:, None], h)
@@ -236,6 +303,97 @@ def test_a_ph_factor_scales_the_rate_by_the_cardinal_model():
     monod = c[0] / (1.0 + c[0])
     expected = 0.5 * c[NAMES.index("bacteria")] * monod * cardinal_ph(ph, 4, 7, 9)
     np.testing.assert_allclose(process_rates(terms, c)[0], expected, rtol=1e-14)
+
+
+# --- the dissociated factor: the counter-ions a fixed buffer holds ---------------------
+
+EXCHANGE = {  # the plaque's carboxyl groups hold as many cations as they have lost protons
+    **SALIVA_AND_PLAQUE,
+    "processes": [
+        *SALIVA_AND_PLAQUE["processes"],
+        {
+            "name": "counter_ions_binding",
+            "kind": "reaction",
+            "stoichiometry_mol_per_mol": {"potassium": -1, "bound_potassium": 1},
+            "rate": {
+                "maximum_per_h": 3600,
+                "proportional_to": "carboxyl_groups",
+                "factors": [{"component": "carboxyl_groups", "form": "dissociated"}],
+                "assumed_in_excess": ["potassium"],
+            },
+        },
+        {
+            "name": "counter_ions_release",
+            "kind": "reaction",
+            "stoichiometry_mol_per_mol": {"bound_potassium": -1, "potassium": 1},
+            "rate": {"maximum_per_h": 3600, "proportional_to": "bound_potassium"},
+        },
+    ],
+}
+EXCHANGING = network_from_dict(EXCHANGE)
+
+
+@pytest.mark.parametrize("ph", [3.0, 4.8, 6.0, 7.0, 9.0])
+def test_the_dissociated_factor_is_the_protons_each_total_has_lost(ph):
+    h = np.array([1000.0 * 10**-ph])
+    carboxyl, _ = BALANCE.dissociated(NAMES.index("carboxyl_groups"), h)
+    ka, x = 10**-4.8, 10**-ph
+    assert carboxyl[0] == pytest.approx(ka / (ka + x), rel=1e-13)
+    phosphate, _ = BALANCE.dissociated(NAMES.index("phosphate"), h)
+    k1, k2, k3 = 10**-2.0, 10**-6.8, 10**-11.7
+    weights = np.array([1.0, k1 / x, k1 * k2 / x**2, k1 * k2 * k3 / x**3])
+    assert phosphate[0] == pytest.approx((weights * np.arange(4)).sum() / weights.sum(), rel=1e-12)
+    with pytest.raises(ValueError, match="not an acid-base total"):
+        BALANCE.dissociated(NAMES.index("potassium"), h)
+
+
+def test_the_dissociated_factors_slope_is_its_derivative():
+    """In log h, where the finite differences are well conditioned at every pH."""
+    log_h = np.log(1000.0) - np.linspace(2.0, 12.0, 41) * np.log(10.0)
+    step = 1e-4
+    for name in ("carboxyl_groups", "phosphate", "ammonium"):
+        j = NAMES.index(name)
+        _, slope = BALANCE.dissociated(j, np.exp(log_h))
+        up, _ = BALANCE.dissociated(j, np.exp(log_h + step))
+        down, _ = BALANCE.dissociated(j, np.exp(log_h - step))
+        numeric = (up - down) / (2 * step)  # d lost / d ln h, which is h times the slope
+        np.testing.assert_allclose(slope * np.exp(log_h), numeric, rtol=1e-6, atol=1e-11)
+        assert np.all(slope <= 0)  # more hydrogen ions, fewer protons lost
+
+
+def test_the_rate_jacobian_follows_a_dissociated_factor_through_every_charged_component():
+    """In plaque-like voxels: far from any pKa, the factor's slope is below the noise of the
+    differences."""
+    terms = compile_rates(EXCHANGING)
+    rng = np.random.default_rng(5)
+    c = rng.uniform(0.5, 1.5, size=(len(NAMES), 50)) * TYPICAL[:, None]
+    jacobian = rate_jacobian(terms, c)
+    numeric = np.zeros_like(jacobian)
+    for k in range(len(NAMES)):
+        step = 1e-5 * np.maximum(1.0, c[k])
+        up, down = c.copy(), c.copy()
+        up[k] += step
+        down[k] -= step
+        numeric[:, k] = (process_rates(terms, up) - process_rates(terms, down)) / (2 * step)
+    scale = np.abs(numeric).max()
+    assert np.max(np.abs(jacobian - numeric) / (np.abs(numeric) + 1e-9 * scale)) < 1e-6
+    assert EXCHANGING.component_names == NAMES
+    assert np.all(jacobian[1, NAMES.index("lactate")] < 0)  # acid takes the counter-ions' place
+
+
+def test_at_equilibrium_the_bound_counter_ions_are_the_dissociated_groups():
+    terms = compile_rates(EXCHANGING)
+    c = TYPICAL[:, None].copy()
+    groups, bound = NAMES.index("carboxyl_groups"), NAMES.index("bound_potassium")
+    low, high = 0.0, float(c[groups, 0])
+    for _ in range(80):  # bound cations raise the pH, and with it the groups that hold them
+        c[bound] = 0.5 * (low + high)
+        held = BALANCE.dissociated(groups, BALANCE.hydrogen(c))[0] * c[groups]
+        low, high = (
+            (float(c[bound, 0]), high) if held[0] > c[bound, 0] else (low, float(c[bound, 0]))
+        )
+    rates = process_rates(terms, c)
+    assert rates[1, 0] == pytest.approx(rates[2, 0], rel=1e-10)
 
 
 # --- reading acids, bases and pH factors ----------------------------------------------
@@ -296,6 +454,11 @@ def _factor(**fields):
             "does not apply to a ph factor",
         ),
         (_factor(form="monod", half_saturation_mol_per_m3=1), "needs component"),
+        (_factor(form="dissociated", component="glucose"), "is not an acid or a base"),
+        (
+            _factor(form="dissociated", component="lactate", half_saturation_mol_per_m3=1),
+            "does not apply to a dissociated factor",
+        ),
         (
             _factor(form="monod", component="lactate", half_saturation_mol_per_m3=1, ph_min=4),
             "applies only to a ph factor",

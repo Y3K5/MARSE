@@ -329,7 +329,54 @@ least certain of all.
 
 ---
 
-## 8. Conditions under which reference data were obtained
+## 8. Saliva, plaque and diet
+
+The oral scenes of [`docs/environments.md`](environments.md#the-oral-scenes) run
+a column of plaque under a salivary film, renewed from a mouth that secretes,
+swallows and takes a diet (theory.md §3.8, §4.8 and §4.9). Saliva's buffers and
+the mouth's volumes are measured values; what the plaque does with sugar is
+calibrated, all of it **C**, to the criteria for a Stephan curve set before
+Stage S1 was built (docs/validation.md, "The Stephan curve").
+
+### 8.1 Measured values
+
+| Quantity | Value | Unit | Source | Verified |
+|---|---|---|---|---|
+| Resting whole saliva: pH; bicarbonate; phosphate; flow | 6.8; 4.4 (5.3 with its CO₂, at 29.3 mmHg); 4.5; 0.55 | —; mM; mM; mL min⁻¹ | Bardow et al. (2000), collected under oil so that no CO₂ was lost | **B** |
+| Stimulated whole saliva: pH; bicarbonate; phosphate; flow | 7.2; 9.7 (10.5 with its CO₂, at 25.7 mmHg); 3.8; 1.66 | —; mM; mM; mL min⁻¹ | Bardow et al. (2000) | **B** |
+| Conditional pKa of carbonic acid; second pKa of phosphate | 6.1; 7.2 | — | Implied by the same saliva: its pH, bicarbonate and CO₂ give 6.11 at rest and stimulated, and its HPO₄²⁻ fractions give 7.19 and 7.20 | **B** (derived) |
+| Volume of saliva in the mouth after a swallow, and before one | 0.77 and 1.07 | mL | Lagerlöf & Dawes (1984) | **B** |
+| Unstimulated salivary flow | 0.3 | mL min⁻¹ | Dawes (1983) models clearance at about this flow; Bardow et al. (2000) measured 0.55 | **B** |
+| Thickness of the salivary film; its velocity by site | 70–100; 0.8–7.6 | µm; mm min⁻¹ | Collins & Dawes (1987); Dawes et al. (1989) | **B** |
+| Plaque's buffering | strong at pH 4–5.5, weak near neutrality; about 90% from cell walls and matrix | — | Shellis & Dibdin (1988) | **B** (qualitative) |
+| Food retained on the teeth | starchy particles for up to 20 min, accumulating sugars and acids | — | Kashket, Zhang & Van Houte (1996) | **B** (qualitative) |
+
+### 8.2 Values in the oral scenes
+
+Every value in this table is **C**. The calibrated ones were chosen so that a
+rinse of 10% sucrose meets all five criteria for a Stephan curve with a margin
+on each; the others are orders of magnitude.
+
+| Quantity | Value | Unit | Basis |
+|---|---|---|---|
+| Acid production | 0.5 per C-mol of an 800 C-mM population, so 400 mM of hexose per hour at pH 7 | h⁻¹ | Calibrated. Lactate in the plaque rises by 15 mM at 7 minutes. |
+| Half-saturation of acid production for sugar | 1 | mM | An order of magnitude: the plaque ferments at its full rate at the sugar a rinse leaves. |
+| Cardinal pH of acid production | 4, 7, 9 | — | One population for all; Stage S2 separates growth from acid production, species by species. |
+| Fixed buffer: carboxyl groups; their pKa | 160; 4.8 | mM; — | Calibrated, with its pKa inside the region of strong buffering of §8.1. |
+| Exchange of the fixed groups' potassium | 3600 | h⁻¹ | Fast against everything else, so that the bound potassium equals the groups' charge. |
+| Thickness of plaque | 150 | µm | Calibrated: sugar lingers in plaque for about three times $L^2/D$, so the thickness sets when the minimum falls. |
+| Velocity of the film; the plaque it has crossed | 6; 6 | mm min⁻¹; mm | Calibrated, inside the range of §8.1; the film is renewed every minute on average. |
+| Area of plaque the column stands for | 2 | cm² | An order of magnitude for plaque-covered surfaces. |
+| Diffusivity of sugar; of every charged component | 2.3 × 10⁻¹⁰; 7 × 10⁻¹⁰ | m² s⁻¹ | About half their values in water; one value for the charged components, about that of potassium lactate, so that diffusion separates no charge. |
+| Stimulated flow at most; the sugar that gives half of it | 2.0; 50 | mL min⁻¹; mM | Orders of magnitude for tasting sugar. |
+| Sodium and potassium in saliva, at rest and stimulated | 5 and 25; 22 and 20 | mM | Typical values; chloride is set to make each saliva neutral at its measured pH. |
+| Ammonium in saliva | 2 | mM | An order of magnitude. |
+| Mixing of the film during an intake | 1 | s⁻¹ | Fast mixing while sugar is in the mouth, as Dibdin (1990) assumed. |
+| The sipped drink; the pocket | 100 mL of 10% sucrose over 20 min; 0.02 mol m⁻² of sugar in food particles, dissolving at 3 h⁻¹ | — | Illustrative habits of a high-sugar eater. |
+
+---
+
+## 9. Conditions under which reference data were obtained
 
 Published rate constants are only meaningful alongside the conditions that
 produced them. MARSE records these as metadata on each parameter set so that
@@ -360,7 +407,7 @@ Two recurring pitfalls this metadata is designed to catch:
 
 ---
 
-## 9. Scope
+## 10. Scope
 
 The parameters here support simulation of microbial growth and biofilm
 structure under defined physical and chemical conditions, for the research
@@ -374,13 +421,13 @@ list of things v1.0 does not claim in the specification.
 
 ---
 
-## 10. Contributing a parameter
+## 11. Contributing a parameter
 
 To add a value (see [`CONTRIBUTING.md`](../CONTRIBUTING.md)):
 
 1. Give the value **with units**.
 2. Cite a primary source with a DOI.
-3. Record the conditions of §8.
+3. Record the conditions of §9.
 4. State the confidence level using the **A/B/C** scale above.
 5. If the value is fitted rather than measured, say so and give the data and
    procedure.

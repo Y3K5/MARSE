@@ -66,7 +66,7 @@ __all__ = [
 SCHEMA_VERSION = 2
 PHASES = ("dissolved", "particulate")
 KINDS = ("growth", "reaction")
-FORMS = ("monod", "inhibition", "haldane", "ph")
+FORMS = ("monod", "inhibition", "haldane", "ph", "dissociated")
 
 RUN_FIELDS = {
     "experiment_id": Field("text", required=False),
@@ -308,11 +308,14 @@ class Factor:
     S/(K+S+S^2/K_I), with S the concentration of ``component``. ``ph`` is the
     cardinal pH model of Rosso et al. (1995), 1 at ``ph_optimum`` and 0 at and
     beyond ``ph_min`` and ``ph_max``, of the pH the network's charges set
-    (docs/theory.md, section 3.8); it names no component.
+    (docs/theory.md, section 3.8); it names no component. ``dissociated`` is
+    the number of protons each unit of ``component``, an acid-base total, has
+    lost at that pH: Ka/(Ka+h) for a monoprotic acid. It is how many
+    counter-ions a fixed buffer's groups hold, for instance.
     """
 
     component: str | None
-    form: Literal["monod", "inhibition", "haldane", "ph"]
+    form: Literal["monod", "inhibition", "haldane", "ph", "dissociated"]
     half_saturation_mol_per_m3: Fraction | None = None
     inhibition_mol_per_m3: Fraction | None = None
     ph_min: Fraction | None = None
@@ -335,6 +338,8 @@ class Factor:
         return written
 
     def describe(self) -> str:
+        if self.form == "dissociated":
+            return f"dissociated({self.component})"
         if self.form == "ph":
             assert self.ph_min is not None
             assert self.ph_optimum is not None
@@ -790,6 +795,8 @@ def _factor(raw: Any, where: str, components: Mapping[str, Component]) -> Factor
         if key in values:
             raise ConfigError(f"{where}: {key} applies only to a ph factor")
     _known([values["component"]], components, f"{where}.component")
+    if form == "dissociated":
+        return _dissociated_factor(values, where, components)
     needs = {
         "monod": ("half_saturation_mol_per_m3",),
         "inhibition": ("inhibition_mol_per_m3",),
@@ -809,6 +816,21 @@ def _factor(raw: Any, where: str, components: Mapping[str, Component]) -> Factor
         half_saturation_mol_per_m3=values.get("half_saturation_mol_per_m3"),
         inhibition_mol_per_m3=values.get("inhibition_mol_per_m3"),
     )
+
+
+def _dissociated_factor(
+    values: Mapping[str, Any], where: str, components: Mapping[str, Component]
+) -> Factor:
+    name = values["component"]
+    if not components[name].pka:
+        raise ConfigError(
+            f"{where}.component: '{name}' is not an acid or a base; a dissociated factor needs "
+            "a component with acid_base pKa values"
+        )
+    for constant in ("half_saturation_mol_per_m3", "inhibition_mol_per_m3"):
+        if constant in values:
+            raise ConfigError(f"{where}: {constant} does not apply to a dissociated factor")
+    return Factor(component=name, form="dissociated")
 
 
 def _rate(
@@ -845,7 +867,9 @@ def _rate(
     in_excess: tuple[str, ...] = values.get("assumed_in_excess", ())
     _known(in_excess, components, f"{where}.assumed_in_excess")
     limiting = {proportional_to} | {
-        f.component for f in factors if f.component is not None and f.form != "inhibition"
+        f.component
+        for f in factors
+        if f.component is not None and f.form not in ("inhibition", "dissociated")
     }
     for name in in_excess:
         if coefficients.get(name, 0) >= 0:

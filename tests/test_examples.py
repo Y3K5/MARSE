@@ -38,6 +38,13 @@ def test_example_runs_cleanly(name):
     assert run_example(name).strip()
 
 
+@pytest.mark.slow
+def test_the_stephan_curve_example_passes_its_own_checks():
+    out = run_example("stephan_curve.py")
+    assert out.count("pass  ") == 7
+    assert "FAIL" not in out
+
+
 def test_stratified_growth_shows_the_active_zone_saturating():
     """Past the penetration depth, added thickness must add no active biomass."""
     output = run_example("stratified_growth.py")

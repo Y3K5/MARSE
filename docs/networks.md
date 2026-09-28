@@ -163,9 +163,18 @@ $$
   phosphate needs the potassium, sodium and chloride that balance their
   charge at its pH; `marse check` prints the pH that each composition
   implies.
-- **Fixed charges need their counter-ions.** Groups on bacteria or in the
-  matrix are particulate totals; the cations bound to them can be a
-  particulate ion, such as bound potassium.
+- **Fixed charges need their counter-ions, and must release them.** Groups on
+  bacteria or in the matrix are particulate totals, and the cations bound to
+  them are a particulate ion, such as bound potassium. As the groups take up
+  protons, the cations they held must be released into the liquid, or acid
+  leaving the groups' neighbourhood would take its protons with it. Two fast
+  processes do it: a binding process from the free to the bound cation, at
+  `maximum_per_h` × the groups × their `dissociated` factor, and a release
+  process back, proportional to the bound cation, both at the same fast rate
+  (theory.md §3.8; the oral scenes use 3600 per hour).
+- **Charged components should share one diffusivity.** They diffuse
+  independently, and ones that moved at different rates would separate charge,
+  which the pH would absorb as an artifact.
 - **What a run records.** A well-mixed run adds a `ph` column to
   `trajectory.csv`. A run in space writes `ph.csv`, with the pH over the
   substratum (its mean, minimum and maximum) and its range in the box at
@@ -239,8 +248,8 @@ formed. Each factor f is dimensionless. The equations are in
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `component` | component name | monod, inhibition, haldane | The component the factor responds to. |
-| `form` | `monod`, `inhibition`, `haldane` or `ph` | yes | `monod`: S/(K+S). `inhibition`: K_I/(K_I+S). `haldane`: S/(K+S+S²/K_I). `ph`: the cardinal pH model of Rosso et al. (1995), 1 at the optimum and 0 at the limits and beyond. |
+| `component` | component name | monod, inhibition, haldane, dissociated | The component the factor responds to. |
+| `form` | `monod`, `inhibition`, `haldane`, `ph` or `dissociated` | yes | `monod`: S/(K+S). `inhibition`: K_I/(K_I+S). `haldane`: S/(K+S+S²/K_I). `ph`: the cardinal pH model of Rosso et al. (1995), 1 at the optimum and 0 at the limits and beyond. `dissociated`: the protons each unit of the component, an acid–base total, has lost at the local pH, Ka/(Ka+[H⁺]) for one pKa. It does not limit the process by itself. |
 | `half_saturation_mol_per_m3` | number | monod, haldane | K, positive. |
 | `inhibition_mol_per_m3` | number | inhibition, haldane | K_I, positive. |
 | `ph_min` | number | ph | The lowest pH at which the process runs. |

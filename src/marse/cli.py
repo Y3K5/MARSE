@@ -608,26 +608,29 @@ def _report_domain(config: ReactiveTransportConfig) -> None:
     if domain.surface is not None:
         _report_surface(config)
     limit = build_model(config).diffusion.explicit_step_limit_h()
-    levels = hierarchy(grid.shape, len(names))
     if math.isfinite(limit):
         stability = f"an explicit step would have to be at most {limit * 3600 * 1000:.3g} ms"
     else:
         stability = "with nothing diffusing, no step is too long to be stable"
-    print(
-        f"  {stability}; the implicit solver uses {len(levels)} grid "
-        f"level{'s' if len(levels) > 1 else ''}, "
-        f"down to {' x '.join(map(str, levels[-1][0]))}"
-    )
-    if math.prod(levels[-1][0]) > 64:
+    if grid.dimensions == 1:
+        print(f"  {stability}; the implicit solver solves the column directly")
+    else:
+        levels = hierarchy(grid.shape, len(names))
         print(
-            "  note: the coarsest level is large, which slows every solve; voxel counts "
-            "divisible by 2 several times (such as 32, 48 or 64) are faster"
+            f"  {stability}; the implicit solver uses {len(levels)} grid "
+            f"level{'s' if len(levels) > 1 else ''}, "
+            f"down to {' x '.join(map(str, levels[-1][0]))}"
         )
+        if math.prod(levels[-1][0]) > 64:
+            print(
+                "  note: the coarsest level is large, which slows every solve; voxel counts "
+                "divisible by 2 several times (such as 32, 48 or 64) are faster"
+            )
     scales = time_scales(config)
     if scales["ratio"] is not None:
         print(
             f"time scales diffusion across the box {scales['diffusion_h'] * 3600:.3g} s, "
-            f"fastest growth {scales['growth_h']:.3g} h (ratio {scales['ratio']:.2g})"
+            f"fastest process {scales['growth_h']:.3g} h (ratio {scales['ratio']:.2g})"
         )
 
 

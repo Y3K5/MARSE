@@ -84,6 +84,17 @@ marse run examples/environments/dental/dental_surfaces.json -o runs/dental   # u
 python examples/surface_adhesion.py    # the four dental materials, hour by hour
 ```
 
+A tooth's plaque can also stand under the mouth itself: a film of saliva that
+the mouth renews as it secretes and swallows, a pH set by the charges of every
+acid, base and ion, and a diet of rinses, drinks and foods. Three oral scenes
+give plaque the same sugar as a rinse, sipped over 20 minutes, or with food
+left on the teeth, and show which keeps it acid for longest:
+
+```bash
+marse run examples/environments/oral/stephan_rinse.json -o runs/stephan   # a Stephan curve, about 10 s
+python examples/stephan_curve.py      # the three diets side by side, under a minute
+```
+
 The manifest records the configuration, its SHA-256 checksum, the random seed,
 the versioned models used and the software versions — and deliberately records
 no username, hostname or absolute path, so it is safe to attach to a paper or
@@ -142,6 +153,9 @@ src/marse/         the Python package
   schemas/         configuration schema v2: formulas and balanced reaction networks
   spatial/         voxel grids in 1, 2 or 3 dimensions, diffusion, multigrid, surfaces and the
                    delivery of cells to them, ParaView output
+  oral/            the mouth: saliva secreted and swallowed, the film over the teeth, the diet,
+                   and the measures of a Stephan curve
+  chemistry/       acid-base equilibria: the pH that every voxel's charges set
   microbes/        growth kinetics, cardinal models, adhesion, niches, genotypes, dose responses
   biofilm/         biomass, matrix, maturation
   ecosystem/       the 2-D multispecies engine and its viewer
@@ -154,7 +168,7 @@ src/marse/         the Python package
 examples/          runnable reference calculations
   experiments/     experiment configurations for `marse run` and `marse ecosystem`
   networks/        reaction networks for `marse check` and `marse run` (configuration schema v2)
-  environments/    scenes: surfaces, liquids, flows and the cells that bind to them
+  environments/    scenes: surfaces, liquids, flows and the cells that bind to them, and the mouth
 tests/             test suite
 docs/              theory, parameters, specification, architecture, validation, roadmap
 tools/             repository tooling (privacy and repository guards)

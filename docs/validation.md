@@ -455,6 +455,17 @@ Other checks:
 - **Convergence to the last bit.** The solve stops where the balance reaches
   its own rounding floor. Without that test, Newton's method stepped for ever
   between two neighbouring values of h in a lactate buffer at pH 7.
+- **No cycles.** In one plaque voxel of an oral scene, every Newton step
+  landed on the other end of an unchanging bracket, between pH 3.00 and 5.76,
+  and the solve never finished. A step must now halve the one before, or the
+  bracket is bisected (Press et al. 2007). That voxel converges to the root
+  bisection finds, and 2,000 random plaque voxels, pH 1.3 to 12.7, take 12
+  iterations, against 19 without the safeguard.
+- **The dissociated factor**, the protons a total has lost at the local pH,
+  agrees with its closed forms for one pKa and for phosphate, and its slope
+  with finite differences in log h. The rate Jacobian through it agrees with
+  finite differences to 5.9e-8. At equilibrium, the cations the fixed groups
+  hold are their charge.
 - **The cardinal pH slope** agrees with finite differences of the factor.
 - **Runs.**
   - A fermenting well-mixed box acidifies at every record and writes its pH.
@@ -480,7 +491,7 @@ film, in `tests/test_mouth.py`:
 | | Criterion | Threshold | Result |
 |---|---|---|---|
 | G6a | With a constant flow and nothing taken up, the mouth's sugar after each swallow against Dawes's closed form, (H_resid / H_max) to the number of swallows | rounding | 3.7e-11 over ten swallows |
-| G3, G6b | The box and the mouth together conserve every quantity over an hour with a residue of 10% sucrose, counting what was secreted and swallowed | 1e-12 | 5.6e-16; the box alone 3.2e-16 |
+| G3, G6b | The box and the mouth together conserve every quantity over an hour with a residue of 10% sucrose, counting what was secreted and swallowed | 1e-12 | 5.6e-16; the box alone 3.0e-16 |
 | G6c | The pH at the substratum over that hour, with the mouth running 60 s and 5 s ahead of the box | 1e-3 | 6.1e-5 |
 
 That hour takes 5.9 s: 358 steps and 71 swallows.
@@ -511,15 +522,15 @@ column of the section above, in `tests/test_mouth.py`:
 
 | | Criterion | Threshold | Result |
 |---|---|---|---|
-| G3, G6b | The box and the mouth together conserve every quantity over an hour with a rinse of 10% sucrose, 200 mL of a sugared drink sipped over 20 minutes and a sweet that leaves food on the teeth, counting what was secreted, eaten, swallowed and expelled | 1e-12 | 1.1e-15; the box alone 5.5e-16 |
+| G3, G6b | The box and the mouth together conserve every quantity over an hour with a rinse of 10% sucrose, 200 mL of a sugared drink sipped over 20 minutes and a sweet that leaves food on the teeth, counting what was secreted, eaten, swallowed and expelled | 1e-12 | 1.2e-15; the box alone 8.6e-16 |
 | G6c | The pH at the substratum over an hour after a rinse of 10% sucrose held for a minute, which mixes the film with the mouth once a second, with the mouth running 60 s and 5 s ahead of the box | 1e-3 | 8.6e-5 |
 
 Over the same hour, the mouth's sugar agrees within 8.4e-4. Without the
 run-ahead's expectation of what the plaque gives back (theory.md §9.9), it
 agreed within 1.2e-2 and the pH within 2.3e-4. The hour after the rinse takes
-7.0 s: 404 steps and 73 swallows. The hour with the drink takes 33 s, because
-a drink sipped at 10 mL a minute makes the mouth swallow 910 times, and every
-swallow ends a span.
+6.5 s: 404 steps and 73 swallows. The hour with the drink takes about 30 s,
+because a drink sipped at 10 mL a minute makes the mouth swallow 910 times,
+and every swallow ends a span.
 
 Other checks:
 
@@ -541,6 +552,53 @@ Other checks:
   is bit for bit that of the run without it.
 - **Replay** reproduces a run with a diet exactly, `marse check` lists the
   diet, and every impossible diet is refused with the reason.
+
+## The Stephan curve
+
+The oral scenes of `examples/environments/oral`
+([environments.md](environments.md#the-oral-scenes)): 150 µm of plaque under
+a salivary film and a mouth, given a rinse of 10% sucrose, 100 mL of a drink
+of 10% sucrose sipped over 20 minutes, or the rinse and food left on the
+teeth. The last two criteria set before Stage S1 was built, in
+`tests/test_oral_scenes.py`, as slow tests:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| G5 | After the rinse, the pH at the substratum falls at least one unit, to a minimum within 5 to 20 minutes, is back above 6 within an hour, and the plaque holds more lactate at 7 minutes | 1 unit; 4.5 to 5.5; 60 min; 10 to 60 mM | 1.93, from 6.80 to 4.87 at 15.6 min; back above 6 at 42.9 min; +15.0 mM |
+| G7 | A two-hour curve in 100 voxels | under 30 s | 12.7 s: 550 steps and 132 swallows |
+
+Both ledgers hold to 3.1e-15 or better in every scene, and the film is never
+more acid than the plaque below it.
+
+**What calibration took.** The prototype met G5 with a plaque buffer whose
+cations were held fixed. In MARSE, the scenes first did too, but the film
+above the plaque then fell to pH 3.3: the lactate leaving the plaque carried
+the acid's protons out with it. With the buffer's cations released as its
+groups take up protons (theory.md §3.8), the acid stays in the plaque until
+the saliva's alkali takes it off, and 300 µm of plaque stayed acid for more
+than an hour. Four values were calibrated again, within their ranges: the
+plaque is 150 µm thick, the film moves at 6 mm per minute, the buffer is
+160 mM, and every charged component diffuses at 7 × 10⁻¹⁰ m² per s
+([parameters.md §8](parameters.md#8-saliva-plaque-and-diet)). All four are
+confidence C.
+
+**Directions**, each against the same rinse over 90 minutes, each a slow
+test:
+
+| Change | Lowest pH | Minutes below pH 5.5 | Back above pH 6 | As reported |
+|---|---|---|---|---|
+| None: the rinse | 4.87 at 15.6 min | 31.7 | 42.9 min | the Stephan curve (Stephan 1944) |
+| 100 mL sipped over 20 min | 4.80 at 34.8 min | 52.3 | 64.7 min | a continuous presence of sugar keeps plaque acid |
+| Food left on the teeth, 0.02 mol/m² | 4.78 at 22.2 min | 56.2 | 69.5 min | retained food keeps it acid (Kashket, Zhang and Van Houte 1996) |
+| Low flow: 0.1 mL/min, up to 1.0 more | 4.84 at 18.0 min | 39.7 | 52.0 min | a greater fall, low for longer (Lingström and Birkhed 1993) |
+| A slower film: 2 mm/min | 4.42 at 33.0 min | 87.1 | not within 90 min | a lower minimum, a slower return (Macpherson and Dawes 1991) |
+| Thicker plaque: 300 µm | 4.57 at 22.2 min | 85.7 | not within 90 min | acid for longer (Dawes and Dibdin 1986) |
+| More fixed buffer: 240 mM | 5.03 at 15.6 min | 31.0 | 47.3 min | a shallower fall, a longer low phase (Dibdin 1990) |
+
+Dawes and Dibdin (1986) found an optimum thickness at which plaque reaches
+its lowest pH, so a thicker plaque need not fall further; the test asks only
+that it stays acid longer. `python examples/stephan_curve.py` runs the first
+three and checks G5 and the first two directions (44 s).
 
 ## Running the suite
 

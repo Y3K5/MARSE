@@ -141,16 +141,20 @@ class ChargeBalance:
         """h in mol/m3 wherever c is given: the root of the charge balance.
 
         Newton's method in log h from pH 7, inside a bracket [pH -1, pH 17]
-        that every evaluation narrows; a step that would leave the bracket
-        bisects it instead. A voxel stops where the balance is at its rounding
-        floor, and the solve ends when every voxel has stopped or moves by no
-        more than 1e-13 in log h.
+        that every evaluation narrows. A step that would leave the bracket, or
+        that is not at most half the step before it, bisects the bracket
+        instead, as in the safeguarded Newton method of Press et al. (2007,
+        section 9.4): Newton's method can otherwise cycle, each step landing on
+        the other end of an unchanging bracket. A voxel stops where the balance
+        is at its rounding floor, and the solve ends when every voxel has
+        stopped or moves by no more than 1e-13 in log h.
         """
         c = np.maximum(np.asarray(c, dtype=float), 0.0)
         shape = c.shape[1:]
         low = np.full(shape, _LOWEST)
         high = np.full(shape, _HIGHEST)
         x = np.full(shape, _NEUTRAL)
+        last = np.full(shape, _HIGHEST - _LOWEST)  # the step before, which a step must halve
         for _ in range(_ITERATIONS):
             h = np.exp(x)
             net, slope, size = self._balance(c, h)
@@ -158,11 +162,15 @@ class ChargeBalance:
             low = np.where(net < 0, x, low)
             high = np.where(net > 0, x, high)
             new = x - net / (slope * h)  # dF/d(log h) = h dF/dh
-            # Strictly outside: at convergence a step can round onto a bound.
+            step = np.abs(new - x)
+            # Strictly outside: at convergence a step can round onto a bound, and a step of
+            # rounding size need not halve the one before.
             outside = (new < low) | (new > high) | ~np.isfinite(new)
-            new = np.where(outside, 0.5 * (low + high), new)
+            slow = (step > 0.5 * last) & (step > _CONVERGED)
+            new = np.where(outside | slow, 0.5 * (low + high), new)
             new = np.where(floor, x, new)
             done = bool(np.all(floor | (np.abs(new - x) <= _CONVERGED)))
+            last = np.abs(new - x)
             x = new
             if done:
                 return np.exp(x)
@@ -172,6 +180,19 @@ class ChargeBalance:
 
     def ph(self, c: Field) -> Field:
         return ph_of_hydrogen(self.hydrogen(c))
+
+    def dissociated(self, component: int, h: Field) -> tuple[Field, Field]:
+        """The protons each unit of an acid-base total has lost at h, and its slope in h.
+
+        For a monoprotic acid, Ka / (Ka + h). The slope is minus the variance of
+        the protons lost over h, as for the balance's own slope.
+        """
+        total = next((t for t in self.totals if t.component == component), None)
+        if total is None:
+            raise ValueError(f"component {component} is not an acid-base total")
+        h = np.asarray(h, dtype=float)
+        charge, variance = self._speciation(total, np.log(h))
+        return total.top_charge - charge, -variance / h
 
     def hydrogen_slopes(self, c: Field, h: Field) -> Field:
         """dh/dc for every component, shape (components, *cells): zero below zero, as in rates."""
