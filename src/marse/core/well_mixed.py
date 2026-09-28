@@ -32,12 +32,12 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from marse.chemistry import ChargeBalance
 from marse.core.integrators import integrate
 from marse.core.ledger import Ledger
 from marse.core.provenance import Manifest
 from marse.microbes.kinetics import compile_rates, process_rates
 from marse.schemas.experiment import WellMixedConfig
-from marse.schemas.formula import QUANTITIES
 
 __all__ = [
     "ENGINE_VERSION",
@@ -67,6 +67,7 @@ class WellMixedResult:
     manifest: Manifest
     times_h: NDArray[np.float64]
     concentrations_mol_per_m3: NDArray[np.float64]  # shape (records, components)
+    ph: NDArray[np.float64] | None = None  # per record, when the network's charges set a pH
 
     @property
     def component_names(self) -> tuple[str, ...]:
@@ -81,9 +82,13 @@ class WellMixedResult:
         destination = Path(path)
         with destination.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
-            writer.writerow(["time_h"] + [f"{n}_mol_per_m3" for n in self.component_names])
-            for t, row in zip(self.times_h, self.concentrations_mol_per_m3, strict=True):
-                writer.writerow([f"{t:.6f}"] + [f"{v:.10g}" for v in row])
+            ph = [] if self.ph is None else ["ph"]
+            writer.writerow(["time_h"] + [f"{n}_mol_per_m3" for n in self.component_names] + ph)
+            for i, (t, row) in enumerate(
+                zip(self.times_h, self.concentrations_mol_per_m3, strict=True)
+            ):
+                value = [] if self.ph is None else [f"{self.ph[i]:.6f}"]
+                writer.writerow([f"{t:.6f}"] + [f"{v:.10g}" for v in row] + value)
         return destination
 
 
@@ -119,17 +124,19 @@ def run(config: WellMixedConfig) -> WellMixedResult:
         return process_rates(terms, concentrations)
 
     state = np.array([config.initial_mol_per_m3[n] for n in names], dtype=float)
-    ledger = Ledger(network.composition_matrix(), state, QUANTITIES)
+    ledger = Ledger(network.composition_matrix(), state, network.quantities)
     peak = state.copy()
     times, rows = [0.0], [state.copy()]
     now, substep = 0.0, config.timestep_h
     accepted = rejected = limited = 0
     steps = config.steps
 
+    tolerance = np.broadcast_to(config.absolute_tolerances(), state.shape)
+
     def assumptions_hold(concentrations: NDArray[np.float64]) -> None:
         for process, indices in assumptions:
             for i in indices:
-                if concentrations[i] <= config.absolute_tolerance_mol_per_m3:
+                if concentrations[i] <= tolerance[i]:
                     raise ExhaustedComponentError(
                         f"'{names[i]}' ran out in the step from t = {now:.6g} h, but process "
                         f"'{process}' assumes it is in excess; give that process a monod "
@@ -148,7 +155,7 @@ def run(config: WellMixedConfig) -> WellMixedResult:
             stoichiometry,
             first_step=substep,
             relative_tolerance=config.relative_tolerance,
-            absolute_tolerance=config.absolute_tolerance_mol_per_m3,
+            absolute_tolerance=config.absolute_tolerances(),
             peak=peak,
             guard=assumptions_hold if assumptions else None,
         )
@@ -169,6 +176,15 @@ def run(config: WellMixedConfig) -> WellMixedResult:
         "substeps": {"accepted": accepted, "rejected": rejected, "limited": limited},
         "final_state_sha256": _digest(names, state),
     }
+    ph = None
+    if network.has_ph:
+        ph = ChargeBalance.of(network).ph(np.array(rows).T)
+        lowest = int(np.argmin(ph))
+        outputs["ph"] = {
+            "final": float(ph[-1]),
+            "lowest": float(ph[lowest]),
+            "lowest_at_h": float(times[lowest]),
+        }
     manifest = Manifest.build(
         config=config,
         models={"engine": ENGINE_VERSION, "integrator": INTEGRATOR_VERSION},
@@ -183,4 +199,5 @@ def run(config: WellMixedConfig) -> WellMixedResult:
         manifest=manifest,
         times_h=np.array(times),
         concentrations_mol_per_m3=np.array(rows),
+        ph=ph,
     )

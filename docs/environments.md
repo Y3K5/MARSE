@@ -32,9 +32,11 @@ reuses the machinery of E1 rather than replacing it.
 
 After E1, the roadmap turns to saliva, diet and caries. That stage compares
 high- and low-sugar diets over months to years, with salivary flow, clearance
-and buffering, and the pH drops that select acid-tolerant species. Host biology
-(immune, structural and functional cells, and their signalling) comes after
-v1.0, as a separate, clearly labelled layer ([roadmap.md](roadmap.md)).
+and buffering, and the pH drops that select acid-tolerant species. Its first
+increment, S1, brings the mouth, the diet and the Stephan curve:
+[the oral scenes](#the-oral-scenes) below. Host biology (immune, structural
+and functional cells, and their signalling) comes after v1.0, as a separate,
+clearly labelled layer ([roadmap.md](roadmap.md)).
 
 ## A scene
 
@@ -195,3 +197,64 @@ What the run shows, and what it does not:
 
 The ecosystem model's surface transfer ([adhesion-detachment.md](adhesion-detachment.md))
 is a separate, phenomenological rule of the version 1 engine, not this model.
+
+## The oral scenes
+
+A tooth's plaque does not sit under a well-mixed liquid, but under a thin
+film of saliva that the mouth renews, and it sees sugar only when the mouth
+does. The three scenes in
+[`examples/environments/oral`](../examples/environments/oral) model one site:
+
+- **The plaque** is a column of 150 µm, with one acidogenic population that
+  ferments sugar to lactic acid, more slowly as the pH falls. Carboxyl groups
+  of the cell walls and matrix buffer it and hold potassium, which they
+  release as they take up protons ([theory.md §3.8](theory.md#38-acidbase-equilibria-and-ph)).
+- **The film** is 100 µm of saliva over it, moving at 6 mm per minute and
+  renewed from the mouth ([§4.8](theory.md#48-a-salivary-film-and-the-mouth)).
+- **The mouth** secretes resting saliva, and more and more alkaline saliva as
+  it tastes sugar, with the buffers Bardow et al. (2000) measured. It
+  swallows as Dawes (1983) described.
+- **The diet** is what differs ([§4.9](theory.md#49-the-diet)):
+  - [`stephan_rinse.json`](../examples/environments/oral/stephan_rinse.json):
+    10 mL of 10% sucrose held for a minute and spat out, the challenge of a
+    Stephan curve;
+  - [`sipping.json`](../examples/environments/oral/sipping.json): 100 mL of a
+    drink of 10% sucrose sipped over 20 minutes;
+  - [`pocket.json`](../examples/environments/oral/pocket.json): the rinse,
+    after which food particles holding sugar stay on the teeth and dissolve.
+
+```bash
+marse check examples/environments/oral/stephan_rinse.json
+marse run examples/environments/oral/stephan_rinse.json   # 10 s
+python examples/stephan_curve.py   # the three scenes side by side, 44 s
+```
+
+`marse run` writes `ph.csv` (the pH at the substratum and its range in the
+box) and `mouth.csv` (the mouth's volume, flow, swallows and composition)
+beside the usual outputs. The pH at the substratum, over 90 minutes:
+
+| Scene | Lowest pH | Minutes below pH 5.5 | Back above pH 6 |
+|---|---|---|---|
+| The rinse | 4.87 at 15.6 min | 31.7 | 42.9 min |
+| Sipping | 4.80 at 34.8 min | 52.3 | 64.7 min |
+| Food left on the teeth | 4.78 at 22.2 min | 56.2 | 69.5 min |
+
+What the scenes show, and what they do not:
+
+- **A Stephan curve.** After the rinse the pH falls by 1.9 units, from 6.80
+  to 4.87 at 16 minutes, and is back above 6 within 45 minutes, as measured
+  curves do (Stephan 1944). The acid production, the buffer, the
+  plaque's thickness and the film's speed were calibrated to criteria set
+  before the stage was built ([validation.md](validation.md#the-stephan-curve)),
+  so this shape is a calibration, not a prediction.
+- **What makes a high-sugar eater's plaque acid for longer.** Sipping the same
+  sugar over 20 minutes keeps the plaque below pH 5.5 for 52 minutes instead
+  of 32, and a little food left on the teeth for 56. Low salivary flow, a
+  slower film, thicker plaque and more buffer move the curve the ways the
+  literature reports. Those directions are predictions of the model, and the
+  tests check each one.
+- **One population, one site.** Which species make the acid, and how the pH
+  selects among them, is Stage S2. Enamel dissolving below the critical pH is
+  Stage S3, and many sites and years of diet are S4.
+- **Nothing makes base.** Urea and arginine, which plaque turns into ammonia,
+  are not yet modelled, so the return to neutral relies on the saliva alone.

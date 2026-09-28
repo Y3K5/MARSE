@@ -27,6 +27,7 @@ import numpy as np
 
 from marse import __version__
 from marse.analysis.ensemble import ScenarioBatch, run_batch
+from marse.chemistry import ChargeBalance
 from marse.core.config import ConfigError, load_experiment
 from marse.core.framestore import FrameStore as FieldStore
 from marse.core.provenance import Manifest
@@ -43,8 +44,9 @@ from marse.ecosystem.model import recorded_steps
 from marse.microbes.niche import NicheError, load_niche_scan, run_niche_scan
 from marse.schemas import Network, experiment_from_dict
 from marse.schemas._reading import load_json
-from marse.schemas.experiment import ReactiveTransportConfig
+from marse.schemas.experiment import ReactiveTransportConfig, RunConfig
 from marse.schemas.experiment import load_experiment as load_network_experiment
+from marse.schemas.formula import ELEMENT_QUANTITIES
 from marse.schemas.network import RUN_FIELDS, SCHEMA_VERSION, read_document
 from marse.spatial.multigrid import hierarchy
 from marse.spatial.vtk import write_pvd, write_vti
@@ -109,8 +111,20 @@ def _summarise_well_mixed(result: WellMixedResult) -> None:
     print("final       mol per m3")
     for name, value in outputs["final_mol_per_m3"].items():
         print(f"  {name:<24} {value:.6g}")
+    if "ph" in outputs:
+        ph = outputs["ph"]
+        print(
+            f"pH          {ph['final']:.3f} at the end; lowest {ph['lowest']:.3f} "
+            f"at {ph['lowest_at_h']:g} h"
+        )
     worst = max(q["largest_relative_residual"] for q in outputs["balance"].values())
-    print(f"balance     carbon, nitrogen and electrons conserved to {worst:.1e} of their totals")
+    print(f"balance     {_listed(outputs['balance'])} conserved to {worst:.1e} of their totals")
+
+
+def _listed(quantities: Sequence[str]) -> str:
+    """``carbon, nitrogen and electrons``, from the quantities a balance lists."""
+    names = list(quantities)
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
 
 
 def _summarise_in_space(result: ReactiveTransportResult) -> None:
@@ -129,17 +143,53 @@ def _summarise_in_space(result: ReactiveTransportResult) -> None:
         f"{substeps['limited']} limited to keep concentrations positive"
     )
     boundary = "the top and the substratum" if "surface" in outputs else "the top"
+    if "mouth" in outputs:
+        boundary = "the film and the substratum" if "surface" in outputs else "the film"
+        if any(intake.retained for intake in result.config.domain.diet):
+            boundary += " (food left on the teeth included)"
     print(f"{'final':<24}   mol per m2 of surface   entered through {boundary}")
     for name, value in outputs["totals_mol_per_m2"].items():
         entered = outputs["imported_mol_per_m2"][name]
         print(f"  {name:<24} {value:>12.6g}   {entered:>+12.4g}")
     if "surface" in outputs:
         _summarise_surface(result)
+    if "mouth" in outputs:
+        _summarise_mouth(result)
+    if "ph" in outputs:
+        ph = outputs["ph"]
+        final = ph["final"]
+        print(
+            f"pH          at the substratum {final['substratum_mean']:.3f} at the end "
+            f"(lowest {ph['lowest_at_substratum']:.3f} at {ph['lowest_at_substratum_h']:g} h); "
+            f"in the box {final['box_min']:.3f} to {final['box_max']:.3f}"
+        )
     worst = max(q["largest_relative_residual"] for q in outputs["balance"].values())
     print(
-        f"balance     carbon, nitrogen and electrons, counting what crossed {boundary}, "
+        f"balance     {_listed(outputs['balance'])}, counting what crossed {boundary}, "
         f"conserved to {worst:.1e}"
     )
+
+
+def _summarise_mouth(result: ReactiveTransportResult) -> None:
+    mouth = result.manifest.outputs["mouth"]
+    worst = max(q["largest_relative_residual"] for q in mouth["balance"].values())
+    print(
+        f"mouth       {mouth['swallows']} swallows in {mouth['spans']} spans; "
+        f"{mouth['final_volume_ml']:.3g} mL at the end"
+    )
+    print(f"  {'saliva at the end':<24} mol per m3")
+    for name, value in mouth["final_mol_per_m3"].items():
+        print(f"  {name:<24} {value:>12.6g}")
+    if result.mouth is not None and "ph" in result.mouth:
+        print(f"  {'pH':<24} {result.mouth['ph'][-1]:>12.3f}")
+    counted = "secreted and swallowed"
+    if "intakes" in mouth:
+        counted = "secreted, eaten, swallowed and expelled"
+        print(f"  {'taken in':<24} mol per m2 of plaque, from {mouth['intakes']} intake(s)")
+        for name, value in mouth["eaten_mol_per_m2"].items():
+            if value:
+                print(f"  {name:<24} {value:>12.6g}")
+    print(f"  box and mouth together, counting what was {counted}, conserved to {worst:.1e}")
 
 
 def _summarise_surface(result: ReactiveTransportResult) -> None:
@@ -219,10 +269,14 @@ def _run_in_space(
         for step in range(1, config.steps + 1)
         if step % config.record_every == 0 or step == config.steps
     )
+    balance = ChargeBalance.of(config.network) if config.network.has_ph else None
+    layout = {f"{n}_mol_per_m3": (grid.shape, "<f4") for n in names}
+    if balance is not None:
+        layout["ph"] = (grid.shape, "<f4")
     store = FieldStore.create(
         output_dir / "frames",
         capacity=records,
-        fields={f"{n}_mol_per_m3": (grid.shape, "<f4") for n in names},
+        fields=layout,
         metadata={"voxel_um": grid.voxel_um, "axes": ["x", "y", "z"][-grid.dimensions :]},
         overwrite=True,
     )
@@ -232,6 +286,8 @@ def _run_in_space(
 
     def record(index: int, time_h: float, state: np.ndarray) -> None:
         fields = {f"{n}_mol_per_m3": state[j] for j, n in enumerate(names)}
+        if balance is not None:
+            fields["ph"] = balance.ph(state)
         store.append(time_h=time_h, step=index, arrays=fields)
         name = f"frame_{index:04d}.vti"
         write_vti(vtk / name, grid, fields)
@@ -243,10 +299,14 @@ def _run_in_space(
         index = store.close()
     pvd = write_pvd(vtk / "run.pvd", series)
     totals, manifest = _write_outputs(result, output_dir)
-    if result.surface is None:
-        return result, (totals, index, pvd, manifest)
-    surface = result.write_surface(output_dir / "surface.csv")
-    return result, (totals, surface, index, pvd, manifest)
+    written = [totals]
+    if result.surface is not None:
+        written.append(result.write_surface(output_dir / "surface.csv"))
+    if result.ph is not None:
+        written.append(result.write_ph(output_dir / "ph.csv"))
+    if result.mouth is not None:
+        written.append(result.write_mouth(output_dir / "mouth.csv"))
+    return result, (*written, index, pvd, manifest)
 
 
 def _run_network(args: argparse.Namespace) -> int:
@@ -262,7 +322,8 @@ def _run_network(args: argparse.Namespace) -> int:
         print()
         for path in written:
             print(f"wrote {path}")
-        print(f"\nopen {written[2]} in ParaView to explore the run in 3-D")
+        pvd = next(path for path in written if path.suffix == ".pvd")
+        print(f"\nopen {pvd} in ParaView to explore the run in 3-D")
         print(f"replay it with:  marse replay {written[-1]}")
         return 0
     result = run_well_mixed(config)
@@ -456,16 +517,44 @@ def _report_network(network: Network, source: str) -> None:
     print(
         f"components  {len(network.components)}: {dissolved} dissolved, {particulate} particulate"
     )
-    print(f"  {'name':<24} {'phase':<12} {'formula':<16} {'C':>6} {'N':>6} {'e-':>6} {'g/mol':>9}")
+    elements = [q for q in network.quantities if q in ELEMENT_QUANTITIES]
+    symbols = "".join(f" {ELEMENT_QUANTITIES[q]:>6}" for q in elements)
+    print(
+        f"  {'name':<24} {'phase':<12} {'formula':<16} {'C':>6} {'N':>6} {'e-':>6}{symbols} "
+        f"{'g/mol':>9}"
+    )
     for c in network.components:
         carbon, nitrogen, electrons = (f"{float(q):g}" for q in c.formula.composition)
+        counts = "".join(f" {float(c.formula.content(q)):>6g}" for q in elements)
         print(
             f"  {c.name:<24} {c.phase:<12} {c.formula.label():<16} {carbon:>6} {nitrogen:>6} "
-            f"{electrons:>6} {c.formula.molar_mass_g_per_mol:>9.3f}"
+            f"{electrons:>6}{counts} {c.formula.molar_mass_g_per_mol:>9.3f}"
         )
+    if network.has_ph:
+        pkw = 14.0 if network.pkw is None else float(network.pkw)
+        totals = ", ".join(
+            f"{c.name} ({' '.join(f'{float(k):g}' for k in c.pka)})"
+            for c in network.components
+            if c.pka
+        )
+        print(
+            textwrap.fill(
+                f"pH from the charge balance, pKw {pkw:g}; acid-base totals and their pKa: "
+                f"{totals or 'none'}",
+                88,
+                initial_indent="  ",
+                subsequent_indent="    ",
+            )
+        )
+    quantities = list(network.quantities)
+    conserved = ", ".join(quantities[:-1]) + " and " + quantities[-1]
     print(
-        f"\nprocesses   {len(network.processes)}, each conserving carbon, nitrogen and "
-        "electrons exactly"
+        textwrap.fill(
+            f"processes   {len(network.processes)}, each conserving {conserved} exactly",
+            88,
+            initial_indent="\n",
+            subsequent_indent="            ",
+        )
     )
     for p in network.processes:
         if p.growth is None:
@@ -503,8 +592,11 @@ def _report_domain(config: ReactiveTransportConfig) -> None:
         f"\nspace       {grid.dimensions}-D, {voxels} voxels of {grid.voxel_um:g} um "
         f"({size} um), {grid.voxels:,} voxels, {megabytes:.3g} MB per state"
     )
-    bulk = ", ".join(f"{n} {v:g}" for n, v in domain.bulk_mol_per_m3.items() if v)
-    print(f"  bulk liquid above, mol per m3: {bulk or 'nothing'}")
+    if domain.film is not None and domain.mouth is not None:
+        _report_mouth(config)
+    else:
+        bulk = ", ".join(f"{n} {v:g}" for n, v in domain.bulk_mol_per_m3.items() if v)
+        print(f"  bulk liquid above, mol per m3: {bulk or 'nothing'}")
     moving = ", ".join(f"{n} {v * 1e12:g}" for n, v in domain.diffusivity_m2_per_s.items())
     print(f"  diffusivities, um2 per s: {moving or 'nothing diffuses'}")
     placed = len(domain.colonies) + sum(g.count for g in domain.random_colonies)
@@ -516,27 +608,91 @@ def _report_domain(config: ReactiveTransportConfig) -> None:
     if domain.surface is not None:
         _report_surface(config)
     limit = build_model(config).diffusion.explicit_step_limit_h()
-    levels = hierarchy(grid.shape, len(names))
     if math.isfinite(limit):
         stability = f"an explicit step would have to be at most {limit * 3600 * 1000:.3g} ms"
     else:
         stability = "with nothing diffusing, no step is too long to be stable"
-    print(
-        f"  {stability}; the implicit solver uses {len(levels)} grid "
-        f"level{'s' if len(levels) > 1 else ''}, "
-        f"down to {' x '.join(map(str, levels[-1][0]))}"
-    )
-    if math.prod(levels[-1][0]) > 64:
+    if grid.dimensions == 1:
+        print(f"  {stability}; the implicit solver solves the column directly")
+    else:
+        levels = hierarchy(grid.shape, len(names))
         print(
-            "  note: the coarsest level is large, which slows every solve; voxel counts "
-            "divisible by 2 several times (such as 32, 48 or 64) are faster"
+            f"  {stability}; the implicit solver uses {len(levels)} grid "
+            f"level{'s' if len(levels) > 1 else ''}, "
+            f"down to {' x '.join(map(str, levels[-1][0]))}"
         )
+        if math.prod(levels[-1][0]) > 64:
+            print(
+                "  note: the coarsest level is large, which slows every solve; voxel counts "
+                "divisible by 2 several times (such as 32, 48 or 64) are faster"
+            )
     scales = time_scales(config)
     if scales["ratio"] is not None:
         print(
             f"time scales diffusion across the box {scales['diffusion_h'] * 3600:.3g} s, "
-            f"fastest growth {scales['growth_h']:.3g} h (ratio {scales['ratio']:.2g})"
+            f"fastest process {scales['growth_h']:.3g} h (ratio {scales['ratio']:.2g})"
         )
+
+
+def _report_mouth(config: ReactiveTransportConfig) -> None:
+    from marse.oral import OralFluid, renewal_per_h
+
+    domain = config.domain
+    film, mouth = domain.film, domain.mouth
+    assert film is not None
+    assert mouth is not None
+    fluid = OralFluid(mouth, film, config.network.component_names)
+    rate = renewal_per_h(domain.grid, film)
+    layers = round(film.thickness_um / domain.grid.voxel_um)
+    mean = float(rate[..., -layers:].mean())
+    print(
+        f"  film        {film.thickness_um:g} um moving at {film.velocity_mm_per_min:g} mm per "
+        f"minute over {film.plaque_length_mm:g} mm of plaque: renewed every "
+        f"{60.0 / mean:.3g} min on average, {60.0 / rate.max():.3g} min at its surface"
+    )
+    cycle = (fluid.full_m3 - fluid.resting_m3) / fluid.unstimulated_m3_per_s / 60.0
+    stimulus = (
+        f"; up to {mouth.stimulated_flow_ml_per_min:g} more with {mouth.stimulus}"
+        if (mouth.stimulus)
+        else ""
+    )
+    print(
+        f"  mouth       {mouth.resting_volume_ml:g} to {mouth.swallow_volume_ml:g} mL at "
+        f"{mouth.unstimulated_flow_ml_per_min:g} mL per minute{stimulus}; at rest a swallow "
+        f"every {cycle:.3g} min"
+    )
+    print(
+        f"  plaque      {mouth.plaque_area_cm2:g} cm2 under {fluid.film_m3 * 1e6:.3g} mL of film; "
+        f"the pool holds {fluid.thickness_um(fluid.resting_m3):.4g} um over it at rest"
+    )
+    saliva = ", ".join(f"{n} {v:g}" for n, v in mouth.saliva_mol_per_m3.items() if v)
+    print(f"  saliva, mol per m3: {saliva or 'nothing'}")
+    for intake in domain.diet:
+        if intake.kind == "food":
+            released = intake.released_mmol or {}
+            what = ", ".join(f"{n} {v:g}" for n, v in released.items() if v)
+            brings = f"releases {what or 'nothing'} mmol"
+        else:
+            held = intake.composition_mol_per_m3 or {}
+            what = ", ".join(f"{n} {v:g}" for n, v in held.items() if v)
+            brings = f"{intake.volume_ml:g} mL holding {what or 'nothing'} mol per m3"
+        print(
+            f"  {intake.kind:<11} at {_clock(intake.start_h)} for {intake.duration_min:g} min: "
+            f"{brings}; mixes the film at {intake.mixing_per_s:g} per s"
+        )
+        if intake.retained is not None:
+            print(
+                f"              leaves {intake.retained.amount_mol_per_m2:g} mol per m2 of "
+                f"{intake.retained.component} on the teeth"
+            )
+
+
+def _clock(hours: float) -> str:
+    """A time in the run, in hours and minutes to a tenth of a minute."""
+    whole, minutes = divmod(round(hours * 60.0, 1), 60.0)
+    if not whole:
+        return f"{minutes:g} min"
+    return f"{whole:g} h {minutes:g} min" if minutes else f"{whole:g} h"
 
 
 def _report_surface(config: ReactiveTransportConfig) -> None:
@@ -576,6 +732,30 @@ def _report_surface(config: ReactiveTransportConfig) -> None:
             )
 
 
+def _report_ph(config: RunConfig) -> None:
+    """The pH each composition a run starts from implies, from its charge balance."""
+    network = config.network
+    names = network.component_names
+    balance = ChargeBalance.of(network)
+    if isinstance(config, ReactiveTransportConfig):
+        state = config.domain.initial_state(names, config.initial_mol_per_m3, config.seed)
+        ph = balance.ph(state)
+        mouth = config.domain.mouth
+        if mouth is None:
+            liquid = f"{float(balance.ph(config.domain.bulk(names))):.2f} in the bulk liquid"
+        else:
+            saliva = np.array([mouth.saliva_mol_per_m3.get(n, 0.0) for n in names])
+            pool = np.array([mouth.initial_mol_per_m3.get(n, 0.0) for n in names])
+            liquid = (
+                f"{float(balance.ph(saliva)):.2f} in the saliva secreted; "
+                f"{float(balance.ph(pool)):.2f} in the mouth at the start"
+            )
+        print(f"pH          {liquid}; {ph.min():.2f} to {ph.max():.2f} in the box at the start")
+    else:
+        initial = np.array([config.initial_mol_per_m3[n] for n in names])
+        print(f"\npH          {float(balance.ph(initial)):.2f} at the start")
+
+
 def _command_check(args: argparse.Namespace) -> int:
     path = Path(args.network)
     try:
@@ -593,6 +773,8 @@ def _command_check(args: argparse.Namespace) -> int:
         else:
             if isinstance(config, ReactiveTransportConfig):
                 _report_domain(config)
+            if config.network.has_ph:
+                _report_ph(config)
             print(
                 f"\nrunnable    {config.duration_h:g} h in steps of at most "
                 f"{config.timestep_h:g} h: marse run {args.network}"

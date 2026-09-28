@@ -37,14 +37,19 @@ src/marse/
   core/            simulation.py (run loop, clocks, checkpoints), state.py, config.py, provenance.py,
                    integrators.py, ledger.py, well_mixed.py (the version 2 network engine),
                    framestore.py (frames streamed to disk, for every engine), implicit.py and
-                   reactive_transport.py (the version 2 engine in space)
+                   reactive_transport.py (the version 2 engine in space), reservoir.py (a
+                   well-mixed pool, such as the mouth, solved with the box)
   schemas/         configuration schema v2: formula.py, network.py (reaction networks), experiment.py,
                    domain.py (space)
   spatial/         grid.py (voxels in 1, 2 or 3 dimensions over a surface), transport.py
                    (finite-volume diffusion), multigrid.py (the implicit solver), colloids.py
                    (how cells in the liquid reach a surface), surface.py (the materials of the
-                   substratum), vtk.py (ParaView output); domain.py and diffusion.py (the 1-D
-                   steady solver)
+                   substratum), column.py (the direct solve of a column), vtk.py (ParaView
+                   output); domain.py and diffusion.py (the 1-D steady solver)
+  oral/            mouth.py (saliva secreted and swallowed), film.py (the salivary film's
+                   renewal), diet.py (rinses, drinks and foods, and food left on the teeth),
+                   stephan.py (the measures of a Stephan curve)
+  chemistry/       acid_base.py (pH from electroneutrality over acid-base totals and ions)
   microbes/        growth.py, resource_use.py, adhesion.py, phenotype.py, interactions.py
   biofilm/         biomass.py, matrix.py, maturation.py
   ecosystem/       the 2-D multispecies engine (model.py, providers.py, framestore.py, viewer.py)
@@ -60,8 +65,10 @@ Implemented so far (the rest of the layout above is planned):
 
 | Package | Modules |
 |---|---|
-| `core/` | `config`, `state`, `seeds`, `provenance`, `simulation`, `integrators`, `ledger`, `well_mixed`, `framestore`, `implicit`, `reactive_transport` |
-| `spatial/` | `grid`, `transport`, `multigrid`, `colloids`, `surface`, `vtk`, `domain`, `diffusion`, `solutes` |
+| `core/` | `config`, `state`, `seeds`, `provenance`, `simulation`, `integrators`, `ledger`, `well_mixed`, `framestore`, `implicit`, `reactive_transport`, `reservoir` |
+| `spatial/` | `grid`, `transport`, `multigrid`, `column`, `colloids`, `surface`, `vtk`, `domain`, `diffusion`, `solutes` |
+| `oral/` | `mouth`, `film`, `diet`, `stephan` |
+| `chemistry/` | `acid_base` |
 | `microbes/` | `growth`, `cardinal`, `kinetics`, `adhesion`, `niche`, `genotype`, `additives` |
 | `schemas/` | `formula`, `network`, `experiment`, `domain`: configuration schema v2 (reaction networks checked for continuity, with rates, run settings and space) |
 | `biofilm/` | `biomass` |

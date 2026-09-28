@@ -18,6 +18,9 @@ Boundaries (docs/networks.md, "Running a network in space"):
 - **the substratum** (below the first voxel in height) is impermeable;
 - **the top face** is held at the bulk-liquid concentrations. The voxel centre
   lies half a voxel below it, so the flux there is ``-D (bulk - c) / (h / 2)``.
+  Under a salivary film, whose surface is open to the air, the top face is
+  closed instead (``closed_top``), and the film exchanges with the mouth
+  through its voxels (:mod:`marse.core.reservoir`).
 
 Components whose diffusivity is zero (biomass) do not move.
 
@@ -49,6 +52,8 @@ def face_fluxes(
     diffusivity: NDArray[np.float64],
     spacing: tuple[float, ...],
     bulk: NDArray[np.float64] | None,
+    *,
+    closed_top: bool = False,
 ) -> tuple[NDArray[np.float64], ...]:
     """Flux through the upper face of every voxel along each axis.
 
@@ -56,7 +61,8 @@ def face_fluxes(
     direction of increasing index. On the height axis the last entry is the
     flux through the top face into the bulk liquid; ``bulk=None`` holds the
     bulk at zero, which is what the correction equations of Newton's method
-    need. The substratum face carries nothing and is not stored.
+    need, and ``closed_top`` makes it zero. The substratum face carries
+    nothing and is not stored.
     """
     dims = c.ndim - 1
     d = _per_component(diffusivity, dims)
@@ -66,9 +72,12 @@ def face_fluxes(
     h = spacing[-1]
     height = np.empty_like(c)
     height[..., :-1] = -d * (c[..., 1:] - c[..., :-1]) / h
-    top = c[..., -1]
-    outside = 0.0 if bulk is None else _per_component(bulk, dims - 1)
-    height[..., -1] = -_per_component(diffusivity, dims - 1) * (outside - top) / (0.5 * h)
+    if closed_top:
+        height[..., -1] = 0.0
+    else:
+        top = c[..., -1]
+        outside = 0.0 if bulk is None else _per_component(bulk, dims - 1)
+        height[..., -1] = -_per_component(diffusivity, dims - 1) * (outside - top) / (0.5 * h)
     fluxes.append(height)
     return tuple(fluxes)
 
@@ -89,7 +98,11 @@ def divergence(
 
 
 def diagonal(
-    diffusivity: NDArray[np.float64], spacing: tuple[float, ...], shape: tuple[int, ...]
+    diffusivity: NDArray[np.float64],
+    spacing: tuple[float, ...],
+    shape: tuple[int, ...],
+    *,
+    closed_top: bool = False,
 ) -> NDArray[np.float64]:
     """How each voxel's own rate depends on its own concentration: the diagonal of the operator."""
     dims = len(shape)
@@ -102,7 +115,7 @@ def diagonal(
     faces_below = np.ones(shape[-1])
     faces_below[0] = 0.0  # the substratum
     faces_above = np.ones(shape[-1])
-    faces_above[-1] = 2.0  # the top face, half a voxel away
+    faces_above[-1] = 0.0 if closed_top else 2.0  # the top face, half a voxel away
     diag -= d * (faces_below + faces_above) / h2
     return diag
 
@@ -113,12 +126,14 @@ class Diffusion:
 
     ``diffusivity_um2_per_h`` and ``bulk_mol_per_m3`` hold one value per
     component. Amounts are concentration times volume, mol/m3 x um3, which is
-    attomoles (1e-18 mol).
+    attomoles (1e-18 mol). With ``closed_top`` nothing crosses the top face,
+    and the bulk is not used.
     """
 
     grid: Grid
     diffusivity_um2_per_h: NDArray[np.float64]
     bulk_mol_per_m3: NDArray[np.float64]
+    closed_top: bool = False
     spacing: tuple[float, ...] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -150,6 +165,7 @@ class Diffusion:
             self.diffusivity_um2_per_h,
             self.spacing,
             None if homogeneous else self.bulk_mol_per_m3,
+            closed_top=self.closed_top,
         )
 
     def rate(self, c: NDArray[np.float64], *, homogeneous: bool = False) -> NDArray[np.float64]:
@@ -157,7 +173,9 @@ class Diffusion:
         return divergence(self.fluxes(c, homogeneous=homogeneous), self.spacing)
 
     def diagonal(self) -> NDArray[np.float64]:
-        return diagonal(self.diffusivity_um2_per_h, self.spacing, self.grid.shape)
+        return diagonal(
+            self.diffusivity_um2_per_h, self.spacing, self.grid.shape, closed_top=self.closed_top
+        )
 
     def top_flux(self, c: NDArray[np.float64]) -> NDArray[np.float64]:
         """Flux into the box through each top face, shape (components, *lateral), mol/m3 x um/h."""

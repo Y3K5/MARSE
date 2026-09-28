@@ -29,9 +29,15 @@ from marse.core.config import ConfigError
 UNIT_SUFFIXES = {
     "_mol_per_mol": "mol of one component per mol of another",
     "_mol_per_m3": "mol per cubic metre, which is mmol per litre",
+    "_mol_per_m2": "mol per square metre of surface",
+    "_mmol": "millimoles",
     "_m2_per_s": "square metres per second, as diffusivities are tabulated",
     "_fmol_per_cell": "femtomoles per cell",
+    "_ml_per_min": "millilitres per minute",
+    "_mm_per_min": "millimetres per minute",
     "_per_ml": "per millilitre",
+    "_ml": "millilitres",
+    "_cm2": "square centimetres",
     "_per_h": "per hour",
     "_per_s": "per second",
     "_mpa_s": "millipascal seconds, which is centipoise",
@@ -39,6 +45,7 @@ UNIT_SUFFIXES = {
     "_um": "micrometres",
     "_mm": "millimetres",
     "_h": "hours",
+    "_min": "minutes",
     "_c": "degrees Celsius",
 }
 """Every numeric field name ends in one of these suffixes, which names its unit.
@@ -55,6 +62,11 @@ DIMENSIONLESS = {
     "voxels": "how many voxels along each axis, a count",
     "count": "how many colonies, a count",
     "efficiency": "a fraction: of the cells delivered to a surface, the share that binds",
+    "pkw": "water's ion product, -log10 of Kw in (mol/L)^2: a logarithm",
+    "pka": "acid dissociation constants, each -log10 of Ka in mol/L: logarithms",
+    "ph_min": "a pH, -log10 of the hydrogen ion concentration in mol/L",
+    "ph_optimum": "a pH, -log10 of the hydrogen ion concentration in mol/L",
+    "ph_max": "a pH, -log10 of the hydrogen ion concentration in mol/L",
 }
 """Numeric fields that are labels or pure numbers, so they carry no unit suffix."""
 
@@ -67,11 +79,14 @@ Kind = Literal[
     "integers",
     "number",
     "numbers",
+    "number_or_numbers",
     "vector",
     "object",
     "objects",
 ]
-NUMERIC_KINDS = frozenset({"integer", "integers", "number", "numbers", "vector"})
+NUMERIC_KINDS = frozenset(
+    {"integer", "integers", "number", "numbers", "number_or_numbers", "vector"}
+)
 
 _NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}")
 
@@ -83,9 +98,10 @@ class Field:
     ``text`` is any string, ``name`` an identifier, ``names`` a list of
     distinct identifiers, ``choice`` one of ``choices``, ``integer`` a whole
     number, ``integers`` a list of whole numbers, ``number`` an exact decimal,
-    ``numbers`` an object from names to exact decimals, ``vector`` a list of
-    exact decimals, ``object`` an object read by the caller, and ``objects`` a
-    list of objects read by the caller.
+    ``numbers`` an object from names to exact decimals, ``number_or_numbers``
+    either of those two, ``vector`` a list of exact decimals, ``object`` an
+    object read by the caller, and ``objects`` a list of objects read by the
+    caller.
     """
 
     kind: Kind
@@ -184,6 +200,10 @@ def _convert(value: Any, where: str, field: Field) -> Any:
             if not isinstance(value, dict):
                 raise ConfigError(f"{where}: expected an object of numbers, got {_describe(value)}")
             return {name(k, f"{where} key"): exact(v, f"{where}.{k}") for k, v in value.items()}
+        case "number_or_numbers":
+            if isinstance(value, dict):
+                return {name(k, f"{where} key"): exact(v, f"{where}.{k}") for k, v in value.items()}
+            return exact(value, where)
         case "object":
             if not isinstance(value, dict):
                 raise ConfigError(f"{where}: expected an object, got {_describe(value)}")

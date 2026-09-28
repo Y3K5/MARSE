@@ -61,9 +61,10 @@ face transfers. The limiter scales them like any other, and the ledger counts
 them as imports. Locking turns reversibly bound cells into biomass, as an extra
 row of the stoichiometric matrix acting in the bottom layer.
 
-The linear systems are solved by :mod:`marse.spatial.multigrid`. One matrix,
-with the Jacobian at the start of the step, serves both stages, and it is
-rebuilt only when Newton converges slowly.
+The linear systems are solved by :mod:`marse.spatial.multigrid`, or, in a
+column, directly by :mod:`marse.spatial.column`. One matrix, with the
+Jacobian at the start of the step, serves both stages, and it is rebuilt only
+when Newton converges slowly.
 """
 
 from __future__ import annotations
@@ -76,6 +77,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from marse.microbes.adhesion import SurfaceExchange
+from marse.spatial.column import ColumnSystem
 from marse.spatial.multigrid import ImplicitSystem
 from marse.spatial.transport import Diffusion, divergence
 
@@ -90,6 +92,18 @@ _LINEAR_TOLERANCE = 1e-4
 
 type Field = NDArray[np.float64]
 type Transfers = tuple[Field, ...]
+type Tolerance = float | NDArray[np.float64]
+
+
+def _tolerance(absolute: Tolerance, dims: int) -> Tolerance:
+    """An absolute tolerance per component shaped to broadcast against a field.
+
+    One number stays that number, so a run with a single tolerance computes
+    exactly what it computed before tolerances could be given per component.
+    """
+    if np.ndim(absolute) == 0:
+        return absolute
+    return np.asarray(absolute, dtype=float).reshape((-1,) + (1,) * dims)
 
 
 def _magnitude(*fields: Field) -> Field:
@@ -160,6 +174,7 @@ class ReactionTransport:
         self.jacobian = jacobian
         self.shape = diffusion.grid.shape
         self.spacing = diffusion.spacing
+        self._now = 0.0  # the start of the current step, h
 
     # -- the right-hand side --------------------------------------------------------------
 
@@ -176,12 +191,19 @@ class ReactionTransport:
         rate[..., 0] += substratum / self.spacing[-1]
         return _Stage(rate, fluxes, reactions, substratum)
 
-    def _system(self, c: Field, a: float) -> ImplicitSystem:
+    def _system(self, c: Field, a: float) -> ImplicitSystem | ColumnSystem:
         blocks = np.einsum("pj,pk...->jk...", self.stoichiometry, self.jacobian(c))
         if self.surface is not None:
             blocks[..., 0] += self.surface.exchange_jacobian(c)
-        return ImplicitSystem(
-            self.shape, self.spacing, self.diffusion.diffusivity_um2_per_h, a, blocks
+        # A column is solved directly; a box by multigrid (docs/theory.md, section 9.7).
+        solver = ColumnSystem if len(self.shape) == 1 else ImplicitSystem
+        return solver(
+            self.shape,
+            self.spacing,
+            self.diffusion.diffusivity_um2_per_h,
+            a,
+            blocks,
+            closed_top=self.diffusion.closed_top,
         )
 
     # -- one stage: Y = base + a f(Y) ----------------------------------------------------
@@ -191,11 +213,11 @@ class ReactionTransport:
         base: Field,
         a: float,
         guess: Field,
-        system: ImplicitSystem,
+        system: ImplicitSystem | ColumnSystem,
         reference: Field,
-        atol: float,
+        atol: Tolerance,
         rtol: float,
-    ) -> tuple[Field, ImplicitSystem, int]:
+    ) -> tuple[Field, ImplicitSystem | ColumnSystem, int]:
         y = guess.copy()
         previous = math.inf
         for iteration in range(1, _NEWTON_ITERATIONS + 1):
@@ -319,15 +341,15 @@ class ReactionTransport:
     # -- one step and an adaptive span ----------------------------------------------------
 
     def step(
-        self, y: Field, h: float, reference: Field, atol: float, rtol: float
+        self, y: Field, h: float, reference: Field, atol: Tolerance, rtol: float
     ) -> tuple[Field, NDArray[np.float64], Field, int, int]:
         """One SDIRK2 step: new state, imports, error estimate, limiter rounds, Newton steps."""
         # Traces far below any tolerance may underflow to zero; that loses nothing.
         with np.errstate(under="ignore"):
-            return self._step(y, h, reference, atol, rtol)
+            return self._step(y, h, reference, _tolerance(atol, y.ndim - 1), rtol)
 
     def _step(
-        self, y: Field, h: float, reference: Field, atol: float, rtol: float
+        self, y: Field, h: float, reference: Field, atol: Tolerance, rtol: float
     ) -> tuple[Field, NDArray[np.float64], Field, int, int]:
         g = GAMMA
         reference = _magnitude(reference)
@@ -355,7 +377,7 @@ class ReactionTransport:
             imports = imports + substratum.reshape(top.shape[0], -1).sum(axis=1) / self.spacing[-1]
         return new, imports, estimate, rounds, n1 + n2
 
-    def starting_step(self, y: Field, reference: Field, atol: float, rtol: float) -> float:
+    def starting_step(self, y: Field, reference: Field, atol: Tolerance, rtol: float) -> float:
         """A first step from the rates and their change over a trial Euler step.
 
         The algorithm of Hairer, Norsett and Wanner (1993, section II.4) for a
@@ -364,9 +386,9 @@ class ReactionTransport:
         change in the rates, a hundredth of the tolerance.
         """
         with np.errstate(under="ignore"):
-            return self._starting_step(y, reference, atol, rtol)
+            return self._starting_step(y, reference, _tolerance(atol, y.ndim - 1), rtol)
 
-    def _starting_step(self, y: Field, reference: Field, atol: float, rtol: float) -> float:
+    def _starting_step(self, y: Field, reference: Field, atol: Tolerance, rtol: float) -> float:
         scale = atol + rtol * np.maximum(_magnitude(reference), _magnitude(y))
         rate = self.evaluate(y).rate
         size = float(np.max(np.abs(y) / scale))
@@ -384,16 +406,22 @@ class ReactionTransport:
         span: float,
         *,
         relative_tolerance: float,
-        absolute_tolerance: float,
+        absolute_tolerance: Tolerance,
         first_step: float | None = None,
         peak: Field | None = None,
+        start_h: float = 0.0,
     ) -> tuple[Field, NDArray[np.float64], StepStats]:
         """Advance ``y`` by ``span`` in adaptive steps; imports are summed over the span.
 
         Without ``first_step``, the first step comes from :meth:`starting_step`.
         Imports are in the units the ledger sums: concentration summed over
-        voxels, per component.
+        voxels, per component. ``absolute_tolerance`` is one number, or one per
+        component. ``start_h`` is the time the span starts at, for a subclass
+        whose rates depend on time (:mod:`marse.core.reservoir`); each step
+        sees its own start as ``self._now``.
         """
+        self._now = start_h
+        absolute_tolerance = _tolerance(absolute_tolerance, y.ndim - 1)
         reference = _magnitude(y if peak is None else peak)
         if first_step is None:
             first_step = self.starting_step(y, reference, absolute_tolerance, relative_tolerance)
@@ -405,6 +433,7 @@ class ReactionTransport:
         while span - elapsed > 1e-12 * span:
             step = min(h, span - elapsed)
             clipped = step < h
+            self._now = start_h + elapsed
             try:
                 new, entered, estimate, rounds, iterations = self.step(
                     y, step, reference, absolute_tolerance, relative_tolerance

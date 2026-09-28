@@ -9,6 +9,12 @@ results for the same manifest is always called out.
 
 ### Changed
 
+- **Columns are solved directly.** A one-dimensional run's linear systems are
+  now solved exactly, by block-tridiagonal elimination, instead of by
+  multigrid. The 1-D example runs three times faster, in the same 348 steps.
+  **Results changed**, in their last digits only: the example's totals agree
+  with before to about 1e-14. Boxes in two and three dimensions are
+  unchanged, bit for bit.
 - **The package follows its documented layout.** Modules that had been added
   at the package root now live in subpackages:
   - `niche`, `genotype` and `additives` are in `marse.microbes`;
@@ -280,6 +286,157 @@ results for the same manifest is always called out.
   - **Parameters,** graded in docs/parameters.md §7. The one contrast between
     materials that data support, titanium against zirconia, is a calibration.
     Every binding rate is illustrative.
+
+- **pH, and the elements of saliva: Stage S, increment S1, part one**
+  (`marse.chemistry`, [docs/networks.md](docs/networks.md#acids-bases-and-ph)).
+  A network can now set a pH in every voxel, and rates can depend on it. The
+  equations are in docs/theory.md §3.8.
+  - **Acids and bases.** A component with `acid_base: {"pka": [...]}` is an
+    acid-base total, such as lactic acid and lactate together, written in its
+    most protonated form. Protons are never components. The hydrogen ion
+    concentration in each voxel is the unique root of the charge balance over
+    the totals and the ions of fixed charge, found by a bracketed Newton
+    method in log h. `pkw` sets water's ion product.
+  - **pH in rates.** A `ph` factor is the cardinal pH model of Rosso et al.
+    (1995) at the local pH. Its Jacobian runs through every charged component,
+    with dh/dc from the implicit function theorem.
+  - **Four more elements.** Formulas may hold P, K, Cl and Na. Each is
+    balanced in every network that contains it, and the degree of reduction
+    counts them at their valence in phosphate and the salt ions, so those hold
+    no electrons.
+  - **An absolute tolerance per component.** `absolute_tolerance_mol_per_m3`
+    may be an object by component; the rest keep the default.
+  - **Outputs.** A run whose network sets a pH records it: a `ph` column in
+    `trajectory.csv`, `ph.csv` in space (the substratum and the box), a pH
+    field in every ParaView frame, and a summary in the manifest. `marse
+    check` prints the pKa values and the pH each starting composition implies.
+  - **Verified:**
+    - the hydrogen ion concentration against bisection of the charge balance
+      (2.4e-12 relative);
+    - every voxel left neutral to 1e-12 of the charges present;
+    - dh/dc and the rate Jacobian against finite differences;
+    - a weak acid and its salt giving back the pH they were made at.
+
+    A network without acids, bases or the new elements runs exactly as
+    before: the examples' final digests are unchanged. See docs/validation.md,
+    "pH from electroneutrality".
+
+- **The mouth over a site of plaque: Stage S, increment S1, part two**
+  (`marse.oral`, `marse.core.reservoir`, [docs/networks.md](docs/networks.md#a-salivary-film-and-the-mouth)).
+  A domain in space can now stand under a salivary film, renewed from the
+  mouth, instead of under a fixed bulk liquid. The equations are in
+  docs/theory.md §4.8 and §9.9.
+  - **The film** is the top of the box, closed to the air. Saliva replaces
+    each of its voxels at u(z) / l: the film's speed at that height over the
+    length of plaque it has crossed (Dawes 1989), with the free-surface
+    profile whose shear increment E1 uses.
+  - **The mouth** follows Dawes's (1983) model of sugar clearance. Its volume
+    grows from the resting volume at a salivary flow that tasting sugar
+    raises, and a swallow takes it back without changing its concentrations.
+    Secreted saliva moves from resting towards stimulated saliva as the flow
+    rises.
+  - **Solved together.** The mouth's composition is part of the implicit
+    system: its unknowns border the box's, and each linear system is solved
+    by a Schur complement on the pool. The S1 prototype showed why. A mouth
+    solved apart and corrected after each span conserved to rounding, but its
+    answer changed by 0.03 pH with the length of the span.
+  - **Two ledgers.** The box's books what crossed into the film. The second
+    checks the box and the mouth together, against what was secreted and
+    swallowed.
+  - **Outputs.** `mouth.csv` gives the mouth's volume, flow, swallows,
+    composition and pH at every recorded time. The manifest adds both balances
+    and the model's version. `marse check` describes the film and the mouth.
+  - **Verified:**
+    - the mouth's clearance against Dawes's closed form (3.7e-11 over ten
+      swallows);
+    - the box and the mouth conserving everything over an hour (5.6e-16);
+    - the same pH, within 6.1e-5, whether the mouth runs a minute or 5 s
+      ahead of the box;
+    - the exchange of a film with its pool against its closed form;
+    - the bordered linear system against the Jacobian;
+    - replay.
+
+    See docs/validation.md, "The mouth and its film".
+
+- **What is eaten and drunk: Stage S, increment S1, part three**
+  (`marse.oral.diet`, [docs/networks.md](docs/networks.md#the-diet)). A
+  mouth can now take a diet: intakes listed in order, one at a time, each
+  from a start for a duration. The equations are in docs/theory.md §4.9.
+  - **A rinse** is taken in at once, held without swallowing, and expelled
+    down to the resting volume at its end. A Stephan curve is the plaque's
+    response to one.
+  - **A drink** is sipped steadily and swallowed as the mouth fills. **A
+    food** releases what it holds into the saliva steadily, without liquid,
+    as a sweet sucked slowly does. The mouth tastes what they bring, and its
+    flow rises.
+  - **Mixing.** While an intake lasts, the film is mixed with the mouth's
+    liquid (Dibdin 1990), once a second unless the intake says otherwise.
+  - **Food left on the teeth.** An intake may leave an amount of a
+    particulate component in the film when it ends, over a region of the
+    substratum. A process of the network releases what dissolves from it, as
+    starchy particles held on the teeth release sugars (Kashket, Zhang and
+    Van Houte 1996).
+  - **Booked.** The ledger of the box and the mouth counts what was eaten and
+    expelled; the box's own counts the food placed in it. The manifest records
+    the intakes taken, what was eaten and expelled, and the diet's model
+    version. `marse check` lists the diet.
+  - **The mouth expects the plaque to go on giving sugar back** at the rate it
+    just did, when it runs ahead of the box. After a rinse, the mouth's sugar
+    had changed by 1% with the length of the span; it now changes by 8e-4.
+    Runs under a mouth change accordingly.
+  - **Verified:**
+    - every intake booked as eaten within 5e-15 of what was stated, and the
+      box and the mouth conserving everything over an hour with a rinse, a
+      sipped drink and a sweet that sticks (1.2e-15);
+    - the same pH, within 8.6e-5 over an hour after a rinse, whether the
+      mouth runs a minute or 5 s ahead of the box;
+    - a rinse held and expelled, a drink setting the mouth's sugar, a sweet
+      releasing its sugar, and food placed only over its region;
+    - a diet that starts after the run changing nothing, bit for bit;
+    - replay.
+
+    See docs/validation.md, "The diet".
+
+- **The Stephan curve: Stage S, increment S1, part four**
+  (`examples/environments/oral`, `examples/stephan_curve.py`,
+  [docs/environments.md](docs/environments.md#the-oral-scenes)). Three oral
+  scenes give 150 µm of plaque under the mouth the same sugar in three ways:
+  a rinse of 10% sucrose held for a minute, 100 mL of it sipped over 20
+  minutes, and the rinse with food left on the teeth. Saliva's buffers are
+  those Bardow et al. (2000) measured, at rest and stimulated.
+  - **The rinse gives a Stephan curve**, meeting every criterion set before
+    the stage was built: the pH falls 1.9 units, to 4.87 at 16 minutes, and
+    is back above 6 at 43 minutes, with 15 mM more lactate in the plaque at
+    7 minutes. A two-hour curve runs in 13 s.
+  - **What keeps plaque acid for longer.** Sipping keeps the plaque below pH
+    5.5 for 52 minutes and food left on the teeth for 56, against 32 after
+    the rinse. Low salivary flow, a slower film, thicker plaque and more
+    fixed buffer each move the curve the ways the literature reports, and
+    each is a test.
+  - **Fixed charges release their counter-ions.** A plaque buffer holding its
+    cations fixed turned the whole salivary film above it to pH 3.3 after a
+    rinse, as the lactate leaving the plaque carried the acid's protons with
+    it. Two fast processes now keep the cations the groups hold equal to
+    their charge, so the acid stays on the buffer until the saliva's alkali
+    takes it off, and the film is never more acid than the plaque. A new
+    rate factor, `dissociated`, gives the protons an acid-base total has lost
+    at the local pH, with its Jacobian through dh/dc. The scenes give every
+    charged component one diffusivity, so that diffusion separates no charge.
+  - **Calibrated again.** With the acid held in the plaque, the prototype's
+    300 µm of plaque stayed acid for more than an hour. The plaque's
+    thickness, the film's speed, the buffer and the ionic diffusivity were
+    calibrated to the criteria, within their ranges, all confidence C
+    ([parameters.md §8](docs/parameters.md#8-saliva-plaque-and-diet)).
+  - **The pH solve can no longer cycle.** In one voxel of these scenes,
+    Newton's method stepped for ever between the two ends of its bracket. A
+    step must now halve the one before, or the bracket is bisected (Press et
+    al. 2007); 2,000 plaque-like voxels take 12 iterations instead of 19.
+  - `marse.oral.stephan` measures a curve: its minimum and when, the minutes
+    and the area below pH 5.5, and when it is back above 6. `marse check`
+    says that a column is solved directly, and calls its fastest time scale
+    a process rather than growth.
+
+    See docs/validation.md, "The Stephan curve".
 
 - **Ecosystem runs are reproducible.** `marse ecosystem` writes a
   `manifest.json` beside its frames and viewer, and `marse replay` reproduces

@@ -361,7 +361,14 @@ def test_the_run_replays_bit_for_bit_and_an_edit_is_refused(tmp_path):
 
 
 @pytest.mark.invariance
-def test_a_run_gives_the_same_result_on_any_number_of_threads():
+@pytest.mark.parametrize(
+    ("scene", "hours"),
+    [
+        ("networks/surface_biofilm_1d.json", "1.0"),
+        ("environments/oral/stephan_rinse.json", "0.05"),  # the rinse taken, held and spat out
+    ],
+)
+def test_a_run_gives_the_same_result_on_any_number_of_threads(scene, hours):
     # OpenBLAS factorises a matrix of more than about 100 unknowns in parallel, and
     # its last bits then depend on the thread count. The column's coarsest level has
     # 112, so before the coarse solve left LAPACK this run replayed only on a machine
@@ -371,16 +378,16 @@ def test_a_run_gives_the_same_result_on_any_number_of_threads():
         "from marse.core.reactive_transport import run\n"
         "from marse.schemas.experiment import experiment_from_dict\n"
         "raw = json.loads(open(sys.argv[1], encoding='utf-8').read())\n"
-        "raw['duration_h'] = 1.0\n"
+        "raw['duration_h'] = float(sys.argv[2])\n"
         "print(run(experiment_from_dict(raw)).manifest.outputs['final_state_sha256'])\n"
     )
-    column = ROOT / "examples" / "networks" / "surface_biofilm_1d.json"
+    column = ROOT / "examples" / scene
     digests = set()
     for threads in ("1", "4"):
         variables = ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS")
         env = dict(os.environ, **dict.fromkeys(variables, threads))
         result = subprocess.run(
-            [sys.executable, "-c", script, str(column)],
+            [sys.executable, "-c", script, str(column), hours],
             env=env,
             capture_output=True,
             text=True,

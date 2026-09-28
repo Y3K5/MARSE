@@ -88,13 +88,14 @@ key is an error, not a silently ignored typo.
 | `description` | text | no | What the network represents, and where its numbers come from. |
 | `components` | list of components | yes | At least one. |
 | `processes` | list of processes | yes | May be empty. |
+| `pkw` | number | no, default `14` | Water's ion product, −log₁₀ K<sub>w</sub>, for a network whose charges set a pH: 14.0 at 25 °C, 13.6 at 37 °C. Only with an `acid_base` component or a `ph` factor. |
 | `experiment_id` | text | to run | Names the run in its manifest. |
 | `initial_mol_per_m3` | object of numbers | no, default `0` each | The starting concentration of each component, in mol per m³ (mmol per litre). Components left out start at zero. |
 | `duration_h` | number | to run | How long to run. |
 | `timestep_h` | number | to run | The longest substep, and the unit of recording. Accuracy comes from the tolerances, not from this. |
 | `record_interval_h` | number | no, default `timestep_h` | How often the trajectory records a row, rounded to a whole number of timesteps. The final state is always recorded. |
 | `relative_tolerance` | number | no, default `1e-6`, or `1e-4` in space | The accepted local error, as a fraction of each component's largest value. In space that is its largest value anywhere in the box. |
-| `absolute_tolerance_mol_per_m3` | number | no, default `1e-9` | The accepted local error for traces (picomolar). |
+| `absolute_tolerance_mol_per_m3` | number, or object of numbers | no, default `1e-9` | The accepted local error for traces (picomolar). An object gives each component named its own, and the rest the default, so a component far below the others is held to its own scale. |
 | `seed` | integer | no, default `0` | Places `random_colonies`, and is recorded in the manifest. Nothing else draws random numbers. |
 | `domain` | domain | no | Runs the network in space instead of a closed box; see [Running a network in space](#running-a-network-in-space). |
 
@@ -106,14 +107,21 @@ key is an error, not a silently ignored typo.
 | `phase` | `dissolved` or `particulate` | yes | Dissolved components are carried by the liquid. Particulate ones, such as biomass, move only with the biofilm. |
 | `formula` | text | yes | The chemical formula of one unit of the component, such as `C6H12O6` or `CH1.8O0.5N0.2`. |
 | `charge` | number | no, default `0` | The charge of one formula unit, in elementary charges: `1` for ammonium, `-1` for lactate. |
+| `acid_base` | object | no | Makes the component an acid–base total, such as lactic acid and lactate together; see [Acids, bases and pH](#acids-bases-and-ph). |
 
 A component is counted in mol of its formula unit. Biomass written per carbon
 atom, as `CH1.8O0.5N0.2`, is therefore counted in C-mol. The formula rules:
 
-- **Elements** may be C, H, O and N, each followed by an optional count. A
-  count may be a decimal, for a lumped composition such as biomass. A symbol
-  may repeat (`CH3COOH`) and its counts are summed. Sulphur and phosphorus
-  arrive in Stage 3; parentheses are not supported.
+- **Elements** may be C, H, N and O, and P, K, Cl and Na, each followed by an
+  optional count. A count may be a decimal, for a lumped composition such as
+  biomass. A symbol may repeat (`CH3COOH`) and its counts are summed. Other
+  elements, such as sulphur and calcium, arrive when they are balanced;
+  parentheses are not supported.
+- **Every element present is balanced.** Carbon, nitrogen and electrons are
+  balanced in every network, and phosphorus, potassium, chlorine and sodium in
+  a network whose components contain them. The degree of reduction takes P at
+  +5, K and Na at +1 and Cl at −1, so phosphate and the salt ions hold no
+  electrons ([theory.md §3.6](theory.md#36-composition-continuity-and-the-degree-of-reduction)).
 - **The charge goes in its own field.** A formula whose counts are whole
   numbers must have an even number of electrons. An odd number almost always
   means an ion written without its charge: `NH4` without `"charge": 1` would
@@ -123,6 +131,58 @@ atom, as `CH1.8O0.5N0.2`, is therefore counted in C-mol. The formula rules:
 - **Water, protons and hydroxide are refused.** They hold no carbon, nitrogen
   or electrons, so no balance could constrain them; they are closed implicitly
   instead.
+
+### Acid base fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `pka` | list of numbers | yes | The acid's pKa values, rising strictly, one for each proton it gives up in turn, as conditional values for the liquid's temperature and ionic strength. |
+
+## Acids, bases and pH
+
+A network sets a pH when one of its components is an acid–base total or one
+of its rates has a `ph` factor. Protons are never components. In every voxel,
+the concentration of hydrogen ions is the one that makes the liquid
+electrically neutral (theory.md §3.8):
+
+$$
+[\mathrm{H^+}] - \frac{K_w}{[\mathrm{H^+}]}
++ \sum_{\text{totals}} T_k\,\bar z_k([\mathrm{H^+}])
++ \sum_{\text{ions}} z_s\,c_s = 0 .
+$$
+
+- **An acid–base total** holds every protonation state of one acid, such as
+  lactic acid and lactate. Its `formula` and `charge` are those of the most
+  protonated form: lactic acid `C3H6O3` with charge 0, carbonic acid `H2CO3`
+  for dissolved carbon dioxide, bicarbonate and carbonate together, `H3PO4`
+  for phosphate, `NH4` with charge 1 for ammonium. Its mean charge, z̄,
+  follows from its pKa values.
+- **Any other charged component** is an ion that keeps its charge at any pH,
+  such as K⁺ or Cl⁻.
+- **The liquid must be neutral as given.** A saliva of bicarbonate and
+  phosphate needs the potassium, sodium and chloride that balance their
+  charge at its pH; `marse check` prints the pH that each composition
+  implies.
+- **Fixed charges need their counter-ions, and must release them.** Groups on
+  bacteria or in the matrix are particulate totals, and the cations bound to
+  them are a particulate ion, such as bound potassium. As the groups take up
+  protons, the cations they held must be released into the liquid, or acid
+  leaving the groups' neighbourhood would take its protons with it. Two fast
+  processes do it: a binding process from the free to the bound cation, at
+  `maximum_per_h` × the groups × their `dissociated` factor, and a release
+  process back, proportional to the bound cation, both at the same fast rate
+  (theory.md §3.8; the oral scenes use 3600 per hour).
+- **Charged components should share one diffusivity.** They diffuse
+  independently, and ones that moved at different rates would separate charge,
+  which the pH would absorb as an artifact.
+- **What a run records.** A well-mixed run adds a `ph` column to
+  `trajectory.csv`. A run in space writes `ph.csv`, with the pH over the
+  substratum (its mean, minimum and maximum) and its range in the box at
+  every recorded time, and a `ph` field in every ParaView frame. Both put a
+  summary in the manifest.
+
+A `ph` factor in a rate (below) uses the pH of the voxel the rate is evaluated
+in.
 
 ### Growth process fields
 
@@ -188,10 +248,13 @@ formed. Each factor f is dimensionless. The equations are in
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `component` | component name | yes | The component the factor responds to. |
-| `form` | `monod`, `inhibition` or `haldane` | yes | `monod`: S/(K+S). `inhibition`: K_I/(K_I+S). `haldane`: S/(K+S+S²/K_I). |
+| `component` | component name | monod, inhibition, haldane, dissociated | The component the factor responds to. |
+| `form` | `monod`, `inhibition`, `haldane`, `ph` or `dissociated` | yes | `monod`: S/(K+S). `inhibition`: K_I/(K_I+S). `haldane`: S/(K+S+S²/K_I). `ph`: the cardinal pH model of Rosso et al. (1995), 1 at the optimum and 0 at the limits and beyond. `dissociated`: the protons each unit of the component, an acid–base total, has lost at the local pH, Ka/(Ka+[H⁺]) for one pKa. It does not limit the process by itself. |
 | `half_saturation_mol_per_m3` | number | monod, haldane | K, positive. |
 | `inhibition_mol_per_m3` | number | inhibition, haldane | K_I, positive. |
+| `ph_min` | number | ph | The lowest pH at which the process runs. |
+| `ph_optimum` | number | ph | The pH at which it runs fastest; between `ph_min` and `ph_max`. |
+| `ph_max` | number | ph | The highest pH at which it runs. |
 
 Two rules are checked when the file is read:
 
@@ -338,6 +401,9 @@ chemistry in a single column in three seconds.
 | `flow` | object | with `substratum` | The flow's shear at the substratum. |
 | `suspension` | list of suspended species | with `substratum` | The cells in the liquid that bind. |
 | `adhesion` | list of bindings | with `substratum` | How each species binds to each material. |
+| `film` | object | no | The top voxels are a salivary film, closed to the air and renewed from the mouth. [A salivary film and the mouth](#a-salivary-film-and-the-mouth): these two fields go together, and replace `bulk_mol_per_m3`. |
+| `mouth` | object | with `film` | The mouth's saliva: what is secreted, how much the mouth holds, and when it swallows. |
+| `diet` | list of intakes | no, with `mouth` | What is eaten and drunk: rinses, drinks and foods, each from a start for a duration. [The diet](#the-diet). |
 
 `initial_mol_per_m3` fills every voxel. Each colony then sets its component to
 its concentration in the voxels whose centres lie inside it. A colony that
@@ -450,12 +516,109 @@ material, species by species, and the area each material has covered.
 | `detachment_per_h` | number | yes | How fast reversibly bound cells detach, per hour. |
 | `locking_per_h` | number | yes | How fast they lock into the biomass, per hour. |
 
+### A salivary film and the mouth
+
+Plaque in the mouth lies under a film of saliva about 0.1 mm thick, which
+moves slowly over the teeth and is renewed from the saliva in the mouth. The
+mouth fills with saliva and empties by swallowing. With `film` and `mouth`,
+a run in space models exactly that
+([theory.md §4.8 and §9.9](theory.md#48-a-salivary-film-and-the-mouth)):
+
+- **The film** is the top `thickness_um` of the box. Its surface is open to the
+  air, so nothing crosses the top face. Saliva replaces each of its voxels at
+  the rate u(z) / l, where u is the film's speed at that height and l the
+  length of plaque the film has crossed to reach the site.
+- **The mouth** holds a pool of saliva between a resting volume and the volume
+  at which it swallows (Dawes 1983). The glands secrete saliva into it, faster
+  while it tastes the stimulus, and a swallow takes it back to the resting
+  volume without changing its concentrations. The film exchanges with this
+  pool, whose composition is solved together with the box.
+- **What the run records.** `mouth.csv` gives the pool's volume, the flow, the
+  swallows so far and the pool's concentration of every dissolved component,
+  and its pH, at every recorded time. The manifest adds what was secreted and
+  swallowed, and a second balance: the box and the mouth together, counting
+  both.
+
+### Film fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `thickness_um` | number | yes | How thick the film is: a whole number of voxels, less than the box. |
+| `velocity_mm_per_min` | number | yes | Its mean speed over the teeth; measured values are 0.8 to 7.6 mm per minute. |
+| `plaque_length_mm` | number | yes | How much plaque it crossed to reach this site. The film is renewed every `plaque_length_mm` / `velocity_mm_per_min` minutes on average. |
+
+### Mouth fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `saliva_mol_per_m3` | object of numbers | yes | What the glands secrete at rest. Dissolved components only; it must be neutral at its pH. |
+| `stimulated_saliva_mol_per_m3` | object of numbers | no | What they secrete at the highest stimulated flow; between the two flows, in proportion. |
+| `resting_volume_ml` | number | yes | How much the mouth holds after a swallow, films included. |
+| `swallow_volume_ml` | number | yes | How much it holds when it swallows. |
+| `unstimulated_flow_ml_per_min` | number | yes | The flow at rest. |
+| `stimulated_flow_ml_per_min` | number | no, default `0` | The most the stimulus can add to it. |
+| `stimulus` | component name | with a stimulated flow | The dissolved component whose taste raises the flow, such as sugar. |
+| `stimulus_half_mol_per_m3` | number | with `stimulus` | The concentration in the mouth that raises the flow by half the stimulated flow. |
+| `plaque_area_cm2` | number | yes | The plaque this box stands for, which exchanges with the mouth through its film. |
+| `initial_mol_per_m3` | object of numbers | no, default the saliva | What the mouth holds at the start. |
+
+### The diet
+
+A high-sugar eater differs from a low-sugar eater in more than the amount of
+sugar: sugar stays in the mouth for longer, sipped in drinks or sucked from
+sweets, and food left on the teeth keeps it concentrated where the plaque is
+(Kashket, Zhang and Van Houte 1996). `diet` lists the intakes, in order and one
+at a time, each from `start_h` for `duration_min`
+([theory.md §4.9](theory.md#49-the-diet)):
+
+- **A rinse** adds `volume_ml` at once. The mouth holds it without swallowing,
+  and at the end expels everything above its resting volume. Expelling, like
+  a swallow, changes no concentration. A Stephan curve is the plaque's
+  response to a rinse of 10 mL of 10% sucrose held for a minute.
+- **A drink** of `volume_ml` flows in steadily over the duration, as sips
+  would, and is swallowed as the mouth fills.
+- **A food** releases `released_mmol` into the saliva steadily over the
+  duration, as a sweet sucked slowly does. It brings no liquid.
+- **Mixing.** While an intake is in the mouth, the film is mixed with the
+  mouth's liquid at `mixing_per_s` in each of its voxels (Dibdin 1990), on top
+  of its own renewal. The taste of what it brings raises the flow.
+- **Food left on the teeth.** `retained` places an amount of a particulate
+  component in the film when the intake ends. A process of the network, such
+  as a first-order reaction to sugar, releases what dissolves from it.
+
+Spans of the run end at every start and end. The manifest records how many
+intakes were taken, what was eaten and what was expelled, and the second
+balance counts them with what was secreted and swallowed; the box's balance
+counts food placed in the film as entering the box.
+
+### Intake fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `kind` | `rinse`, `drink` or `food` | yes | How it enters the mouth: held and expelled, sipped and swallowed, or dissolved. |
+| `start_h` | number | yes | When it starts, in hours from the start of the run: no earlier than the previous intake ends. |
+| `duration_min` | number | yes | How long a rinse is held, a drink sipped or a food eaten. |
+| `volume_ml` | number | for a rinse or a drink | How much liquid it brings. A food brings none. |
+| `composition_mol_per_m3` | object of numbers | no, default water | What a rinse or a drink holds. Dissolved components only. |
+| `released_mmol` | object of numbers | for a food | What a food releases into the saliva over its duration, in the whole mouth. Dissolved components only. |
+| `mixing_per_s` | number | no, default `1` | How fast the film mixes with the mouth's liquid while the intake lasts, per second. `0` leaves the film's own renewal alone. |
+| `retained` | object | no | Food it leaves on the teeth when it ends. |
+
+### Retained fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `component` | component name | yes | A particulate component, such as the sugar held in food particles. A process of the network must consume it: what that process makes is what dissolves. |
+| `amount_mol_per_m2` | number | yes | How much, per m² of the substratum it covers, spread evenly through the film's depth. |
+| `region_um` | list of numbers | no, default the whole substratum | Where, with a patch's bounds: `[x0, x1]` in 2-D, `[x0, x1, y0, y1]` in 3-D, none in 1-D. |
+
 ## Balancing: `balanced_by`
 
 Each component in `balanced_by` gets the coefficient that makes the process
-balance. There are three balances (carbon, nitrogen and electrons), so at most
-three components can be determined, and they must be determined uniquely.
-MARSE refuses:
+balance. There is one balance for each conserved quantity (carbon, nitrogen and
+electrons, and each of phosphorus, potassium, chlorine and sodium that the
+network contains), so at most that many components can be determined, and they
+must be determined uniquely. MARSE refuses:
 
 - **a quantity nothing in `balanced_by` carries.** Growth on glucose balanced
   only by oxygen and carbon dioxide leaves the biomass's nitrogen with no

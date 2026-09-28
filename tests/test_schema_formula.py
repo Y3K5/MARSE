@@ -82,7 +82,7 @@ def test_chemical_oxygen_demand_reproduces_the_textbook_factors(formula, cod_g_p
         ("Ca(OH)2", "parentheses"),
         ("NH4+", "give the charge in the separate 'charge' field"),
         ("C0H4", "a count of zero"),
-        ("CH4S", "contains S; formulas may use only C, H, O and N"),
+        ("CH4S", "contains S; formulas may use only C, H, N, O, P, K, Cl and Na"),
         ("FeCl3", "contains Fe"),
     ],
 )
@@ -106,3 +106,43 @@ def test_a_charged_formula_is_labelled_with_its_charge():
     assert parse_formula("NH4", 1).label() == "NH4 (+1)"
     assert parse_formula("C4H4O4", -2).label() == "C4H4O4 (-2)"
     assert parse_formula("CO2").label() == "CO2"
+
+
+# --- phosphorus, potassium, chlorine and sodium ------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("formula", "charge"),
+    [
+        ("H3PO4", 0),  # phosphate is the reference state of phosphorus, at +5
+        ("H2PO4", -1),
+        ("HPO4", -2),
+        ("PO4", -3),
+        ("K", 1),
+        ("Na", 1),
+        ("Cl", -1),
+        ("KCl", 0),
+        ("NaCl", 0),
+    ],
+)
+def test_phosphate_and_the_salt_ions_hold_no_electrons(formula, charge):
+    assert parse_formula(formula, charge).electrons == 0
+
+
+def test_a_phosphorylated_sugar_holds_the_sugars_electrons():
+    assert parse_formula("C6H13O9P").electrons == parse_formula("C6H12O6").electrons == 24
+
+
+def test_the_new_elements_are_counted_and_weighed():
+    salt = parse_formula("KCl")
+    assert salt.count("K") == salt.count("Cl") == 1
+    assert salt.content("potassium") == salt.content("chlorine") == 1
+    assert salt.content("carbon") == 0
+    assert salt.molar_mass_g_per_mol == pytest.approx(74.548)
+    assert parse_formula("H3PO4").molar_mass_g_per_mol == pytest.approx(97.994, abs=1e-3)
+
+
+@pytest.mark.parametrize(("formula", "charge"), [("K", 0), ("Cl", 0), ("H2PO4", 0)])
+def test_an_ion_written_without_its_charge_is_refused(formula, charge):
+    with pytest.raises(ConfigError, match="odd number of electrons"):
+        parse_formula(formula, charge)
