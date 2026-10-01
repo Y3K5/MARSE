@@ -3,9 +3,9 @@
 import numpy as np
 
 from marse.ecosystem import AdditiveConfig, EcosystemConfig, NutrientConfig, SpeciesConfig, run
-from marse.genotype import GenotypeRule, map_genotype_to_capabilities
-from marse.immune import ImmuneInteraction
-from marse.niche import Capability
+from marse.experimental.host.immune import ImmuneInteraction
+from marse.microbes.genotype import GenotypeRule, map_genotype_to_capabilities
+from marse.microbes.niche import Capability
 
 
 def test_resistance_allele_changes_ecosystem_survival_under_effector_pressure():

@@ -56,6 +56,13 @@ in public CI logs.
 
    Add `--global` to use this identity for every repository.
 
+   Do this in **every clone you commit from**: a second computer, or an editor
+   whose AI assistant commits for you, uses that clone's own git settings. The
+   privacy guard accepts any GitHub noreply address, so a different account's
+   noreply address passes the check but still appears as that account's name
+   in the public history. Check before your first commit there with
+   `git config user.name` and `git config user.email`.
+
 3. **Install the hooks:**
 
    ```bash

@@ -1,7 +1,7 @@
 import pytest
 
-from marse.genotype import GenotypeError, GenotypeRule, map_genotype_to_capabilities
-from marse.niche import Capability
+from marse.microbes.genotype import GenotypeError, GenotypeRule, map_genotype_to_capabilities
+from marse.microbes.niche import Capability
 
 
 def test_declared_allele_modifies_only_matching_capability():

@@ -1,0 +1,28 @@
+name: Nightly
+
+# The long parameter sweeps (tests marked `slow`) are deselected from the
+# pull-request suite by pyproject.toml so that CI stays fast. They still have to
+# run somewhere, on a schedule, against main: this is that place.
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  slow:
+    name: Slow sweeps (Python 3.14, ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - run: python -m pip install -e ".[test]"
+      - name: Run the slow sweeps
+        run: python -m pytest -m slow

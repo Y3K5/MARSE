@@ -14,6 +14,13 @@ over time, which is where the biomass-spreading choice of
 [modeling-landscape.md](modeling-landscape.md#2-the-biomass-spreading-decision)
 has to be made.
 
+Alongside that core, a two-dimensional multispecies engine (`marse.ecosystem`)
+now runs, with a browser viewer and a periodontal example study. It is not yet
+verified, and a review found defects in its mass balance, transport and
+reproducibility ([validation.md](validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified)).
+Fixing them comes before anything new; see
+[the order of work](#order-of-work-correctness-first).
+
 | Phase | Deliverable | Exit criterion |
 |---|---|---|
 | 0. Specification | Schemas, model assumptions, benchmark plan | Core objects and scientific scope settled enough to implement |
@@ -51,6 +58,37 @@ has to be made.
    reference.
 10. Experimental external policy adapters, compared against the deterministic
     policies on bounded decisions.
+
+## Order of work: correctness first
+
+The ecosystem engine grew faster than its verification. Until the defects in
+[validation.md](validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified)
+are fixed, **no new mechanism is added**: work is limited to fixes,
+verification and documentation. After that, a mechanism lands only with its
+equations in `theory.md`, units in its configuration field names, a
+conservation or invariance test, a verification or validation case that runs
+the simulator, graded parameters in `parameters.md`, and a `CHANGELOG` entry.
+
+| Stage | Work | Done when |
+|---|---|---|
+| 0. Stabilise ✓ | Honest docs and tests; each known defect written as an expected-failure test; long sweeps moved to a nightly run | Pull-request CI is fast and every defect has a test |
+| 1. Provenance and infrastructure | Ecosystem runs go through the core manifest and replay *(done)*; frames recorded on demand and streamed to disk instead of every frame held in memory *(done)*; the package layout (`ecosystem/`, `evidence/`, `analysis/`, `experimental/host/`). The configuration is redesigned in Stage 2, not here. | `marse replay` reproduces an ecosystem run exactly *(met)*; memory no longer grows with run length *(met)* |
+| 2. The material core | Conservation by construction, as in the IWA biofilm models. Components have a composition (C, N and electrons). Processes are rows of a stoichiometric (Gujer) matrix, and a continuity check refuses at load time any process that creates matter. One rate per process drives every component it touches. Reactions use an integrator that is conservative and positive by construction (Heun's method with per-process limiting). In space, reactions and conservative finite-volume diffusion at physical diffusivities are integrated together, implicitly, in one, two or three dimensions. Each species has an oxygen role, variants are heritable lineages, and space is shared. A ledger checks the balance every step. Configuration schema v2 replaces v1, which is removed, and the examples and periodontal study are rebuilt on it. Built in increments: (2a) the v2 reaction-network language, whose processes are checked for continuity when they load *(done: [networks.md](networks.md))*; (2b) a well-mixed engine with the per-step ledger *(done)*; (2c) reactions and transport in one, two or three dimensions over a surface, with the ledger counting what crosses the top *(done)*; (2d) biomass that spreads and shares space in 3-D, whose plan chooses between a continuum and individual cells, with oxygen roles and lineages; (2e) the examples and study rebuilt, v1 removed. | Every known-defect test passes; a closed box conserves C, N and electrons to 1e-12 *(met in 2b)* |
+| E. Environments and surfaces | Cells reach surfaces from the liquid and bind to them, in environments the project's owner chose. Built in increments: (E1) binding to flat surfaces: delivery by the flow, binding limited by the free area, reversible then locked binding, and growth of the locked cells, in a laboratory flow chamber and a dental scene of enamel, titanium, zirconia and acrylic *(done: [environments.md](environments.md))*; (E2) binding from surface physics, the extended DLVO theory, with natural waters by region and rock and mineral surfaces; (E3) soil as a full 3-D pore structure, with binding on every grain face and water flowing through the pores; (E4) geographic scenes, from measured regional compositions of soils and waters. E1 follows 2c; the order of E2–E4 against 2d and 2e is set as each is planned. | Each increment checked against closed forms, and conserving to 1e-12 *(met in E1)* |
+| S. Saliva, diet and caries | High- and low-sugar diets compared over months to years. The stage covers saliva flow, clearance and buffering, mucus and the pellicle, and the pH drops after sugar (the Stephan curve) that select acid-tolerant *S. mutans* and lactobacilli over the early colonizers, the ecological plaque hypothesis. It adds enamel demineralisation and remineralisation, salivary flow over a lifetime, and where each species lives and what it does there. Long runs step daily cycles at several rates in 1-D columns. Built in increments: (S1) pH from electroneutrality, a salivary film renewed from a mouth that secretes and swallows, solved with the plaque, and a diet of rinses, drinks, foods and food left on the teeth, calibrated to a Stephan curve *(done: [environments.md](environments.md#the-oral-scenes))*; (S2) the five-species core, whose pH selects among them; (S3) enamel dissolving and reforming as its saturation says; (S4) many sites, diets over years, and salivary flow by age. | S1: the criteria G1 to G7, set before it was built, all met *(met: [validation.md](validation.md#the-stephan-curve))* |
+| 3. Compartments and elements | Dead biomass, lysis and hydrolysis, extracellular matrix and inert pools; porosity and effective diffusivity from the matrix; detachment recorded as an export; named decay products; sulphur and phosphorus | Open-system benchmarks: the import at steady state matches the analytical surface flux |
+| 4. Verification | Transport in 1, 2 and 3 dimensions against `point_source_diffusion_2d` and `point_source_diffusion_3d`; the spatial solver reducing to V3; manufactured solutions; permutation invariance; the R\* rule through the simulator | Convergence at design order; cross-platform replay in CI |
+| 5. External validation | IWA BM1 (V9) and BM3 (V10); oxygen microprofiles | Published reference solutions reproduced |
+| 6. Flagship study | The periodontal biofilm rebuilt with graded parameters, named metabolite exchanges and a published in-vitro calibration target | A falsifiable, evidence-linked prediction |
+| 7. Scale | Year-long runs and large ensembles, streamed and resumable. The spatial solver made fast enough, without loosening any tolerance, for the target 2c missed: 24 h on 64 × 64 × 32 voxels in under an hour on one core, measured at 2 h 17 min ([validation.md](validation.md#performance)) | Annual runs on a laptop |
+| 8. Publication | JOSS paper on the verified software; a validation paper on Stages 5–6 | Submitted |
+
+The long-term plan below is sequenced after these stages, not beside them.
+
+**After v1.0: the host.** Immune, structural and functional host cells, and the
+signals between them, come after v1.0. They form the simplified host-cell and
+immune-state layer of the [specification](specification.md#scales), staged,
+clearly labelled, and outside the claims of v1.0.
 
 ## Long-term scientific platform plan
 

@@ -20,6 +20,7 @@ __all__ = [
     "minimum_substrate_concentration",
     "monod",
     "net_growth_rate",
+    "noncompetitive_inhibition",
     "product_formation_rate",
     "specific_growth_rate",
     "substrate_uptake_rate",
@@ -66,6 +67,19 @@ def haldane(
     require(np.all(mu_max >= 0), "mu_max must be non-negative")
     require(np.all(k_s > 0) and np.all(k_i > 0), "k_s and k_i must be positive")
     return unwrap(mu_max * s / (k_s + s + s**2 / k_i))
+
+
+def noncompetitive_inhibition(concentration: ArrayLike, k_i: ArrayLike) -> FloatOrArray:
+    """Non-competitive inhibition factor, K_i / (K_i + C).
+
+    1 without the inhibitor and 1/2 at C = K_i. Multiplying a rate by it is how
+    an anaerobe's growth is slowed by oxygen. Negative concentrations count as
+    zero.
+    """
+    c = np.maximum(as_array(concentration), 0.0)
+    k_i = as_array(k_i)
+    require(np.all(k_i > 0), "k_i must be positive")
+    return unwrap(k_i / (k_i + c))
 
 
 def net_growth_rate(

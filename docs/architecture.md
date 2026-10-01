@@ -34,20 +34,53 @@ flowchart LR
 
 ```text
 src/marse/
-  core/            simulation.py (run loop, clocks, checkpoints), state.py, config.py, provenance.py
-  schemas/         organism.py, environment.py, resource.py, interaction.py, phenotype.py, perturbation.py
-  spatial/         domain.py, grid.py, neighborhoods.py, diffusion.py
+  core/            simulation.py (run loop, clocks, checkpoints), state.py, config.py, provenance.py,
+                   integrators.py, ledger.py, well_mixed.py (the version 2 network engine),
+                   framestore.py (frames streamed to disk, for every engine), implicit.py and
+                   reactive_transport.py (the version 2 engine in space), reservoir.py (a
+                   well-mixed pool, such as the mouth, solved with the box)
+  schemas/         configuration schema v2: formula.py, network.py (reaction networks), experiment.py,
+                   domain.py (space)
+  spatial/         grid.py (voxels in 1, 2 or 3 dimensions over a surface), transport.py
+                   (finite-volume diffusion), multigrid.py (the implicit solver), colloids.py
+                   (how cells in the liquid reach a surface), surface.py (the materials of the
+                   substratum), column.py (the direct solve of a column), vtk.py (ParaView
+                   output); domain.py and diffusion.py (the 1-D steady solver)
+  oral/            mouth.py (saliva secreted and swallowed), film.py (the salivary film's
+                   renewal), diet.py (rinses, drinks and foods, and food left on the teeth),
+                   stephan.py (the measures of a Stephan curve)
+  chemistry/       acid_base.py (pH from electroneutrality over acid-base totals and ions)
   microbes/        growth.py, resource_use.py, adhesion.py, phenotype.py, interactions.py
   biofilm/         biomass.py, matrix.py, maturation.py
+  ecosystem/       the 2-D multispecies engine (model.py, providers.py, framestore.py, viewer.py)
   adaptation/      transitions.py, policies.py
   interventions/   perturbations.py
+  analysis/        calibration.py, uncertainty.py, ensemble.py
+  evidence/        science.py (culture evidence and the evidence-to-experiment compiler)
+  experimental/    host/: immune.py, actions.py, outside the v1.0 claims
   validation/      analytical/, regression/, literature_cases/
 ```
 
-Implemented so far: `core/config.py`, `core/state.py`, `core/seeds.py`,
-`core/provenance.py` and `core/simulation.py` (the Phase 1 kernel), plus
-`microbes/growth.py`, `microbes/cardinal.py`, `spatial/solutes.py` and
-`validation/analytical.py`. The remaining modules are added phase by phase.
+Implemented so far (the rest of the layout above is planned):
+
+| Package | Modules |
+|---|---|
+| `core/` | `config`, `state`, `seeds`, `provenance`, `simulation`, `integrators`, `ledger`, `well_mixed`, `framestore`, `implicit`, `reactive_transport`, `reservoir` |
+| `spatial/` | `grid`, `transport`, `multigrid`, `column`, `colloids`, `surface`, `vtk`, `domain`, `diffusion`, `solutes` |
+| `oral/` | `mouth`, `film`, `diet`, `stephan` |
+| `chemistry/` | `acid_base` |
+| `microbes/` | `growth`, `cardinal`, `kinetics`, `adhesion`, `niche`, `genotype`, `additives` |
+| `schemas/` | `formula`, `network`, `experiment`, `domain`: configuration schema v2 (reaction networks checked for continuity, with rates, run settings and space) |
+| `biofilm/` | `biomass` |
+| `ecosystem/` | `model`, `providers`, `framestore`, `viewer` (not yet verified: see validation.md) |
+| `analysis/` | `calibration`, `uncertainty`, `ensemble` |
+| `evidence/` | `science` |
+| `experimental/host/` | `immune`, `actions` |
+| `validation/` | `analytical`, `benchmarks` |
+
+`adaptation/` and `interventions/` exist but are still empty.
+Modules that used to sit at the package root (`marse.niche`,
+`marse.ensemble` and so on) keep a deprecated alias there for one release.
 
 ## Providers
 
@@ -72,9 +105,13 @@ class GrowthModel(Protocol):
 
 The spatial ecosystem now has a concrete first contract in
 `marse.ecosystem.providers`. `ExplicitTransportProvider` advances one
-non-negative field with the validated finite-difference operator and fixed
-boundaries; `EcosystemProviders` declares transport, biomass spreading,
-reaction, biomass, and diagnostics versions. Every ecosystem result records
+field with an explicit two-dimensional finite-difference operator and fixed
+boundaries. That operator is not yet verified: unlike the one-dimensional
+solver in `marse.spatial.diffusion`, it has not been checked against an
+analytical solution (see
+[validation.md](validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified)).
+`EcosystemProviders` declares transport, biomass spreading, reaction, biomass,
+and diagnostics versions. Every ecosystem result records
 these versions, and the default providers preserve the existing numerical
 behavior. Future reaction, mechanics, or stochastic providers must implement
 the same state-and-units boundary rather than modifying the orchestration loop.
@@ -127,6 +164,25 @@ the same run produces byte-identical output and manifests diff cleanly. The
 experiment always carries the same identifier and re-running is idempotent.
 Reading a manifest re-verifies the checksum, so one edited after the run is
 refused rather than replayed into different results.
+
+Each manifest names its `kind` (`batch`, `biofilm_profile` or `ecosystem`), and
+`marse replay` rebuilds the configuration with the parser for that kind. A
+manifest whose configuration does not match its declared kind is refused.
+`kind` arrived with manifest format version 2. Version 1 manifests, which
+predate the ecosystem engine, remain readable: their kind is recovered from the
+configuration. An ecosystem manifest also records a SHA-256 digest of the
+entire final state, so a replay compares every value, not only summary totals.
+
+Frames, the snapshots a run records along the way, are separate from the
+result. `run(config, frame_every=..., sink=...)` records every `frame_every`
+steps plus the last, or only the first and last when `frame_every` is `None`,
+and hands each frame to an optional sink as it is made. Recording only
+observes: every setting yields a bit-identical final state, and a test holds
+the engine to that. `marse.ecosystem.framestore` provides the standard sink:
+one preallocated `.npy` file per field, written in place through a memory map,
+with an `index.json` naming the fields, their shapes and types, and each
+frame's time and step. The store knows nothing about ecosystems, so a later
+engine reuses it with different fields.
 
 ### Privacy rules for manifests and outputs
 

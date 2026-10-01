@@ -1,0 +1,219 @@
+{
+  "schema_version": 2,
+  "description": "Colonies of an aerobic heterotroph and a lactic fermenter on a surface, under liquid that holds a quarter of air-saturated oxygen, as partly depleted saliva might. Oxygen and glucose diffuse down from the liquid; inside the larger colonies oxygen runs out, the fermenter turns glucose into lactate, and the lactate diffuses out to heterotrophs nearer the oxygen. The chemistry is that of glucose_cross_feeding.json. Rates, yields, half-saturation constants and the biomass density (2000 C-mol per m3) are illustrative (confidence C). Diffusivities are effective values inside a biofilm (docs/parameters.md), used everywhere until diffusivity depends on the biofilm. Biomass grows in place: colonies do not yet spread, so the run is kept short.",
+  "components": [
+    {
+      "name": "glucose",
+      "phase": "dissolved",
+      "formula": "C6H12O6"
+    },
+    {
+      "name": "oxygen",
+      "phase": "dissolved",
+      "formula": "O2"
+    },
+    {
+      "name": "ammonium",
+      "phase": "dissolved",
+      "formula": "NH4",
+      "charge": 1
+    },
+    {
+      "name": "carbon_dioxide",
+      "phase": "dissolved",
+      "formula": "CO2"
+    },
+    {
+      "name": "lactate",
+      "phase": "dissolved",
+      "formula": "C3H5O3",
+      "charge": -1
+    },
+    {
+      "name": "heterotroph",
+      "phase": "particulate",
+      "formula": "CH1.8O0.5N0.2"
+    },
+    {
+      "name": "fermenter",
+      "phase": "particulate",
+      "formula": "CH1.8O0.5N0.2"
+    }
+  ],
+  "processes": [
+    {
+      "name": "heterotroph_growth_on_glucose",
+      "kind": "growth",
+      "biomass": "heterotroph",
+      "substrate": "glucose",
+      "yield_mol_per_mol": 3.6,
+      "balanced_by": [
+        "oxygen",
+        "carbon_dioxide",
+        "ammonium"
+      ],
+      "rate": {
+        "maximum_per_h": 0.4,
+        "factors": [
+          {
+            "component": "glucose",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.05
+          },
+          {
+            "component": "oxygen",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.005
+          },
+          {
+            "component": "ammonium",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.01
+          }
+        ]
+      }
+    },
+    {
+      "name": "fermenter_growth_on_glucose",
+      "kind": "growth",
+      "biomass": "fermenter",
+      "substrate": "glucose",
+      "yield_mol_per_mol": 0.6,
+      "balanced_by": [
+        "lactate",
+        "carbon_dioxide",
+        "ammonium"
+      ],
+      "rate": {
+        "maximum_per_h": 0.3,
+        "factors": [
+          {
+            "component": "glucose",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.1
+          },
+          {
+            "component": "ammonium",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.01
+          }
+        ]
+      }
+    },
+    {
+      "name": "heterotroph_growth_on_lactate",
+      "kind": "growth",
+      "biomass": "heterotroph",
+      "substrate": "lactate",
+      "yield_mol_per_mol": 1.5,
+      "balanced_by": [
+        "oxygen",
+        "carbon_dioxide",
+        "ammonium"
+      ],
+      "rate": {
+        "maximum_per_h": 0.3,
+        "factors": [
+          {
+            "component": "lactate",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.1
+          },
+          {
+            "component": "oxygen",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.005
+          },
+          {
+            "component": "ammonium",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.01
+          }
+        ]
+      }
+    },
+    {
+      "name": "heterotroph_endogenous_respiration",
+      "kind": "reaction",
+      "stoichiometry_mol_per_mol": {
+        "heterotroph": -1
+      },
+      "balanced_by": [
+        "oxygen",
+        "carbon_dioxide",
+        "ammonium"
+      ],
+      "rate": {
+        "maximum_per_h": 0.01,
+        "proportional_to": "heterotroph",
+        "factors": [
+          {
+            "component": "oxygen",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.005
+          }
+        ]
+      }
+    }
+  ],
+  "experiment_id": "surface-biofilm-3d",
+  "initial_mol_per_m3": {
+    "glucose": 5.0,
+    "oxygen": 0.05,
+    "ammonium": 5.0,
+    "carbon_dioxide": 1.0
+  },
+  "duration_h": 2.0,
+  "timestep_h": 0.25,
+  "record_interval_h": 0.25,
+  "seed": 1,
+  "domain": {
+    "voxels": [
+      32,
+      32,
+      16
+    ],
+    "voxel_um": 5.0,
+    "bulk_mol_per_m3": {
+      "glucose": 5.0,
+      "oxygen": 0.05,
+      "ammonium": 5.0,
+      "carbon_dioxide": 1.0
+    },
+    "diffusivity_m2_per_s": {
+      "glucose": 2.3e-10,
+      "oxygen": 1.13e-09,
+      "ammonium": 1.47e-09,
+      "carbon_dioxide": 1.1e-09,
+      "lactate": 3.9e-10
+    },
+    "colonies": [
+      {
+        "component": "heterotroph",
+        "center_um": [
+          50.0,
+          80.0
+        ],
+        "radius_um": 40.0,
+        "concentration_mol_per_m3": 2000.0
+      },
+      {
+        "component": "fermenter",
+        "center_um": [
+          110.0,
+          80.0
+        ],
+        "radius_um": 40.0,
+        "concentration_mol_per_m3": 2000.0
+      }
+    ],
+    "random_colonies": [
+      {
+        "component": "heterotroph",
+        "count": 6,
+        "radius_um": 10.0,
+        "concentration_mol_per_m3": 2000.0
+      }
+    ]
+  }
+}

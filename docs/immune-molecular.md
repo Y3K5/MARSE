@@ -1,6 +1,6 @@
 # Immune and molecular interaction primitives
 
-`marse.immune` provides explicit field-level primitives for immune pressure
+`marse.experimental.host.immune` provides explicit field-level primitives for immune pressure
 and molecular neutralization. An `ImmuneInteraction` maps an effector field to
 a species-specific first-order biomass loss using a bounded Hill response.
 `MolecularNeutralizer` reduces the effective effector field, representing a
