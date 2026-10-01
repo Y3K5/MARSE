@@ -333,10 +333,12 @@ least certain of all.
 
 The oral scenes of [`docs/environments.md`](environments.md#the-oral-scenes) run
 a column of plaque under a salivary film, renewed from a mouth that secretes,
-swallows and takes a diet (theory.md §3.8, §4.8 and §4.9). Saliva's buffers and
-the mouth's volumes are measured values; what the plaque does with sugar is
-calibrated, all of it **C**, to the criteria for a Stephan curve set before
-Stage S1 was built (docs/validation.md, "The Stephan curve").
+swallows and takes a diet (theory.md §3.8, §4.8 and §4.9). The film's surface
+may be at the air (theory.md §4.10), which holds oxygen at its solubility in
+§1 above. Saliva's buffers and the mouth's volumes are measured values; what
+the plaque does with sugar is calibrated, all of it **C**, to the criteria for
+a Stephan curve set before Stage S1 was built (docs/validation.md, "The
+Stephan curve").
 
 ### 8.1 Measured values
 
@@ -351,6 +353,7 @@ Stage S1 was built (docs/validation.md, "The Stephan curve").
 | Plaque's buffering | strong at pH 4–5.5, weak near neutrality; about 90% from cell walls and matrix | — | Shellis & Dibdin (1988) | **B** (qualitative) |
 | Food retained on the teeth | starchy particles for up to 20 min, accumulating sugars and acids | — | Kashket, Zhang & Van Houte (1996) | **B** (qualitative) |
 | Plaque removed by one brushing with a manual toothbrush: overall; by plaque index | 42; 30 to 53 | % | Slot et al. (2012), 59 papers and 212 brushing exercises. MARSE's default for a brushing (theory.md §6.3). | **B** |
+| Salivary flow while chewing gum | 10 to 12 times the unstimulated 0.47 in the first minute with flavoured gum; within about 10 min, the flow with gum base alone; still above the unstimulated flow after 2 h | mL min⁻¹ | Dawes & Macpherson (1992); Dawes & Kubieniec (2004). A mouth's `chewing_flow_ml_per_min` is the lasting part (theory.md §4.9). | **B** |
 
 ### 8.2 Values in the oral scenes
 

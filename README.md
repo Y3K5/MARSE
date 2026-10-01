@@ -152,7 +152,7 @@ src/marse/         the Python package
   core/            run loop, state, configuration, seeds, provenance, frame store
   schemas/         configuration schema v2: formulas and balanced reaction networks
   spatial/         voxel grids in 1, 2 or 3 dimensions, diffusion, multigrid, surfaces and the
-                   delivery of cells to them, ParaView output
+                   delivery of cells to them, gases from the air, ParaView output
   oral/            the mouth: saliva secreted and swallowed, the film over the teeth, the diet,
                    and the measures of a Stephan curve
   chemistry/       acid-base equilibria: the pH that every voxel's charges set

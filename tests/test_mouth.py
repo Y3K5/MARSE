@@ -11,11 +11,15 @@ The criteria set before Stage S1 was built that these check:
 
 The diet's rinses, drinks and foods each bring into the mouth what they state,
 when they state it, and the food they leave on the teeth goes where it is put.
+A food that is chewed adds the mouth's chewing flow while it lasts, and P7,
+set before Stage S2 was built: sugar-free gum after a sugar rinse brings the
+plaque's pH back sooner.
 """
 
 import copy
 import csv
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -28,6 +32,7 @@ from marse.oral import OralFluid, film_layers, renewal_per_h
 from marse.schemas import experiment_from_dict, network_from_dict
 from marse.spatial.grid import Grid
 
+ROOT = Path(__file__).resolve().parents[1]
 NETWORK = {
     "schema_version": 2,
     "pkw": 13.6,
@@ -487,6 +492,10 @@ def test_g6c_a_rinse_that_mixes_the_film_fast_does_not_depend_on_the_spans(monke
         (lambda d: d["diet"][1]["retained"].update(component="bacteria"), "no process consumes"),
         (lambda d: d["diet"][1]["retained"].update(region_um=[0, 4]), "needs 0 bounds"),
         (lambda d: d["diet"][1]["retained"].update(amount_mol_per_m2=0), "must be positive"),
+        (lambda d: d["diet"][0].update(chewing=True), "only food is chewed"),
+        (lambda d: d["diet"][1].update(chewing=True), "give the mouth chewing_flow_ml_per_min"),
+        (lambda d: d["diet"][1].update(chewing="yes"), "expected true or false"),
+        (lambda d: d["mouth"].update(chewing_flow_ml_per_min=-1), "must not be negative"),
     ],
 )
 def test_impossible_diets_are_refused(change, message):
@@ -541,3 +550,74 @@ def test_a_diet_is_written_back_as_read_and_replays(tmp_path, capsys):
         == 0
     )
     assert "reproduced the recorded results exactly" in capsys.readouterr().out
+
+
+# --- chewing ----------------------------------------------------------------------------
+
+GUM = {"kind": "food", "start_h": 0.0, "duration_min": 10, "released_mmol": {}, "chewing": True}
+STEPHAN_RINSE = ROOT / "examples" / "environments" / "oral" / "stephan_rinse.json"
+
+
+def chewed(diet, *, chewing_flow=1.0, **kwargs):
+    """The scene with a diet, a mouth that chews, and stimulated saliva richer in carbonate."""
+    raw = dieted(diet, **kwargs)
+    mouth = raw["domain"]["mouth"]
+    mouth["chewing_flow_ml_per_min"] = chewing_flow
+    mouth["stimulated_saliva_mol_per_m3"] = _neutral(
+        {"carbonate": 15.0, "phosphate": 4.0, "chloride": 20.0}
+    )
+    return raw
+
+
+def test_chewing_adds_its_flow_while_it_lasts_and_the_saliva_comes_stimulated():
+    raw = chewed([GUM], duration_h=15 / 60, timestep_h=1 / 60)
+    result = reactive_transport.run(experiment_from_dict(raw))
+    minutes = result.times_h * 60
+    flow = result.mouth["flow_ml_per_min"]
+    np.testing.assert_allclose(flow[(minutes > 0.5) & (minutes < 9.5)], 1.3, rtol=1e-12)
+    np.testing.assert_allclose(flow[minutes > 10.5], 0.3, rtol=1e-12)
+    # At 1.3 mL a minute the mouth swallows about four times a minute, against once at rest.
+    swallows = result.mouth["swallows"]
+    assert swallows[10] >= 40
+    assert swallows[-1] - swallows[10] <= 6
+    # While chewing, the glands secrete saliva half way to stimulated: more carbonate.
+    carbonate = result.mouth["carbonate_mol_per_m3"]
+    assert carbonate[9] > carbonate[0] + 2.0
+    outputs = result.manifest.outputs
+    for balance in (outputs["balance"], outputs["mouth"]["balance"]):
+        for quantity, entry in balance.items():
+            assert entry["largest_relative_residual"] < 1e-12, quantity
+
+
+def test_chewing_is_written_back_as_read_and_described(tmp_path, capsys):
+    raw = chewed([GUM], duration_h=2 / 60)
+    config = experiment_from_dict(raw)
+    written = config.to_dict()["domain"]
+    assert written["diet"][0]["chewing"] is True
+    assert written["mouth"]["chewing_flow_ml_per_min"] == 1.0
+    assert experiment_from_dict(json.loads(json.dumps(config.to_dict()))) == config
+    # A mouth that does not chew writes neither field, so S1's configurations read as before.
+    plain = experiment_from_dict(scene()).to_dict()["domain"]
+    assert "chewing_flow_ml_per_min" not in plain["mouth"]
+    path = tmp_path / "gum.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    assert main(["check", str(path)]) == 0
+    out = " ".join(capsys.readouterr().out.split())
+    assert "1 more while chewing" in out
+    assert "food at 0 min for 10 min: releases nothing mmol, chewed" in out
+
+
+@pytest.mark.slow
+def test_p7_gum_chewed_after_a_sugar_rinse_brings_the_plaque_back_sooner():
+    raw = json.loads(STEPHAN_RINSE.read_text("utf-8"))
+    raw["duration_h"] = 0.25
+    raw["domain"]["mouth"]["chewing_flow_ml_per_min"] = 1.0
+    plain = reactive_transport.run(experiment_from_dict(raw))
+    gum = dict(GUM, start_h=2 / 60, duration_min=20)
+    raw["domain"]["diet"].append(gum)
+    chewing = reactive_transport.run(experiment_from_dict(raw))
+    rinse, gummed = plain.ph["substratum_mean"], chewing.ph["substratum_mean"]
+    # The rinse alone is still falling at 15 minutes; gum has stopped the fall and turned it.
+    assert rinse[-1] < 5.0
+    assert gummed[-1] > 6.0
+    assert gummed.min() > rinse.min() + 0.5

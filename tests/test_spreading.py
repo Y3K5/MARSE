@@ -10,7 +10,8 @@ The criteria set before Stage S2 was built, checked here (docs/validation.md,
 - P4: a brushing removes exactly its share, from the surface down.
 
 And conservation: what detaches, wears away or is brushed off is booked, so
-both ledgers close to rounding.
+both ledgers close to rounding. Under the mouth, the film rides on the
+plaque's surface, wherever it is, and food left on the teeth lands in it.
 """
 
 import copy
@@ -25,7 +26,10 @@ import marse.core.reactive_transport as reactive_transport
 from marse.biofilm.spreading import SPREADING_VERSION, Spreading, remap
 from marse.cli import main
 from marse.core.config import ConfigError
+from marse.oral import film_share, liquid_share, renewal_over, renewal_per_h
 from marse.schemas import experiment_from_dict
+from marse.schemas.domain import Film
+from marse.spatial.grid import Grid
 
 ROOT = Path(__file__).resolve().parents[1]
 RINSE = ROOT / "examples" / "environments" / "oral" / "stephan_rinse.json"
@@ -260,6 +264,46 @@ def test_a_brushing_takes_the_same_share_of_food_left_on_the_teeth():
 def test_a_flossing_removes_the_share_it_states():
     result = reactive_transport.run(experiment_from_dict(_brushed(0.25, kind="flossing")))
     assert result.plaque["thickness_um"][-1] == pytest.approx(150.0 * 0.75, abs=1e-9)
+
+
+# --- the film rides on the plaque -----------------------------------------------------------
+
+
+def test_the_film_rides_on_the_plaque_wherever_its_surface_is():
+    grid, film = Grid((100,), 2.5), Film(100.0, 6.0, 6.0)
+    # On a plaque as high as the film's underside, the film is S1's, bit for bit.
+    np.testing.assert_array_equal(renewal_over(grid, film, 150.0), renewal_per_h(grid, film))
+    # Brushed down to 87 um, the liquid above it is renewed from there up...
+    rate = renewal_over(grid, film, 87.0)
+    assert np.all(rate[:34] == 0.0)  # below 85 um, all plaque
+    assert rate[34] > 0.0  # 85 to 87.5 um: a fifth of it liquid
+    assert np.all(np.diff(rate[34:]) >= 0.0)
+    np.testing.assert_allclose(liquid_share(grid, 87.0)[33:36], [0.0, 0.2, 1.0], rtol=1e-12)
+    # ...and liquid more than a film's thickness above it moves with the film's surface.
+    surface = 1.5 * 6.0 * 60_000.0 / 6_000.0  # 1.5 u_bar / l, per hour
+    np.testing.assert_allclose(rate[grid.heights_um() > 187.0], surface, rtol=1e-15)
+    # Food left on the teeth fills the film's thickness above the surface: 100 um of it.
+    assert film_share(grid, film, 87.0).sum() * 2.5 == pytest.approx(100.0, rel=1e-12)
+
+
+def test_food_left_on_the_teeth_lands_in_the_film_on_a_brushed_plaque():
+    raw = json.loads(POCKET.read_text("utf-8"))
+    raw["duration_h"] = 0.05
+    raw["domain"]["plaque"] = {
+        "packing_mol_per_m3": {"bacteria": 800.0},
+        "carried": ["carboxyl_groups", "bound_potassium"],
+    }
+    raw["domain"]["hygiene"] = [{"kind": "brushing", "start_h": 0.0}]  # 150 um down to 87
+    result = reactive_transport.run(experiment_from_dict(raw))
+    food = result.final_state[result.component_names.index("food_sugar")]
+    heights = result.config.domain.grid.heights_um()
+    assert np.all(food[heights < 85.0] == 0.0)
+    assert np.all(food[heights > 190.0] == 0.0)
+    assert food[(heights > 90.0) & (heights < 185.0)].min() > 0.0
+    outputs = result.manifest.outputs
+    for balance in (outputs["balance"], outputs["mouth"]["balance"]):
+        for quantity, entry in balance.items():
+            assert entry["largest_relative_residual"] < 1e-13, quantity
 
 
 def test_a_plaque_that_does_not_spread_runs_as_before():

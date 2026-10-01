@@ -392,7 +392,7 @@ chemistry in a single column in three seconds.
 |---|---|---|---|
 | `voxels` | list of 1 to 3 whole numbers | yes | Voxels along each axis. The last axis is height above the surface. `[64]` is a column, `[32, 64]` a vertical slice, `[32, 32, 16]` a box. Counts divisible by 2 several times make the solver fastest. |
 | `voxel_um` | number | yes | The edge of a cubic voxel, in µm. |
-| `bulk_mol_per_m3` | object of numbers | no, default `0` each | What the liquid above holds, held at the top face. Dissolved components only. |
+| `bulk_mol_per_m3` | object of numbers | no, default `0` each | What the liquid above holds, held at the top face. Dissolved components only. Left out under a film or at the air. |
 | `diffusivity_m2_per_s` | object of numbers | yes | One value for every dissolved component, in m² per s, as tables give them. Particulate components (biomass) do not diffuse. |
 | `colonies` | list of colonies | no | Hemispheres of biomass on the surface, placed where stated. |
 | `random_colonies` | list of random colonies | no | Hemispheres of biomass scattered over the surface from the run's `seed`. |
@@ -401,11 +401,12 @@ chemistry in a single column in three seconds.
 | `flow` | object | with `substratum` | The flow's shear at the substratum. |
 | `suspension` | list of suspended species | with `substratum` | The cells in the liquid that bind. |
 | `adhesion` | list of bindings | with `substratum` | How each species binds to each material. |
-| `film` | object | no | The top voxels are a salivary film, closed to the air and renewed from the mouth. [A salivary film and the mouth](#a-salivary-film-and-the-mouth): these two fields go together, and replace `bulk_mol_per_m3`. |
+| `film` | object | no | The top voxels are a salivary film, renewed from the mouth; its surface is closed unless `air` opens it to gases. [A salivary film and the mouth](#a-salivary-film-and-the-mouth): these two fields go together, and replace `bulk_mol_per_m3`. |
 | `mouth` | object | with `film` | The mouth's saliva: what is secreted, how much the mouth holds, and when it swallows. |
 | `diet` | list of intakes | no, with `mouth` | What is eaten and drunk: rinses, drinks and foods, each from a start for a duration. [The diet](#the-diet). |
 | `plaque` | object | no, in a column | Biomass that spreads as it grows, packing the column from the substratum up, wearing at its surface and detached above a maximum height. [Plaque that spreads](#plaque-that-spreads). |
 | `hygiene` | list of cleanings | no, with `plaque` and `mouth` | Brushings and flossings, each taking a share of the plaque off at its time. |
+| `air` | object | no | The top face is at the air, which holds the gases it lists at their saturation there: the film's surface, or, without a film, the top of the box in place of a bulk liquid. [Oxygen and the air](#oxygen-and-the-air). |
 
 `initial_mol_per_m3` fills every voxel. Each colony then sets its component to
 its concentration in the voxels whose centres lie inside it. A colony that
@@ -526,10 +527,12 @@ mouth fills with saliva and empties by swallowing. With `film` and `mouth`,
 a run in space models exactly that
 ([theory.md §4.8 and §9.9](theory.md#48-a-salivary-film-and-the-mouth)):
 
-- **The film** is the top `thickness_um` of the box. Its surface is open to the
-  air, so nothing crosses the top face. Saliva replaces each of its voxels at
-  the rate u(z) / l, where u is the film's speed at that height and l the
-  length of plaque the film has crossed to reach the site.
+- **The film** is the top `thickness_um` of the box. Its surface is at the
+  air, so nothing crosses the top face, unless `air` lists gases, which do.
+  Saliva replaces each of its voxels at the rate u(z) / l, where u is the
+  film's speed at that height and l the length of plaque the film has crossed
+  to reach the site. Over a plaque that spreads, the film lies on the
+  plaque's surface wherever that is, and is renewed from there up.
 - **The mouth** holds a pool of saliva between a resting volume and the volume
   at which it swallows (Dawes 1983). The glands secrete saliva into it, faster
   while it tastes the stimulus, and a swallow takes it back to the resting
@@ -563,6 +566,7 @@ a run in space models exactly that
 | `stimulus_half_mol_per_m3` | number | with `stimulus` | The concentration in the mouth that raises the flow by half the stimulated flow. |
 | `plaque_area_cm2` | number | yes | The plaque this box stands for, which exchanges with the mouth through its film. |
 | `initial_mol_per_m3` | object of numbers | no, default the saliva | What the mouth holds at the start. |
+| `chewing_flow_ml_per_min` | number | with an intake that is chewed | The flow chewing adds while it lasts. |
 
 ### The diet
 
@@ -584,6 +588,10 @@ at a time, each from `start_h` for `duration_min`
 - **Mixing.** While an intake is in the mouth, the film is mixed with the
   mouth's liquid at `mixing_per_s` in each of its voxels (Dibdin 1990), on top
   of its own renewal. The taste of what it brings raises the flow.
+- **Chewing.** A food that is `chewing`, as gum or a meal is, adds the
+  mouth's `chewing_flow_ml_per_min` to the flow while it lasts, and the saliva
+  secreted moves towards stimulated saliva. Gum without sugar is a food that
+  releases nothing.
 - **Food left on the teeth.** `retained` places an amount of a particulate
   component in the film when the intake ends. A process of the network, such
   as a first-order reaction to sugar, releases what dissolves from it.
@@ -604,6 +612,7 @@ counts food placed in the film as entering the box.
 | `composition_mol_per_m3` | object of numbers | no, default water | What a rinse or a drink holds. Dissolved components only. |
 | `released_mmol` | object of numbers | for a food | What a food releases into the saliva over its duration, in the whole mouth. Dissolved components only. |
 | `mixing_per_s` | number | no, default `1` | How fast the film mixes with the mouth's liquid while the intake lasts, per second. `0` leaves the film's own renewal alone. |
+| `chewing` | true or false | no, default `false` | Whether a food is chewed, adding the mouth's chewing flow while it lasts. |
 | `retained` | object | no | Food it leaves on the teeth when it ends. |
 
 ### Retained fields
@@ -665,6 +674,35 @@ recorded time. The manifest names the spreading mechanism,
 | `kind` | `brushing` or `flossing` | yes | What cleans the plaque. In a single column both take plaque off its surface; where each reaches comes with sites. |
 | `start_h` | number | yes | When, in hours from the start of the run, in time order. |
 | `removes_fraction` | number | brushing: no, default `0.42`; flossing: yes | The share of the plaque taken off, from its surface down. A brushing removes 42% of plaque on average (Slot et al. 2012). |
+
+### Oxygen and the air
+
+Where the box's top face is at the air, the gases the air holds cross it, and
+nothing else does. With `air`
+([theory.md §4.10](theory.md#410-oxygen-from-the-air)):
+
+- **At the face**, each gas is held at its saturation: its concentration in
+  water in equilibrium with the air. For oxygen at 37 °C under air at one
+  atmosphere, that is 0.210 mol per m³ in pure water
+  ([theory.md §4.4](theory.md#44-oxygen-solubility)); salts lower it a little.
+- **Under a film**, the face is the film's surface. The mouth's saliva is at
+  the air too, spread over the mouth's surfaces, so the air holds it at
+  saturation as well, and the film is renewed with saturated saliva. A gas
+  the air holds is left out of the saliva's composition.
+- **Without a film**, the box borders the air instead of a bulk liquid, as a
+  colony biofilm on a membrane does. Leave `bulk_mol_per_m3` out.
+- **What it exchanges.** Both balances count what the air gave and took, and
+  the manifest records it for each gas.
+
+A gas must be a neutral dissolved component that is not an acid-base total.
+Carbon dioxide belongs to the carbonate total, which stays closed to the air,
+so the buffer calibrated in Stage S1 is unchanged.
+
+### Air fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `saturation_mol_per_m3` | object of numbers | yes | Each gas the air holds, and its concentration in water in equilibrium with the air. |
 
 ## Balancing: `balanced_by`
 

@@ -43,7 +43,13 @@ packs the column from the substratum up after every step, wears at its
 surface, and what passes its maximum height is detached: into the bulk liquid,
 or under a film into the mouth, which swallows it. Brushing and flossing take
 a share of it off at their times, and the mouth expels it. The run records
-the plaque's thickness and what left it.
+the plaque's thickness and what left it. The film rides on the plaque's
+surface, wherever it is (:mod:`marse.oral.film`).
+
+Where the top face is at the air (:mod:`marse.spatial.air`), the gases the
+air holds cross it; under a film, the air holds the mouth's saliva at their
+saturation too. Both ledgers count what the air gave and took, and the run
+records it.
 """
 
 from __future__ import annotations
@@ -69,8 +75,17 @@ from marse.core.provenance import Manifest
 from marse.core.reservoir import ReservoirPath, ReservoirTransport
 from marse.microbes.adhesion import AttachingSpecies, SurfaceExchange
 from marse.microbes.kinetics import compile_rates, process_rates, rate_jacobian
-from marse.oral import Diet, Inflow, OralFluid, film_layers, renewal_per_h
+from marse.oral import (
+    Diet,
+    Inflow,
+    OralFluid,
+    film_layers,
+    liquid_share,
+    renewal_over,
+    renewal_per_h,
+)
 from marse.schemas.experiment import ReactiveTransportConfig
+from marse.spatial.air import AirExchange
 from marse.spatial.colloids import leveque_transfer_um_per_s, stokes_einstein_um2_per_s
 from marse.spatial.transport import Diffusion
 
@@ -281,6 +296,34 @@ def spreading_of(config: ReactiveTransportConfig) -> Spreading | None:
     )
 
 
+def air_of(config: ReactiveTransportConfig) -> AirExchange | None:
+    """The gases exchanged with the air at the top face, if the domain is open to it."""
+    domain = config.domain
+    if domain.air is None:
+        return None
+    names = config.network.component_names
+    saturation = domain.air.saturation_mol_per_m3
+    return AirExchange.at(
+        np.array([names.index(n) for n in saturation], dtype=np.intp),
+        np.array(list(saturation.values())),
+        domain.diffusivities_um2_per_h(names),
+        domain.grid.voxel_um,
+        domain.grid.shape,
+    )
+
+
+def _air_outputs(
+    air: AirExchange, names: tuple[str, ...], exchanged: NDArray[np.float64]
+) -> dict[str, Any]:
+    """The manifest's account of the air: what it held each gas at, and what it exchanged."""
+    return {
+        "saturation_mol_per_m3": {
+            names[j]: float(s) for j, s in zip(air.gases, air.saturation_mol_per_m3, strict=True)
+        },
+        "exchanged_mol_per_m2": {names[j]: float(exchanged[j]) for j in air.gases},
+    }
+
+
 def _packed(spreading: Spreading, state: NDArray[np.float64]) -> NDArray[np.float64]:
     """The initial plaque packed from the substratum up; one taller than its maximum is refused."""
     packed, excess = spreading.project(state, 0.0)
@@ -316,7 +359,8 @@ def build_model(config: ReactiveTransportConfig) -> ReactionTransport:
     """The discretised system a configuration describes.
 
     Under a film, a :class:`~marse.core.reservoir.ReservoirTransport`, closed at
-    the top and bordered by the mouth's pool.
+    the top and bordered by the mouth's pool. At the air, the top face is
+    closed to all but the air's gases.
     """
     network = config.network
     names = network.component_names
@@ -346,11 +390,13 @@ def build_model(config: ReactiveTransportConfig) -> ReactionTransport:
             reference_um=fluid.reference_um,
             surface=surface_exchange(config),
             spreading=spreading_of(config),
+            air=air_of(config),
         )
     diffusion = Diffusion(
         domain.grid,
         domain.diffusivities_um2_per_h(names),
         domain.bulk(names),
+        closed_top=domain.air is not None,
     )
     return ReactionTransport(
         diffusion,
@@ -359,6 +405,7 @@ def build_model(config: ReactiveTransportConfig) -> ReactionTransport:
         jacobian,
         surface_exchange(config),
         spreading_of(config),
+        air_of(config),
     )
 
 
@@ -516,6 +563,8 @@ def run(
         outputs["plaque"] = _plaque_outputs(
             spreading, names, plaque_rows[-1], model.detached * areal
         )
+    if model.air is not None:
+        outputs["air"] = _air_outputs(model.air, names, model.aired * areal)
     manifest = Manifest.build(
         config=config,
         models=models,
@@ -588,13 +637,14 @@ def _mouth_record(
     pool: NDArray[np.float64],
     names: tuple[str, ...],
     balance: ChargeBalance | None,
+    chewing: bool = False,
 ) -> dict[str, float]:
     """The mouth's volume, flow and swallows, and the composition of its pool."""
     concentration = pool * engine.reference_um / fluid.thickness_um(fluid.volume_m3)
     stimulus = 0.0 if fluid.stimulus is None else float(concentration[fluid.stimulus])
     record = {
         "volume_ml": fluid.volume_m3 * _ML_PER_M3,
-        "flow_ml_per_min": fluid.flow_m3_per_s(stimulus) * _ML_PER_M3 * 60.0,
+        "flow_ml_per_min": fluid.flow_m3_per_s(stimulus, chewing) * _ML_PER_M3 * 60.0,
         "swallows": float(fluid.swallows),
     }
     for j in engine.exchanged:
@@ -641,6 +691,9 @@ def _run_with_mouth(
     # Food left on the teeth is not plaque: a brush takes the same share of it.
     food = sorted({names.index(i.retained.component) for i in domain.diet if i.retained})
     pool = np.array([domain.mouth.initial_mol_per_m3.get(n, 0.0) for n in names])
+    air = engine.air
+    if air is not None:  # the air holds the mouth's gases at saturation
+        pool[engine.held_gases] = engine.held(engine.reference_um)
     y = engine.pack(box, pool)  # at the resting volume, the pool's unknowns are its concentrations
     areal = grid.voxel_volume_um3 / grid.footprint_um2 * _AMOL_PER_UM2_TO_MOL_PER_M2
     to_mol_per_m2 = engine.reference_um * 1e-6  # the pool's unknowns, per unit area
@@ -658,6 +711,7 @@ def _run_with_mouth(
     eaten = np.zeros(len(names))
     expelled = np.zeros(len(names))
     removed = np.zeros(len(names))  # taken off by brushing and flossing, mol/m2
+    aired = np.zeros(len(names))  # what the air gave less what it took, mol/m2
     times, totals, imports = [0.0], [box.reshape(len(names), -1).sum(axis=1) * areal], [imported]
     exchange = engine.surface
     surface_rows = [] if exchange is None else [_surface_record(config, exchange, box)]
@@ -715,7 +769,10 @@ def _run_with_mouth(
                         expelled += gone
                         whole.exchange(-gone)
                         pool = pool * kept
-                    pocket = None if event.starts else diet.pocket(intake, grid, domain.film)
+                    surface = None if spreading is None else spreading.height_um(box)
+                    pocket = (
+                        None if event.starts else diet.pocket(intake, grid, domain.film, surface)
+                    )
                     if pocket is not None:
                         box = box + pocket
                         placed = pocket.reshape(len(names), -1).sum(axis=1)
@@ -723,15 +780,27 @@ def _run_with_mouth(
                         imported = imported + placed
                         eaten += placed * areal
                         whole.exchange(placed * areal)
+                if air is not None:  # a rinse brings gases of its own; the air takes them back
+                    gases = engine.held_gases
+                    held = engine.held(fluid.thickness_um(fluid.volume_m3))
+                    gained = np.zeros(len(names))
+                    gained[gases] = (held - pool[gases]) * to_mol_per_m2
+                    pool[gases] = held
+                    aired += gained
+                    whole.exchange(gained)
                 y = engine.pack(box, pool)
                 ledger.check(box, step=step, time_h=now)
                 whole.check(everything(box, pool), step=step, time_h=now)
                 peak = np.maximum(peak, y)
             inflow = diet.inflow()
+            box, pool = engine.unpack(y)
+            if spreading is not None:  # the film rides on the plaque's surface
+                surface = spreading.height_um(box)
+                renewal = renewal_over(grid, domain.film, surface)
+                in_film = liquid_share(grid, surface)
             engine.exchange_per_h = (
                 renewal if inflow.mixing_per_h == 0.0 else renewal + inflow.mixing_per_h * in_film
             )
-            box, pool = engine.unpack(y)
             stimulus = 0.0
             if fluid.stimulus is not None:
                 stimulus = pool[fluid.stimulus] * to_mol_per_m2 * fluid.area_m2
@@ -751,6 +820,7 @@ def _run_with_mouth(
                 # meals, to leave 4e-13 of the sugar eaten unaccounted for.
                 engine.path = _path(fluid, 0.0, stretch, fluid.secreted(saliva), inflow)
                 detached = engine.detached.copy()
+                aired_before = engine.aired.copy()
                 y, entered, stats = engine.integrate(
                     y,
                     span,
@@ -778,6 +848,10 @@ def _run_with_mouth(
                 secreted += added - taken
                 eaten += taken
                 whole.exchange(added)
+                if air is not None:
+                    gained = (engine.aired - aired_before) * areal
+                    aired += gained
+                    whole.exchange(gained)
             kept = fluid.end(stretch)
             box, pool = engine.unpack(y)
             if kept < 1.0:
@@ -800,7 +874,9 @@ def _run_with_mouth(
                 surface_rows.append(_surface_record(config, exchange, box))
             if balance is not None:
                 ph_rows.append(_ph_record(balance, box))
-            mouth_rows.append(_mouth_record(fluid, engine, pool, names, balance))
+            mouth_rows.append(
+                _mouth_record(fluid, engine, pool, names, balance, diet.inflow().chewing)
+            )
             if spreading is not None:
                 plaque_rows.append(
                     _plaque_record(spreading, box, names, areal, engine.detached, removed)
@@ -863,6 +939,8 @@ def _run_with_mouth(
             engine.detached * areal,
             removed if domain.hygiene else None,
         )
+    if air is not None:
+        outputs["air"] = _air_outputs(air, names, aired)
     surface = None
     if exchange is not None:
         surface = {key: np.array([row[key] for row in surface_rows]) for key in surface_rows[0]}

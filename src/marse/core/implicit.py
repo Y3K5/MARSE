@@ -61,6 +61,10 @@ face transfers. The limiter scales them like any other, and the ledger counts
 them as imports. Locking turns reversibly bound cells into biomass, as an extra
 row of the stoichiometric matrix acting in the bottom layer.
 
+Where the top face is at the air (:mod:`marse.spatial.air`, docs/theory.md,
+section 4.10), the gases it holds cross it as two more processes per gas in
+the top layer, and the ledger counts what they exchange as an import.
+
 Where a column's plaque spreads (:mod:`marse.biofilm.spreading`, docs/theory.md,
 section 6.1), every step is followed by packing the solid from the substratum
 up, which detaches whatever passes the plaque's maximum height. Wear is taken
@@ -85,6 +89,7 @@ from numpy.typing import NDArray
 
 from marse.biofilm.spreading import Spreading
 from marse.microbes.adhesion import SurfaceExchange
+from marse.spatial.air import AirExchange
 from marse.spatial.column import ColumnSystem
 from marse.spatial.multigrid import ImplicitSystem
 from marse.spatial.transport import Diffusion, divergence
@@ -161,22 +166,37 @@ class ReactionTransport:
         jacobian: Callable[[Field], Field],
         surface: SurfaceExchange | None = None,
         spreading: Spreading | None = None,
+        air: AirExchange | None = None,
     ) -> None:
         self.diffusion = diffusion
         self.surface = surface
         self.spreading = spreading
+        self.air = air
         stoichiometry = np.asarray(stoichiometry, dtype=float)  # processes x components
         if surface is not None:
             # Locking runs as one more process per species, in the bottom layer.
             stoichiometry = np.vstack((stoichiometry, surface.locking_rows))
-            network_rates, network_jacobian = rates, jacobian
+            locked_rates, locked_jacobian = rates, jacobian
 
             def rates(c: Field) -> Field:
-                return np.concatenate((network_rates(c), surface.locking(c)))
+                return np.concatenate((locked_rates(c), surface.locking(c)))
 
             def jacobian(c: Field) -> Field:
-                return np.concatenate((network_jacobian(c), surface.locking_jacobian(c)))
+                return np.concatenate((locked_jacobian(c), surface.locking_jacobian(c)))
 
+        first = stoichiometry.shape[0]
+        if air is not None:
+            # The air runs as two more processes per gas, in the top layer.
+            stoichiometry = np.vstack((stoichiometry, air.rows))
+            aired_rates, aired_jacobian = rates, jacobian
+
+            def rates(c: Field) -> Field:
+                return np.concatenate((aired_rates(c), air.rates(c)))
+
+            def jacobian(c: Field) -> Field:
+                return np.concatenate((aired_jacobian(c), air.jacobian(c)))
+
+        self._air_rows = slice(first, stoichiometry.shape[0])
         self.stoichiometry = stoichiometry
         self.consumed = np.maximum(-self.stoichiometry, 0.0)
         self.produced = np.maximum(self.stoichiometry, 0.0)
@@ -188,6 +208,8 @@ class ReactionTransport:
         components = stoichiometry.shape[1]
         self.detached = np.zeros(components)  # solid that left the plaque, summed over steps
         self._detaching = np.zeros(components)  # what the step being tried detached
+        self.aired = np.zeros(components)  # what the air gave less what it took, summed
+        self._airing = np.zeros(components)  # the same, over the step being tried
 
     # -- the right-hand side --------------------------------------------------------------
 
@@ -410,6 +432,9 @@ class ReactionTransport:
         imports = top.reshape(top.shape[0], -1).sum(axis=1) / self.spacing[-1]
         if substratum is not None:  # and through the substratum: bound less detached
             imports = imports + substratum.reshape(top.shape[0], -1).sum(axis=1) / self.spacing[-1]
+        if self.air is not None:  # and from the air
+            self._airing = self.air.exchanged(extents[self._air_rows])
+            imports = imports + self._airing
         return new, imports, estimate, rounds, n1 + n2
 
     def starting_step(self, y: Field, reference: Field, atol: Tolerance, rtol: float) -> float:
@@ -492,6 +517,8 @@ class ReactionTransport:
                 imports += entered
                 if self.spreading is not None:
                     self.detached += self._detaching
+                if self.air is not None:
+                    self.aired += self._airing
                 elapsed += step
                 accepted += 1
                 limited += rounds > 0

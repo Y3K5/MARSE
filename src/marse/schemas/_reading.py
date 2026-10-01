@@ -74,6 +74,7 @@ DIMENSIONLESS = {
 
 Kind = Literal[
     "text",
+    "flag",
     "name",
     "names",
     "choice",
@@ -97,7 +98,7 @@ _NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}")
 class Field:
     """How one key of a configuration object is read.
 
-    ``text`` is any string, ``name`` an identifier, ``names`` a list of
+    ``text`` is any string, ``flag`` true or false, ``name`` an identifier, ``names`` a list of
     distinct identifiers, ``choice`` one of ``choices``, ``integer`` a whole
     number, ``integers`` a list of whole numbers, ``number`` an exact decimal,
     ``numbers`` an object from names to exact decimals, ``number_or_numbers``
@@ -161,6 +162,10 @@ def _convert(value: Any, where: str, field: Field) -> Any:
         case "text":
             if not isinstance(value, str):
                 raise ConfigError(f"{where}: expected text, got {_describe(value)}")
+            return value
+        case "flag":
+            if not isinstance(value, bool):
+                raise ConfigError(f"{where}: expected true or false, got {_describe(value)}")
             return value
         case "name":
             return name(value, where)

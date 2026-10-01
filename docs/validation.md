@@ -641,6 +641,61 @@ Other checks:
   describes the plaque and its cleanings, and every impossible plaque or
   cleaning is refused with the reason.
 
+## Oxygen from the air
+
+The top face at the air, which holds each gas it lists at its saturation
+([theory.md §4.10](theory.md#410-oxygen-from-the-air)). The criterion set
+before Stage S2 was built, in `tests/test_oxygen.py`:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| P5a | Oxygen filling a slab 200 µm deep from the air, against the series solution (Crank 1975), at 2, 7, 18 and 72 s | 2% after the grid is refined | at most 2.2e-4 of saturation on 5 µm voxels and 5.5e-5 on 2.5 µm: second order, a ratio of 4.06 |
+| P5b | Under uptake of zero order, oxygen reaches δ = √(2DC_s/k₀) = 150 µm, falling to 1% of saturation 135.0 µm in | 2% | 135.3 µm on 5 µm voxels; the profile within 2.7e-4 of saturation of (1 − x/δ)², the difference being the Monod saturation constant of 1e-5 mol m⁻³ near the front |
+
+Both ledgers count what the air gave and took. In the column, the air's
+book and the oxygen gained agree to 4.7e-17. Under the mouth, S1's rinse with
+plaque that respires sugar closes the box to 9.5e-16 and the box and the
+mouth together to 3.5e-16, over 15 minutes and 27 swallows; the mouth's
+oxygen stays at saturation throughout, whatever the swallows and the rinse
+take or bring. The film's surface sits within 0.3% of saturation, and the
+oxygen falls from there into the plaque.
+
+Other checks:
+
+- **Nothing else crosses the face.** A component the air does not list
+  neither enters nor leaves through it.
+- **A rinse that brings oxygen of its own** is brought back to saturation,
+  and the difference is booked.
+- **What is refused:** a gas that is particulate, an ion or an acid-base
+  total (carbon dioxide stays with carbonate), a negative saturation, a gas
+  also stated in the saliva, and a bulk liquid at the air.
+- **Replay** reproduces a run at the air exactly, and `marse check` describes
+  the air.
+
+## Chewing
+
+A chewed food adds the mouth's chewing flow while it lasts
+([theory.md §4.9](theory.md#49-the-diet)). In `tests/test_mouth.py`:
+
+- **The flow** is 1.3 mL per minute while 1.0 mL per minute of chewing is
+  added to the resting 0.3, and back to 0.3 when it ends, to rounding. The
+  mouth swallows 43 times in the 10 minutes of chewing, and 5 times in the 5
+  minutes after.
+- **The saliva** comes half way to stimulated saliva at that flow: the
+  mouth's carbonate rises from 5.0 to 10.0 mM.
+- **The books** close to 5.0e-16 for the box and 1.8e-16 for the box and the
+  mouth together.
+
+The criterion set before Stage S2 was built, as a slow test on S1's rinse
+with 1 mL per minute of chewing:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| P7 | Sugar-free gum chewed after a rinse of 10% sucrose brings the plaque's pH back sooner (Dibdin, Dawes and Macpherson 1995) | the direction | Chewed from minute 2, the fall stops at pH 5.64 at 2.4 minutes, and the plaque is back above 6 at 3.9 minutes. Chewed from minute 10, it is back above 6 at 13.7 minutes. The rinse alone: 4.87 at 15.6 minutes, back at 42.9. |
+
+The size of the effect rests on mixing the film once a second while gum is
+chewed, as for any intake, which is confidence C.
+
 ## Running the suite
 
 `python -m pytest` runs the pull-request suite, which leaves out tests marked

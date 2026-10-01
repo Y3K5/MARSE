@@ -479,6 +479,43 @@ results for the same manifest is always called out.
     A domain without a plaque runs as before. See docs/validation.md,
     "Plaque that spreads".
 
+- **Oxygen from the air, chewing, and a film that rides on the plaque: Stage
+  S, increment S2, part two** (`marse.spatial.air`, `marse.oral`,
+  [docs/networks.md](docs/networks.md#oxygen-and-the-air)). The equations are
+  in docs/theory.md §4.8 to §4.10.
+  - **The air.** A domain's `air` opens the top face of the box to the gases
+    it lists, each held at its stated saturation there, and to nothing else.
+    Each gas crosses the half voxel below the face as two processes in the
+    top layer, so the limiter and both ledgers count it like any other
+    exchange.
+    - Under a film, the face is the film's surface, and the air holds the
+      mouth's saliva at saturation too: a film 0.1 mm deep comes to
+      equilibrium with the air within seconds.
+    - Without a film, the box borders the air instead of a bulk liquid, as a
+      colony biofilm does.
+    - Carbon dioxide stays with its carbonate total, closed, so the buffer
+      calibrated in Stage S1 is unchanged.
+  - **Chewing.** A food may be `chewing`, as gum or a meal is. While it lasts,
+    the mouth's `chewing_flow_ml_per_min` adds to the flow, and the saliva
+    secreted moves towards stimulated saliva (Dawes and Macpherson 1992).
+  - **The film rides on the plaque.** Over a plaque that spreads, the film is
+    renewed from the plaque's surface up, wherever that is after growth or a
+    brushing, and food left on the teeth lands in the film above it. On a
+    plaque as high as the film's underside, the film is S1's, bit for bit.
+  - **A flag field kind** reads true or false.
+  - **Verified:**
+    - P5: oxygen filling a slab from the air follows the series solution to
+      5.5e-5 of saturation, at second order in the voxel;
+    - P5: under zero-order uptake, it falls to 1% of saturation 135.3 µm in,
+      against 135.0;
+    - with oxygen under the mouth, both ledgers close to 9.5e-16;
+    - P7: sugar-free gum chewed from minute 2 after a sucrose rinse stops the
+      fall at pH 5.64 and brings the plaque back above 6 at 3.9 minutes,
+      against 42.9 without it.
+
+    Every example and oral scene keeps its final state, bit for bit. See
+    docs/validation.md, "Oxygen from the air" and "Chewing".
+
 - **Ecosystem runs are reproducible.** `marse ecosystem` writes a
   `manifest.json` beside its frames and viewer, and `marse replay` reproduces
   the run exactly, as it already did for batch and biofilm runs. The manifest
@@ -630,6 +667,8 @@ results for the same manifest is always called out.
 
 ### Fixed
 
+- **Four formulas in docs/theory.md §4.9 render again.** Their `\text`
+  macros had lost the backslash to a tab character.
 - **The mouth's books close to rounding on long runs.** Each span under the
   mouth was integrated on the run's clock, so a step of a few seconds was the
   difference of two times hours into the run, which loses digits in
