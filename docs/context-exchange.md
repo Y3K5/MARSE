@@ -1,8 +1,8 @@
 # Evidence context exchange, version 1
 
-`marse.context.validate_context_exchange` checks metadata before a viewer or an
-external consumer joins it to a run. It is a standalone contract, not a scientific
-provider or a format already consumed by MARSE's simulation loop.
+`marse.evidence.context.validate_context_exchange` checks metadata before a viewer
+or an external consumer joins it to a run. It is a standalone contract, not a
+scientific provider or a format already consumed by MARSE's simulation loop.
 
 The schema identifier is `marse.context-exchange/1`. Its collections are `evidence`,
 `contexts`, `organisms`, `parameters` and `relationships`. The synthetic example is
@@ -53,7 +53,7 @@ transforms are not implemented. Density fields do not establish cell contacts.
 import json
 from pathlib import Path
 
-from marse.context import validate_context_exchange
+from marse.evidence.context import validate_context_exchange
 
 document = json.loads(Path("examples/context_exchange/synthetic.json").read_text())
 summary = validate_context_exchange(document)

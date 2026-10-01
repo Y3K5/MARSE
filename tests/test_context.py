@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from marse.context import ContextError, validate_context_exchange
+from marse.evidence.context import ContextError, validate_context_exchange
 
 ROOT = Path(__file__).resolve().parents[1]
 

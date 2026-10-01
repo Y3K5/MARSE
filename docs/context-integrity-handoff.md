@@ -56,11 +56,20 @@ Molecular-coordinate import, mediator mapping, structural-tool integration and n
 access assessment remain unimplemented. This contract makes those omissions visible
 without replacing them with plausible-looking coordinates or neutral scores.
 
-## Verification at handoff
+## Verification
 
-Checked with Python 3.14: the full suite passed 364 tests, including 40 new context
-contract tests. The optional Node reference passed its synthetic stress, invariance,
-conservation and refinement checks. The pinned pre-commit checks passed, including
-formatting, secrets, repository structure, file privacy and commit identity. The
-selected contribution files were also screened for private workspace references;
-none were found. These checks do not establish biological calibration or validation.
+At handoff, on the branch's first base (main at 248c44e), the full suite passed 364
+tests with Python 3.14, including the 40 context contract tests. The optional Node
+reference passed its synthetic stress, invariance, conservation and refinement checks.
+The pinned pre-commit checks passed, including formatting, secrets, repository
+structure, file privacy and commit identity. The selected contribution files were also
+screened for private workspace references; none were found.
+
+After main was merged in (stages 0 to S1) and the validator moved to
+`marse.evidence.context`, the full suite passed on Python 3.12 and 3.14: 860 tests,
+with 11 expected failures for the known defects of `docs/validation.md`. A slow test
+runs the Node reference, about 35 s with Node 22, and checks that the hashes it reports
+are the ones the synthetic example binds
+(`python -m pytest -m slow tests/test_examples.py`). Every pre-commit hook and the
+repository guard passed on all files. These checks do not establish biological
+calibration or validation.

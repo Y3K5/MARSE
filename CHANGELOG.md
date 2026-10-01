@@ -439,7 +439,8 @@ results for the same manifest is always called out.
     See docs/validation.md, "The Stephan curve".
 
 - **An evidence context exchange, checked before it is joined to a run**
-  (`marse.context`, [docs/context-exchange.md](docs/context-exchange.md)).
+  (`marse.evidence.context`,
+  [docs/context-exchange.md](docs/context-exchange.md)).
   `validate_context_exchange` checks a metadata document of evidence,
   contexts, organisms, parameters and relationships: stable IDs, five
   independent statuses, host, site and compartment scope, units, typed SHA-256
