@@ -1,0 +1,394 @@
+{
+  "schema_version": 2,
+  "experiment_id": "oxygen-profile",
+  "description": "Oxygen in thick plaque (von Ohle et al. 2010): a column of 400 um of plaque under 100 um of salivary film, at the air. For half an hour the plaque lives on saliva, and oxygen reaches about 220 um into it; then a rinse of 10 mL of 10% sucrose is held for a minute, and as the plaque respires the sugar, oxygen reaches only about 150 um. Otherwise the network and the mouth of the Stephan curve scene (stephan_rinse.json), whose description gives their sources. The film's surface is at the air, which holds oxygen at 0.21 mM, its solubility at 37 C (Benson and Krause 1984), and the mouth's saliva at saturation too. Saliva carries glycoproteins: its mucins MG1 and MG2 come to about 0.37 g per L (Payment et al. 2000), 68 to 78% carbohydrate (Levine et al. 1987), about 1.5 mM as hexose, of which the scenes take 1 mM as available. The plaque grows on it where oxygen reaches, at up to 0.06 per h with a yield of 3 C-mol per hexose, respires a little of it for maintenance, at 0.0015 per h, and respires sugar too, at 0.0035 per h; growth on sugar, at up to 0.3 per h, makes lactic acid as it does. New biomass brings its share of the carboxyl groups that buffer it, and packs the column from the substratum up. Oxygen diffuses at 1.13e-9 m2 per s, 0.43 of its rate in water at 37 C, the mean for small solutes in biofilms (Stewart 1998). The three respiration rates are calibrated (confidence C) so that oxygen reaches as deep into thick plaque as von Ohle et al. (2010) measured. docs/parameters.md grades every value.",
+  "pkw": 13.6,
+  "components": [
+    {
+      "name": "sugar",
+      "phase": "dissolved",
+      "formula": "C6H12O6"
+    },
+    {
+      "name": "lactate",
+      "phase": "dissolved",
+      "formula": "C3H6O3",
+      "acid_base": {
+        "pka": [
+          3.86
+        ]
+      }
+    },
+    {
+      "name": "carbonate",
+      "phase": "dissolved",
+      "formula": "H2CO3",
+      "acid_base": {
+        "pka": [
+          6.1,
+          10.0
+        ]
+      }
+    },
+    {
+      "name": "phosphate",
+      "phase": "dissolved",
+      "formula": "H3PO4",
+      "acid_base": {
+        "pka": [
+          2.1,
+          7.2,
+          12.3
+        ]
+      }
+    },
+    {
+      "name": "ammonium",
+      "phase": "dissolved",
+      "formula": "NH4",
+      "charge": 1,
+      "acid_base": {
+        "pka": [
+          9.25
+        ]
+      }
+    },
+    {
+      "name": "sodium",
+      "phase": "dissolved",
+      "formula": "Na",
+      "charge": 1
+    },
+    {
+      "name": "potassium",
+      "phase": "dissolved",
+      "formula": "K",
+      "charge": 1
+    },
+    {
+      "name": "chloride",
+      "phase": "dissolved",
+      "formula": "Cl",
+      "charge": -1
+    },
+    {
+      "name": "carboxyl_groups",
+      "phase": "particulate",
+      "formula": "CH2O2",
+      "acid_base": {
+        "pka": [
+          4.8
+        ]
+      }
+    },
+    {
+      "name": "bound_potassium",
+      "phase": "particulate",
+      "formula": "K",
+      "charge": 1
+    },
+    {
+      "name": "bacteria",
+      "phase": "particulate",
+      "formula": "CH1.8O0.5N0.2"
+    },
+    {
+      "name": "oxygen",
+      "phase": "dissolved",
+      "formula": "O2"
+    },
+    {
+      "name": "saliva_glycan",
+      "phase": "dissolved",
+      "formula": "C6H12O6"
+    }
+  ],
+  "processes": [
+    {
+      "name": "fermentation",
+      "kind": "reaction",
+      "stoichiometry_mol_per_mol": {
+        "sugar": -1,
+        "lactate": 2
+      },
+      "rate": {
+        "maximum_per_h": 0.5,
+        "proportional_to": "bacteria",
+        "factors": [
+          {
+            "component": "sugar",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 1
+          },
+          {
+            "form": "ph",
+            "ph_min": 4,
+            "ph_optimum": 7,
+            "ph_max": 9
+          }
+        ]
+      }
+    },
+    {
+      "name": "counter_ions_binding",
+      "kind": "reaction",
+      "stoichiometry_mol_per_mol": {
+        "potassium": -1,
+        "bound_potassium": 1
+      },
+      "rate": {
+        "maximum_per_h": 3600,
+        "proportional_to": "carboxyl_groups",
+        "factors": [
+          {
+            "component": "carboxyl_groups",
+            "form": "dissociated"
+          }
+        ],
+        "assumed_in_excess": [
+          "potassium"
+        ]
+      }
+    },
+    {
+      "name": "counter_ions_release",
+      "kind": "reaction",
+      "stoichiometry_mol_per_mol": {
+        "bound_potassium": -1,
+        "potassium": 1
+      },
+      "rate": {
+        "maximum_per_h": 3600,
+        "proportional_to": "bound_potassium"
+      }
+    },
+    {
+      "name": "growth",
+      "kind": "growth",
+      "biomass": "bacteria",
+      "substrate": "sugar",
+      "yield_mol_per_mol": 0.8,
+      "products_mol_per_mol": {
+        "carboxyl_groups": 0.16000000000000003
+      },
+      "balanced_by": [
+        "lactate",
+        "carbonate",
+        "ammonium"
+      ],
+      "rate": {
+        "maximum_per_h": 0.3,
+        "factors": [
+          {
+            "component": "sugar",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 1
+          },
+          {
+            "form": "ph",
+            "ph_min": 5.0,
+            "ph_optimum": 7.0,
+            "ph_max": 8.5
+          }
+        ],
+        "assumed_in_excess": [
+          "ammonium",
+          "carbonate"
+        ]
+      }
+    },
+    {
+      "name": "respiration",
+      "kind": "reaction",
+      "stoichiometry_mol_per_mol": {
+        "sugar": -1,
+        "oxygen": -6,
+        "carbonate": 6
+      },
+      "rate": {
+        "maximum_per_h": 0.0035,
+        "proportional_to": "bacteria",
+        "factors": [
+          {
+            "component": "sugar",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 1
+          },
+          {
+            "component": "oxygen",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.005
+          }
+        ]
+      }
+    },
+    {
+      "name": "basal_respiration",
+      "kind": "reaction",
+      "stoichiometry_mol_per_mol": {
+        "saliva_glycan": -1,
+        "oxygen": -6,
+        "carbonate": 6
+      },
+      "rate": {
+        "maximum_per_h": 0.0015,
+        "proportional_to": "bacteria",
+        "factors": [
+          {
+            "component": "saliva_glycan",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.5
+          },
+          {
+            "component": "oxygen",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.005
+          }
+        ]
+      }
+    },
+    {
+      "name": "growth_on_saliva",
+      "kind": "growth",
+      "biomass": "bacteria",
+      "substrate": "saliva_glycan",
+      "yield_mol_per_mol": 3.0,
+      "products_mol_per_mol": {
+        "carboxyl_groups": 0.6000000000000001
+      },
+      "balanced_by": [
+        "oxygen",
+        "carbonate",
+        "ammonium"
+      ],
+      "rate": {
+        "maximum_per_h": 0.06,
+        "factors": [
+          {
+            "component": "saliva_glycan",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.5
+          },
+          {
+            "component": "oxygen",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 0.005
+          }
+        ],
+        "assumed_in_excess": [
+          "ammonium"
+        ]
+      }
+    }
+  ],
+  "initial_mol_per_m3": {
+    "carbonate": 5.3,
+    "phosphate": 4.5,
+    "ammonium": 2.0,
+    "sodium": 5.0,
+    "potassium": 22.0,
+    "chloride": 18.79,
+    "oxygen": 0.21,
+    "saliva_glycan": 1.0
+  },
+  "duration_h": 1.25,
+  "timestep_h": 0.016666666667,
+  "relative_tolerance": 0.001,
+  "absolute_tolerance_mol_per_m3": 1e-06,
+  "seed": 1,
+  "domain": {
+    "voxels": [
+      200
+    ],
+    "voxel_um": 2.5,
+    "diffusivity_m2_per_s": {
+      "sugar": 2.3e-10,
+      "lactate": 7e-10,
+      "carbonate": 7e-10,
+      "phosphate": 7e-10,
+      "ammonium": 7e-10,
+      "sodium": 7e-10,
+      "potassium": 7e-10,
+      "chloride": 7e-10,
+      "oxygen": 1.13e-09,
+      "saliva_glycan": 2.3e-10
+    },
+    "colonies": [
+      {
+        "component": "bacteria",
+        "center_um": [],
+        "radius_um": 400.0,
+        "concentration_mol_per_m3": 800.0
+      },
+      {
+        "component": "carboxyl_groups",
+        "center_um": [],
+        "radius_um": 400.0,
+        "concentration_mol_per_m3": 160.0
+      },
+      {
+        "component": "bound_potassium",
+        "center_um": [],
+        "radius_um": 400.0,
+        "concentration_mol_per_m3": 158.4158
+      }
+    ],
+    "film": {
+      "thickness_um": 100,
+      "velocity_mm_per_min": 6,
+      "plaque_length_mm": 6
+    },
+    "mouth": {
+      "saliva_mol_per_m3": {
+        "carbonate": 5.3,
+        "phosphate": 4.5,
+        "ammonium": 2.0,
+        "sodium": 5.0,
+        "potassium": 22.0,
+        "chloride": 18.79,
+        "saliva_glycan": 1.0
+      },
+      "stimulated_saliva_mol_per_m3": {
+        "carbonate": 10.5,
+        "phosphate": 3.8,
+        "ammonium": 2.0,
+        "sodium": 25.0,
+        "potassium": 20.0,
+        "chloride": 31.5381,
+        "saliva_glycan": 1.0
+      },
+      "resting_volume_ml": 0.77,
+      "swallow_volume_ml": 1.07,
+      "unstimulated_flow_ml_per_min": 0.3,
+      "stimulated_flow_ml_per_min": 2.0,
+      "stimulus": "sugar",
+      "stimulus_half_mol_per_m3": 50,
+      "plaque_area_cm2": 2
+    },
+    "diet": [
+      {
+        "kind": "rinse",
+        "start_h": 0.5,
+        "duration_min": 1,
+        "volume_ml": 10,
+        "composition_mol_per_m3": {
+          "sugar": 584
+        }
+      }
+    ],
+    "air": {
+      "saturation_mol_per_m3": {
+        "oxygen": 0.21
+      }
+    },
+    "plaque": {
+      "packing_mol_per_m3": {
+        "bacteria": 800.0
+      },
+      "carried": [
+        "carboxyl_groups",
+        "bound_potassium"
+      ]
+    }
+  }
+}

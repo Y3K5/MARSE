@@ -13,13 +13,13 @@ import pytest
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
 
-def run_example(name: str) -> str:
+def run_example(name: str, timeout: float = 300) -> str:
     result = subprocess.run(
         [sys.executable, str(EXAMPLES / name)],
         capture_output=True,
         text=True,
         check=True,
-        timeout=300,
+        timeout=timeout,
     )
     assert result.stderr == ""
     return result.stdout
@@ -41,6 +41,13 @@ def test_example_runs_cleanly(name):
 @pytest.mark.slow
 def test_the_stephan_curve_example_passes_its_own_checks():
     out = run_example("stephan_curve.py")
+    assert out.count("pass  ") == 7
+    assert "FAIL" not in out
+
+
+@pytest.mark.slow
+def test_the_plaque_day_example_passes_its_own_checks():
+    out = run_example("plaque_day.py", timeout=900)
     assert out.count("pass  ") == 7
     assert "FAIL" not in out
 

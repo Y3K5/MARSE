@@ -696,6 +696,44 @@ with 1 mL per minute of chewing:
 The size of the effect rests on mixing the film once a second while gum is
 chewed, as for any intake, which is confidence C.
 
+## A day of plaque
+
+The two scenes Stage S2 added to `examples/environments/oral`
+([environments.md](environments.md#a-day-of-plaque)): oxygen in 400 µm of
+plaque before and after a rinse of 10% sucrose, and a day of meals, sweets,
+gum, two brushings, wear and the air. The last criteria set before Stage S2
+was built, in `tests/test_plaque_scenes.py`, as slow tests:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| P6 | Under saliva, plaque is anoxic below about 220 µm; after sucrose, oxygen reaches less far, about 150 µm (von Ohle et al. 2010) | 200 to 250 µm; shallower after sucrose | 216 µm under saliva; 151 µm, 9 minutes after the sucrose; back to 216 µm 45 minutes later |
+| P1 | The box, and the box and the mouth together, conserve every element over a day with growth, packing, wear, brushing, chewing and the air | 1e-12 | 9.8e-15 for the box; 4.6e-16 for the box and the mouth |
+| P8 | The cost of that day in a column of 100 voxels | set from S1's rate, 152 s a day | 130 s: 3,000 steps, 2,156 swallows |
+
+**What calibration took.** In the prototype, the plaque respired its own
+biomass between meals. Over a day that thinned it from 150 to 33 µm, since it
+grew only on meals. In MARSE it lives on saliva instead. Saliva's mucins carry
+about 1.5 mM of hexose (Payment et al. 2000; Levine et al. 1987), of which the
+scenes take 1 mM as available. Where oxygen reaches, the plaque grows on it
+with a yield of 3 C-mol per hexose, and respires a little of it for
+maintenance. Three rates were calibrated to P6, all confidence C
+([parameters.md §8](parameters.md#8-saliva-plaque-and-diet)): growth on
+saliva at up to 0.06 per hour, maintenance at 0.0015 per hour, and
+respiration of sugar at 0.0035 per hour. Against them, the wear of 0.5 µm per
+hour was chosen so that the day returns the plaque within 5% of where it
+started, 62.8 µm against 60.
+
+Other checks:
+
+- **Each brushing** takes 42% of the plaque. The record five minutes after
+  07:45 finds it 41.9% thinner, having grown back a little since.
+- **The plaque grows back** between the brushings, from 39.5 to 84.3 µm, on
+  its meals and on saliva.
+- **Replay** is the same on 1 and on 4 threads, for both scenes. The day's
+  first hour, with breakfast and a brushing, is a slow test.
+- **The example** `python examples/plaque_day.py` runs both scenes and checks
+  P6, the brushings, the regrowth and P1 itself, in about three minutes.
+
 ## Running the suite
 
 `python -m pytest` runs the pull-request suite, which leaves out tests marked

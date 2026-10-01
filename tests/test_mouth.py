@@ -604,7 +604,7 @@ def test_chewing_is_written_back_as_read_and_described(tmp_path, capsys):
     assert main(["check", str(path)]) == 0
     out = " ".join(capsys.readouterr().out.split())
     assert "1 more while chewing" in out
-    assert "food at 0 min for 10 min: releases nothing mmol, chewed" in out
+    assert "food at 0 min for 10 min: releases nothing, chewed" in out
 
 
 @pytest.mark.slow

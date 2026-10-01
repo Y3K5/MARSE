@@ -516,6 +516,30 @@ results for the same manifest is always called out.
     Every example and oral scene keeps its final state, bit for bit. See
     docs/validation.md, "Oxygen from the air" and "Chewing".
 
+- **A day of plaque: Stage S, increment S2, part three**
+  (`examples/environments/oral`, `examples/plaque_day.py`,
+  [docs/environments.md](docs/environments.md#a-day-of-plaque)). Two scenes
+  use all of Stage S2, on a network that extends the Stephan curve's. Oxygen
+  comes from the air. Saliva's glycoproteins, about 1 mM of hexose, feed the
+  plaque between meals: it grows on them where oxygen reaches, and respires
+  a little of them and of sugar.
+  - **`oxygen_profile.json`**: 400 µm of plaque under saliva, then a sucrose
+    rinse. Three respiration rates are calibrated (confidence C) so that
+    oxygen reaches as deep as von Ohle et al. (2010) measured: anoxic below
+    216 µm under saliva (about 220), and below 151 µm 9 minutes after the
+    sucrose (about 150).
+  - **`plaque_day.json`**: a day from 07:00 with three meals, chewed, two
+    sweets, sugar-free gum, brushing at 07:45 and 22:00, and wear. The plaque
+    goes from 60 µm, to 40 after the morning brushing, to 84 by 22:00, and
+    back to 63 by the next morning. Both ledgers close to 9.8e-15 over the
+    day, and the day runs in about 130 s.
+  - **`python examples/plaque_day.py`** runs both scenes and checks P6, the
+    brushings, the regrowth and the ledgers itself.
+
+  The prototype's plaque respired its own biomass between meals, which thinned
+  it from 150 to 33 µm in a day. The scenes feed it on saliva instead. See
+  docs/validation.md, "A day of plaque", and docs/parameters.md §8.3.
+
 - **Ecosystem runs are reproducible.** `marse ecosystem` writes a
   `manifest.json` beside its frames and viewer, and `marse replay` reproduces
   the run exactly, as it already did for batch and biofilm runs. The manifest

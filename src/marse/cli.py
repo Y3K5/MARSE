@@ -716,7 +716,7 @@ def _report_mouth(config: ReactiveTransportConfig) -> None:
         if intake.kind == "food":
             released = intake.released_mmol or {}
             what = ", ".join(f"{n} {v:g}" for n, v in released.items() if v)
-            brings = f"releases {what or 'nothing'} mmol"
+            brings = f"releases {what} mmol" if what else "releases nothing"
             if intake.chewing:
                 brings += ", chewed"
         else:
@@ -748,7 +748,7 @@ def _report_air(config: ReactiveTransportConfig) -> None:
     seconds = ", ".join(
         f"{names[j]} {3600.0 / k:.3g} s" for j, k in zip(air.gases, air.rate_per_h, strict=True)
     )
-    print(f"              the top voxel comes to it in about: {seconds}")
+    print(f"              the top voxel follows it within: {seconds}")
     if config.domain.mouth is not None:
         print("              it holds the mouth's saliva at saturation too")
 

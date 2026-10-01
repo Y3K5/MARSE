@@ -88,11 +88,14 @@ A tooth's plaque can also stand under the mouth itself: a film of saliva that
 the mouth renews as it secretes and swallows, a pH set by the charges of every
 acid, base and ion, and a diet of rinses, drinks and foods. Three oral scenes
 give plaque the same sugar as a rinse, sipped over 20 minutes, or with food
-left on the teeth, and show which keeps it acid for longest:
+left on the teeth, and show which keeps it acid for longest. Two more give the
+plaque room to grow, a brush, chewing and oxygen from the air: one follows how
+far oxygen reaches into thick plaque, and one a day of meals and brushing:
 
 ```bash
 marse run examples/environments/oral/stephan_rinse.json -o runs/stephan   # a Stephan curve, about 10 s
 python examples/stephan_curve.py      # the three diets side by side, under a minute
+python examples/plaque_day.py         # oxygen in plaque, and a day of plaque, about 3 minutes
 ```
 
 The manifest records the configuration, its SHA-256 checksum, the random seed,
