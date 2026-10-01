@@ -1821,6 +1821,13 @@ therefore solved with the box, in the same implicit steps.
   volume, and $H(t)$ is the cubic Hermite polynomial through the samples. A
   swallow ends a span. What was secreted over a step is
   $c_{\text{secreted}}\,[H(t+h) - H(t)]$, so it adds up exactly over a span.
+- **A span's own clock.** Each span counts its time from zero. On the run's
+  clock, a step of a few seconds taken $t$ hours into a run is the difference
+  of two large times, which loses about $\varepsilon\, t/h$ of the step, so
+  what the steps add and what the span books drift apart in proportion to
+  the time: by $4 \times 10^{-13}$ of the sugar after six hours of meals, and
+  more every day. With the span's clock, the box and the mouth balance to
+  $3 \times 10^{-16}$ over the same six hours.
 - **The flow's lag.** The flow over a span depends on the stimulus in the
   pool, which the box changes as the span goes. The run-ahead expects the box
   to go on giving the stimulus back at the rate it did over the span before.

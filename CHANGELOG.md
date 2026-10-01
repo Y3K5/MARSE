@@ -589,6 +589,16 @@ results for the same manifest is always called out.
 
 ### Fixed
 
+- **The mouth's books close to rounding on long runs.** Each span under the
+  mouth was integrated on the run's clock, so a step of a few seconds was the
+  difference of two times hours into the run, which loses digits in
+  proportion to the time. What the steps added and what the span booked
+  drifted apart: over six hours of meals, the box and the mouth together
+  balanced to only 4e-13 of the sugar eaten, and a day or a year would have
+  drifted further. Each span now keeps its own clock, from zero, and the
+  same six hours balance to 3e-16. **Results changed**, in their last digits:
+  the three oral scenes give the same Stephan curves to six figures, with new
+  final digests. Found while building Stage S2's day-long scenes.
 - **Runs in space now replay bit for bit on any number of threads.** They used
   to differ in their last digits between machines with different numbers of
   cores. The coarsest multigrid level was inverted by LAPACK, and OpenBLAS

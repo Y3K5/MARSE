@@ -601,7 +601,11 @@ def _run_with_mouth(
             if span > 0:
                 growth = stretch.volumes_m3[-1] - stretch.volumes_m3[0]
                 saliva = growth / stretch.seconds - inflow.liquid_m3_per_s
-                engine.path = _path(fluid, now, stretch, fluid.secreted(saliva), inflow)
+                # The span keeps its own clock, from zero. On the run's clock, a step of
+                # seconds an hour or a day in would be the difference of two large times,
+                # which loses digits in proportion to the time: enough, over a day of
+                # meals, to leave 4e-13 of the sugar eaten unaccounted for.
+                engine.path = _path(fluid, 0.0, stretch, fluid.secreted(saliva), inflow)
                 y, entered, stats = engine.integrate(
                     y,
                     span,
@@ -609,7 +613,7 @@ def _run_with_mouth(
                     relative_tolerance=config.relative_tolerance,
                     absolute_tolerance=config.absolute_tolerances(),
                     peak=peak,
-                    start_h=now,
+                    start_h=0.0,
                 )
                 substep = stats.next_step
                 accepted += stats.accepted
@@ -623,8 +627,8 @@ def _run_with_mouth(
                 if fluid.stimulus is not None:
                     given = entered[fluid.stimulus] * areal * fluid.area_m2  # mol, into the box
                     returned = -given / (span * 3600.0)
-                added = engine.path.added(now, end) * 1e-6  # mol/m2
-                taken = engine.path.taken(now, end) * 1e-6
+                added = engine.path.added(0.0, span) * 1e-6  # mol/m2
+                taken = engine.path.taken(0.0, span) * 1e-6
                 secreted += added - taken
                 eaten += taken
                 whole.exchange(added)
