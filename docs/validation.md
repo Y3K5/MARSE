@@ -600,6 +600,47 @@ its lowest pH, so a thicker plaque need not fall further; the test asks only
 that it stays acid longer. `python examples/stephan_curve.py` runs the first
 three and checks G5 and the first two directions (44 s).
 
+## Plaque that spreads
+
+Plaque in a column spreads up it as it grows, is worn at its surface and
+detached above a maximum height, and is brushed off
+([theory.md §6.1](theory.md#61-biomass-balance) and
+[§6.3](theory.md#63-detachment)). The criteria set before Stage S2 was built,
+in `tests/test_spreading.py`:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| P2 | After every packing, no voxel is filled past full, and the front is sharp: full voxels, then at most one partly filled. Checked on 500 random columns, against the remap done voxel by voxel | rounding | at most 4.7e-15 past full; at most one partly filled voxel |
+| P3 | A film growing at 0.1 per hour and worn at 4 µm per hour, from 20 µm and from 60 µm, follows L(t) = u/μ + (L₀ − u/μ) e^{μt} (Wanner and Gujer 1986) | 1% | 9.7e-7 and 3.1e-8 |
+| P4 | Under the mouth, a brushing 15 minutes into a half hour takes 42% of 150 µm of plaque off from the surface down, and the mouth expels it | rounding | 87.000000000 µm left; what was removed within 1.1e-16 of 42% |
+| P1, in part | The box and the mouth together conserve every quantity over that half hour, counting what was brushed off and expelled | 1e-12 | 1.9e-16; the box alone 5.1e-16 |
+
+The half hour takes 1.1 s: 30 swallows. P1 in full, with oxygen and chewing,
+comes with them.
+
+Other checks:
+
+- **Wear alone** takes the surface off at its velocity, to 1.4e-14 µm, and
+  books all of it as detached, with the buffer's groups it carried.
+- **Growth past the maximum height** is detached. Over six hours, 1.0e-3 more
+  was detached than in the continuous solution, the first-order error of
+  cutting after each step (theory.md §6.1).
+- **The splitting of wear** matters. With half the wear before each step and
+  half after, P3's error follows the integrator's tolerance. With all of it
+  after, the error is 3.6e-3 at the same tolerance (theory.md §6.3).
+- **Carried components**, such as the buffer's groups, move with the solid
+  and are never lost. Where a voxel holds no solid, they stay.
+- **Food left on the teeth** loses the same share to a brushing as the
+  plaque, to 1e-12, and the mouth expels it. A plaque that lists that food
+  as part of itself is refused.
+- **A plaque that grows nothing** stays packed where it was, so S1's rinse
+  runs as before, within 1e-12.
+- **The books** close to rounding in every case: every ledger to 1.2e-15 or
+  better.
+- **Replay** reproduces a run whose plaque spreads exactly. `marse check`
+  describes the plaque and its cleanings, and every impossible plaque or
+  cleaning is refused with the reason.
+
 ## Running the suite
 
 `python -m pytest` runs the pull-request suite, which leaves out tests marked

@@ -1201,9 +1201,49 @@ advective velocity $\mathbf{u}$ is determined by a constraint — that local
 biomass density cannot exceed a maximum packing — rather than by a
 constitutive law. The three standard resolutions are continuum displacement
 (Wanner & Gujer), discrete cellular-automaton shoving (Picioreanu et al.), and
-individual-based mechanical relaxation (Kreft et al.). Phase 0 has not fixed
-this choice; it is the main open question in
-[`docs/specification.md`](specification.md).
+individual-based mechanical relaxation (Kreft et al.). In two and three
+dimensions they mix lineages differently and so change conclusions; that
+choice is the main open question in [`docs/specification.md`](specification.md)
+and belongs to Stage 2d.
+
+**In a column** the constraint fixes the answer. Each component $q$ that takes
+space has a packing concentration $P_q$, at which it alone would fill the
+volume, and the solid fraction is $\phi = \sum_q X_q / P_q$. With the plaque
+packed, $\phi = 1$, the velocity at height $z$ is the growth of solid below
+it (Wanner & Gujer 1986):
+
+$$
+u(z) = \int_0^{z} \sum_q \frac{r_q(z')}{P_q}\,dz',
+$$
+
+and every particulate component that moves with the solid is carried at $u$.
+On a grid of voxels MARSE applies this after every step of the integration
+(`marse.biofilm.spreading`, recorded as `displacement_1d_v1`): the solid of voxel $k$ occupies the cumulative
+volume between $V_{k-1}$ and $V_k = \sum_{i \le k} \phi_i$, in voxels, and
+new voxel $j$ takes whatever lies between $j$ and $j + 1$, each component in
+the proportions of the voxel it came from. Each component's amount below a
+given volume is a non-decreasing, piecewise-linear function of that volume,
+and the new voxels hold its differences, so nothing goes negative and
+everything is accounted for. The front is sharp: full voxels, then at most
+one partly filled. Where growth slows below a voxel's capacity, the column
+settles.
+
+- **Detachment at a maximum height.** Solid pushed above the plaque's
+  maximum height $L_{\max}$ leaves the column: in the mouth, the film's flow
+  carries it off, and the mouth swallows it.
+- **Accuracy.** Solid grows for a step before it is packed, so what passes
+  $L_{\max}$ is cut a step late, a first-order error that shrinks with the
+  step. A film of $L_0 = 40$ µm growing at $\mu = 0.2$ h⁻¹ under a maximum of
+  60 µm detached $1.0 \times 10^{-3}$ more than the continuous solution over
+  six hours.
+- **The closed form.** A film growing at a constant specific rate $\mu$ and
+  worn at a constant velocity $u_w$ (§6.3) thickens as
+  $dL/dt = \mu L - u_w$, so
+  $L(t) = u_w/\mu + (L_0 - u_w/\mu)\,e^{\mu t}$. The fixed point
+  $u_w/\mu$ is unstable: below it the film wears away, above it the film
+  grows. MARSE follows this as closely as the integrator's tolerance asks:
+  within $9.7 \times 10^{-7}$ at a relative tolerance of $10^{-6}$
+  ([validation](validation.md#plaque-that-spreads)).
 
 ### 6.2 Colony radial expansion
 
@@ -1238,6 +1278,31 @@ which produces a steady-state thickness when balanced against growth. MARSE
 treats the exponent as a declared model choice, because the resulting
 steady-state thickness is sensitive to it and it is poorly constrained by
 data.
+
+**Wear.** In the mouth, the tongue and cheeks rub the surface of plaque.
+MARSE's first closure is the simplest: a constant wear velocity $u_w$, which
+takes $u_w\,\Delta t$ of solid off the top of the column over a step. Half
+comes off before the step and half after (Strang splitting), which keeps the
+step second order. The integrator's error control cannot see a splitting
+error, so this matters. A film of 20 µm against the closed form of §6.1:
+
+| Relative tolerance | Half the wear before the step, half after | All of it after |
+|---|---|---|
+| $10^{-5}$ | $9.7 \times 10^{-6}$ | $1.1 \times 10^{-2}$ |
+| $10^{-6}$ | $9.7 \times 10^{-7}$ | $3.6 \times 10^{-3}$ |
+| $10^{-7}$ | $9.9 \times 10^{-8}$ | $1.2 \times 10^{-3}$ |
+
+With growth limited by what diffuses in, the surface grows more slowly as
+plaque thickens, so a constant wear velocity gives a stable thickness. With
+unlimited growth it cannot (§6.1).
+
+**Brushing and flossing** take a share $f$ of the plaque off from its surface
+down at a stated time. Over 59 papers and 212 brushing exercises, a brushing
+with a manual toothbrush removed 42% of plaque. Depending on the plaque index
+used, the figure runs from 30% to 53% (Slot et al. 2012). MARSE takes 0.42
+for a brushing unless told otherwise, and asks a flossing for its share.
+The same share of any food left on the teeth goes with it. In the mouth, what
+a cleaning takes is expelled, and both balances count it.
 
 ### 6.4 Attachment to surfaces
 
@@ -1987,12 +2052,13 @@ tabulated in [`docs/parameters.md`](parameters.md).
 51. Saad, Y. & Schultz, M.H. (1986) GMRES: a generalized minimal residual algorithm for solving nonsymmetric linear systems. *SIAM Journal on Scientific and Statistical Computing* **7**:856–869. [doi:10.1137/0907058](https://doi.org/10.1137/0907058)
 52. Shellis, R.P. & Dibdin, G.H. (1988) Analysis of the buffering systems in dental plaque. *Journal of Dental Research* **67**:438–446. [doi:10.1177/00220345880670020101](https://doi.org/10.1177/00220345880670020101)
 53. Shu, C.-W. & Osher, S. (1988) Efficient implementation of essentially non-oscillatory shock-capturing schemes. *Journal of Computational Physics* **77**:439–471. [doi:10.1016/0021-9991(88)90177-5](https://doi.org/10.1016/0021-9991(88)90177-5)
-54. Stephan, R.M. (1944) Intra-oral hydrogen-ion concentrations associated with dental caries activity. *Journal of Dental Research* **23**:257–266. [doi:10.1177/00220345440230040401](https://doi.org/10.1177/00220345440230040401)
-55. Stewart, P.S. (1998) A review of experimental measurements of effective diffusive permeabilities and effective diffusion coefficients in biofilms. *Biotechnology and Bioengineering* **59**:261–272. [doi:10.1002/(SICI)1097-0290(19980805)59:3<261::AID-BIT1>3.0.CO;2-9](https://doi.org/10.1002/(SICI)1097-0290(19980805)59:3%3C261::AID-BIT1%3E3.0.CO;2-9)
-56. Stewart, P.S. (2003) Diffusion in biofilms. *Journal of Bacteriology* **185**:1485–1491. [doi:10.1128/jb.185.5.1485-1491.2003](https://doi.org/10.1128/jb.185.5.1485-1491.2003)
-57. Stumm, W. & Morgan, J.J. (1996) *Aquatic Chemistry: Chemical Equilibria and Rates in Natural Waters*, 3rd edn. Wiley, New York. ISBN 978-0-471-51185-4.
-58. Walters, M.C., Roe, F., Bugnicourt, A., Franklin, M.J. & Stewart, P.S. (2003) Contributions of antibiotic penetration, oxygen limitation, and low metabolic activity to tolerance of *Pseudomonas aeruginosa* biofilms. *Antimicrobial Agents and Chemotherapy* **47**:317–323. [doi:10.1128/aac.47.1.317-323.2003](https://doi.org/10.1128/aac.47.1.317-323.2003)
-59. Wanner, O. & Gujer, W. (1986) A multispecies biofilm model. *Biotechnology and Bioengineering* **28**:314–328. [doi:10.1002/bit.260280304](https://doi.org/10.1002/bit.260280304)
-60. Werner, E., Roe, F., Bugnicourt, A. *et al.* (2004) Stratified growth in *Pseudomonas aeruginosa* biofilms. *Applied and Environmental Microbiology* **70**:6188–6196. [doi:10.1128/aem.70.10.6188-6196.2004](https://doi.org/10.1128/aem.70.10.6188-6196.2004)
-61. Zwietering, M.H., Jongenburger, I., Rombouts, F.M. & van 't Riet, K. (1990) Modeling of the bacterial growth curve. *Applied and Environmental Microbiology* **56**:1875–1881. [doi:10.1128/aem.56.6.1875-1881.1990](https://doi.org/10.1128/aem.56.6.1875-1881.1990)
-62. Zwietering, M.H., Wijtzes, T., de Wit, J.C. & van 't Riet, K. (1992) A decision support system for prediction of the microbial spoilage in foods. *Journal of Food Protection* **55**:973–979. [doi:10.4315/0362-028X-55.12.973](https://doi.org/10.4315/0362-028X-55.12.973)
+54. Slot, D.E., Wiggelinkhuizen, L., Rosema, N.A.M. & Van der Weijden, G.A. (2012) The efficacy of manual toothbrushes following a brushing exercise: a systematic review. *International Journal of Dental Hygiene* **10**:187–197. [doi:10.1111/j.1601-5037.2012.00557.x](https://doi.org/10.1111/j.1601-5037.2012.00557.x)
+55. Stephan, R.M. (1944) Intra-oral hydrogen-ion concentrations associated with dental caries activity. *Journal of Dental Research* **23**:257–266. [doi:10.1177/00220345440230040401](https://doi.org/10.1177/00220345440230040401)
+56. Stewart, P.S. (1998) A review of experimental measurements of effective diffusive permeabilities and effective diffusion coefficients in biofilms. *Biotechnology and Bioengineering* **59**:261–272. [doi:10.1002/(SICI)1097-0290(19980805)59:3<261::AID-BIT1>3.0.CO;2-9](https://doi.org/10.1002/(SICI)1097-0290(19980805)59:3%3C261::AID-BIT1%3E3.0.CO;2-9)
+57. Stewart, P.S. (2003) Diffusion in biofilms. *Journal of Bacteriology* **185**:1485–1491. [doi:10.1128/jb.185.5.1485-1491.2003](https://doi.org/10.1128/jb.185.5.1485-1491.2003)
+58. Stumm, W. & Morgan, J.J. (1996) *Aquatic Chemistry: Chemical Equilibria and Rates in Natural Waters*, 3rd edn. Wiley, New York. ISBN 978-0-471-51185-4.
+59. Walters, M.C., Roe, F., Bugnicourt, A., Franklin, M.J. & Stewart, P.S. (2003) Contributions of antibiotic penetration, oxygen limitation, and low metabolic activity to tolerance of *Pseudomonas aeruginosa* biofilms. *Antimicrobial Agents and Chemotherapy* **47**:317–323. [doi:10.1128/aac.47.1.317-323.2003](https://doi.org/10.1128/aac.47.1.317-323.2003)
+60. Wanner, O. & Gujer, W. (1986) A multispecies biofilm model. *Biotechnology and Bioengineering* **28**:314–328. [doi:10.1002/bit.260280304](https://doi.org/10.1002/bit.260280304)
+61. Werner, E., Roe, F., Bugnicourt, A. *et al.* (2004) Stratified growth in *Pseudomonas aeruginosa* biofilms. *Applied and Environmental Microbiology* **70**:6188–6196. [doi:10.1128/aem.70.10.6188-6196.2004](https://doi.org/10.1128/aem.70.10.6188-6196.2004)
+62. Zwietering, M.H., Jongenburger, I., Rombouts, F.M. & van 't Riet, K. (1990) Modeling of the bacterial growth curve. *Applied and Environmental Microbiology* **56**:1875–1881. [doi:10.1128/aem.56.6.1875-1881.1990](https://doi.org/10.1128/aem.56.6.1875-1881.1990)
+63. Zwietering, M.H., Wijtzes, T., de Wit, J.C. & van 't Riet, K. (1992) A decision support system for prediction of the microbial spoilage in foods. *Journal of Food Protection* **55**:973–979. [doi:10.4315/0362-028X-55.12.973](https://doi.org/10.4315/0362-028X-55.12.973)

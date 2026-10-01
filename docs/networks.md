@@ -404,6 +404,8 @@ chemistry in a single column in three seconds.
 | `film` | object | no | The top voxels are a salivary film, closed to the air and renewed from the mouth. [A salivary film and the mouth](#a-salivary-film-and-the-mouth): these two fields go together, and replace `bulk_mol_per_m3`. |
 | `mouth` | object | with `film` | The mouth's saliva: what is secreted, how much the mouth holds, and when it swallows. |
 | `diet` | list of intakes | no, with `mouth` | What is eaten and drunk: rinses, drinks and foods, each from a start for a duration. [The diet](#the-diet). |
+| `plaque` | object | no, in a column | Biomass that spreads as it grows, packing the column from the substratum up, wearing at its surface and detached above a maximum height. [Plaque that spreads](#plaque-that-spreads). |
+| `hygiene` | list of cleanings | no, with `plaque` and `mouth` | Brushings and flossings, each taking a share of the plaque off at its time. |
 
 `initial_mol_per_m3` fills every voxel. Each colony then sets its component to
 its concentration in the voxels whose centres lie inside it. A colony that
@@ -611,6 +613,58 @@ counts food placed in the film as entering the box.
 | `component` | component name | yes | A particulate component, such as the sugar held in food particles. A process of the network must consume it: what that process makes is what dissolves. |
 | `amount_mol_per_m2` | number | yes | How much, per m² of the substratum it covers, spread evenly through the film's depth. |
 | `region_um` | list of numbers | no, default the whole substratum | Where, with a patch's bounds: `[x0, x1]` in 2-D, `[x0, x1, y0, y1]` in 3-D, none in 1-D. |
+
+### Plaque that spreads
+
+Biomass does not diffuse: as cells divide in a crowded biofilm, they push
+their neighbours away from the substratum. With `plaque`, a column's biomass
+spreads that way ([theory.md §6.1](theory.md#61-biomass-balance)):
+
+- **What fills it.** Each component in `packing_mol_per_m3` takes space: at
+  that concentration it alone fills a voxel. A voxel's solid fraction is the
+  sum of each such component over its packing concentration.
+- **Packing.** After every step of the integration, the solid is packed from
+  the substratum up: a voxel holds at most its own volume of solid, and what
+  grows beyond that moves into the voxels above, in the proportions of the
+  voxel it came from. Where it shrinks, the column settles. The front stays
+  sharp: full voxels, then at most one partly filled.
+- **What it carries.** Components in `carried` move with the solid without
+  taking space, such as the fixed buffer of cell walls and its counter-ions.
+  In a voxel with no solid, nothing carries them, and they stay. Dissolved
+  components, and particulate ones neither filling nor carried,
+  such as food left on the teeth, stay where they are.
+- **What takes it off.** Solid pushed above `maximum_um` is detached: under a
+  film, into the mouth, which swallows it; otherwise into the bulk liquid.
+  The surface wears at `wear_um_per_h`, for the friction of the tongue and
+  cheeks. A brushing or a flossing in `hygiene` takes a share of the plaque
+  off from its surface down, and the same share of any food left on the
+  teeth, and the mouth expels it.
+
+Plaque spreads in a column only. How biomass spreads in two and three
+dimensions changes conclusions about competition and cooperation, so that
+choice belongs to Stage 2d, which compares mechanisms
+([modeling-landscape.md §2](modeling-landscape.md#2-the-biomass-spreading-decision)).
+`marse run` writes `plaque.csv`: the thickness, and for each filling
+component the amount in the plaque, detached and taken off, at every
+recorded time. The manifest names the spreading mechanism,
+`displacement_1d_v1`, and adds what left the plaque; both balances count it.
+
+### Plaque fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `packing_mol_per_m3` | object of numbers | yes | Each particulate component that takes space, and the concentration at which it alone fills a voxel. |
+| `carried` | list of component names | no | Particulate components that move with the plaque without taking space. |
+| `maximum_um` | number | no, default up to the film, or the top of the box | How high the plaque can be. Solid pushed above it is detached. Under a film, no higher than the film's underside. |
+| `wear_um_per_h` | number | no, default `0` | How fast the surface wears away. |
+
+### Hygiene fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `kind` | `brushing` or `flossing` | yes | What cleans the plaque. In a single column both take plaque off its surface; where each reaches comes with sites. |
+| `start_h` | number | yes | When, in hours from the start of the run, in time order. |
+| `removes_fraction` | number | brushing: no, default `0.42`; flossing: yes | The share of the plaque taken off, from its surface down. A brushing removes 42% of plaque on average (Slot et al. 2012). |
 
 ## Balancing: `balanced_by`
 

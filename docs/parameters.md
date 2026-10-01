@@ -350,6 +350,7 @@ Stage S1 was built (docs/validation.md, "The Stephan curve").
 | Thickness of the salivary film; its velocity by site | 70–100; 0.8–7.6 | µm; mm min⁻¹ | Collins & Dawes (1987); Dawes et al. (1989) | **B** |
 | Plaque's buffering | strong at pH 4–5.5, weak near neutrality; about 90% from cell walls and matrix | — | Shellis & Dibdin (1988) | **B** (qualitative) |
 | Food retained on the teeth | starchy particles for up to 20 min, accumulating sugars and acids | — | Kashket, Zhang & Van Houte (1996) | **B** (qualitative) |
+| Plaque removed by one brushing with a manual toothbrush: overall; by plaque index | 42; 30 to 53 | % | Slot et al. (2012), 59 papers and 212 brushing exercises. MARSE's default for a brushing (theory.md §6.3). | **B** |
 
 ### 8.2 Values in the oral scenes
 

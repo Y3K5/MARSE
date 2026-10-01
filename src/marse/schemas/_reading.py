@@ -38,6 +38,7 @@ UNIT_SUFFIXES = {
     "_per_ml": "per millilitre",
     "_ml": "millilitres",
     "_cm2": "square centimetres",
+    "_um_per_h": "micrometres per hour",
     "_per_h": "per hour",
     "_per_s": "per second",
     "_mpa_s": "millipascal seconds, which is centipoise",
@@ -67,6 +68,7 @@ DIMENSIONLESS = {
     "ph_min": "a pH, -log10 of the hydrogen ion concentration in mol/L",
     "ph_optimum": "a pH, -log10 of the hydrogen ion concentration in mol/L",
     "ph_max": "a pH, -log10 of the hydrogen ion concentration in mol/L",
+    "removes_fraction": "a fraction: of the plaque on a surface, the share a cleaning removes",
 }
 """Numeric fields that are labels or pure numbers, so they carry no unit suffix."""
 

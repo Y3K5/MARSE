@@ -157,7 +157,8 @@ src/marse/         the Python package
                    and the measures of a Stephan curve
   chemistry/       acid-base equilibria: the pH that every voxel's charges set
   microbes/        growth kinetics, cardinal models, adhesion, niches, genotypes, dose responses
-  biofilm/         biomass, matrix, maturation
+  biofilm/         biomass, plaque that spreads up a column and is worn and brushed off, matrix,
+                   maturation
   ecosystem/       the 2-D multispecies engine and its viewer
   adaptation/      state transitions and decision policies
   interventions/   perturbations

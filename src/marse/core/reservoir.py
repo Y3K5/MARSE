@@ -42,6 +42,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from marse.biofilm.spreading import Spreading
 from marse.core.implicit import (  # the engine's own step, reused
     GAMMA,
     ReactionTransport,
@@ -250,10 +251,11 @@ class ReservoirTransport(ReactionTransport):
         exchanged: Sequence[int],
         reference_um: float,
         surface: SurfaceExchange | None = None,
+        spreading: Spreading | None = None,
     ) -> None:
         if not diffusion.closed_top:
             raise ValueError("a box under a film exchanges through the film: close its top face")
-        super().__init__(diffusion, stoichiometry, rates, jacobian, surface)
+        super().__init__(diffusion, stoichiometry, rates, jacobian, surface, spreading)
         self.exchanged = np.asarray(exchanged, dtype=np.intp)
         count = self.exchanged.size
         components = self.stoichiometry.shape[1]
@@ -283,6 +285,13 @@ class ReservoirTransport(ReactionTransport):
     def _per_area(self, field: Field) -> NDArray[np.float64]:
         """Summed over the box, per unit area of substratum: mol/m3 x um."""
         return field.reshape(field.shape[0], -1).sum(axis=1) * self.areal_um
+
+    def _detach(self, y: Field, hours: float) -> tuple[Field, NDArray[np.float64]]:
+        """Pack the plaque and wear it; what leaves the box enters the pool, carried by the film."""
+        assert self.spreading is not None
+        box, pool = self.unpack(y)
+        box, detached = self.spreading.project(box, hours)
+        return self.pack(box, pool + detached * self.areal_um / self.reference_um), detached
 
     def _pool_concentration(self, pool: NDArray[np.float64]) -> tuple[NDArray, float]:
         assert self.path is not None, "set the path before each span"

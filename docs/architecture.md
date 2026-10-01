@@ -51,7 +51,8 @@ src/marse/
                    stephan.py (the measures of a Stephan curve)
   chemistry/       acid_base.py (pH from electroneutrality over acid-base totals and ions)
   microbes/        growth.py, resource_use.py, adhesion.py, phenotype.py, interactions.py
-  biofilm/         biomass.py, matrix.py, maturation.py
+  biofilm/         biomass.py, spreading.py (plaque packed up a column, detached above its
+                   maximum height, worn and brushed off), matrix.py, maturation.py
   ecosystem/       the 2-D multispecies engine (model.py, providers.py, framestore.py, viewer.py)
   adaptation/      transitions.py, policies.py
   interventions/   perturbations.py
@@ -71,7 +72,7 @@ Implemented so far (the rest of the layout above is planned):
 | `chemistry/` | `acid_base` |
 | `microbes/` | `growth`, `cardinal`, `kinetics`, `adhesion`, `niche`, `genotype`, `additives` |
 | `schemas/` | `formula`, `network`, `experiment`, `domain`: configuration schema v2 (reaction networks checked for continuity, with rates, run settings and space) |
-| `biofilm/` | `biomass` |
+| `biofilm/` | `biomass`, `spreading` |
 | `ecosystem/` | `model`, `providers`, `framestore`, `viewer` (not yet verified: see validation.md) |
 | `analysis/` | `calibration`, `uncertainty`, `ensemble` |
 | `evidence/` | `science` |

@@ -155,6 +155,8 @@ def _summarise_in_space(result: ReactiveTransportResult) -> None:
         _summarise_surface(result)
     if "mouth" in outputs:
         _summarise_mouth(result)
+    if "plaque" in outputs:
+        _summarise_plaque(result)
     if "ph" in outputs:
         ph = outputs["ph"]
         final = ph["final"]
@@ -190,6 +192,23 @@ def _summarise_mouth(result: ReactiveTransportResult) -> None:
             if value:
                 print(f"  {name:<24} {value:>12.6g}")
     print(f"  box and mouth together, counting what was {counted}, conserved to {worst:.1e}")
+
+
+def _summarise_plaque(result: ReactiveTransportResult) -> None:
+    plaque = result.manifest.outputs["plaque"]
+    assert result.plaque is not None
+    thickness = result.plaque["thickness_um"]
+    print(
+        f"plaque      {plaque['final_thickness_um']:.4g} um at the end, "
+        f"{thickness.min():.4g} to {thickness.max():.4g} um over the run "
+        f"(spreading {plaque['spreading']})"
+    )
+    detached = ", ".join(f"{n} {v:.4g}" for n, v in plaque["detached_mol_per_m2"].items() if v)
+    print(f"  detached, worn and over the top, mol per m2: {detached or 'nothing'}")
+    if "removed_mol_per_m2" in plaque:
+        cleanings = result.manifest.outputs["mouth"].get("cleanings", 0)
+        removed = ", ".join(f"{n} {v:.4g}" for n, v in plaque["removed_mol_per_m2"].items() if v)
+        print(f"  taken off by {cleanings} cleaning(s), mol per m2: {removed or 'nothing'}")
 
 
 def _summarise_surface(result: ReactiveTransportResult) -> None:
@@ -306,6 +325,8 @@ def _run_in_space(
         written.append(result.write_ph(output_dir / "ph.csv"))
     if result.mouth is not None:
         written.append(result.write_mouth(output_dir / "mouth.csv"))
+    if result.plaque is not None:
+        written.append(result.write_plaque(output_dir / "plaque.csv"))
     return result, (*written, index, pvd, manifest)
 
 
@@ -605,6 +626,8 @@ def _report_domain(config: ReactiveTransportConfig) -> None:
     )
     if placed:
         print(f"  colonies: {placed} ({', '.join(kinds)})")
+    if domain.plaque is not None:
+        _report_plaque(config)
     if domain.surface is not None:
         _report_surface(config)
     limit = build_model(config).diffusion.explicit_step_limit_h()
@@ -685,6 +708,27 @@ def _report_mouth(config: ReactiveTransportConfig) -> None:
                 f"              leaves {intake.retained.amount_mol_per_m2:g} mol per m2 of "
                 f"{intake.retained.component} on the teeth"
             )
+
+
+def _report_plaque(config: ReactiveTransportConfig) -> None:
+    from marse.biofilm.spreading import SPREADING_VERSION
+
+    plaque = config.domain.plaque
+    assert plaque is not None
+    fills = ", ".join(f"{n} at {v:g} mol per m3" for n, v in plaque.packing_mol_per_m3.items())
+    carried = f"; carries {', '.join(plaque.carried)}" if plaque.carried else ""
+    print(f"  plaque      spreads up the column ({SPREADING_VERSION}): filled by {fills}{carried}")
+    wear = (
+        f"wears {plaque.wear_um_per_h:g} um per hour at its surface"
+        if plaque.wear_um_per_h
+        else "does not wear"
+    )
+    print(f"              at most {plaque.maximum_um:g} um high, detached above; {wear}")
+    for cleaning in config.domain.hygiene:
+        print(
+            f"  {cleaning.kind:<11} at {_clock(cleaning.start_h)}: takes "
+            f"{cleaning.removes_fraction:.0%} of the plaque off from its surface down"
+        )
 
 
 def _clock(hours: float) -> str:

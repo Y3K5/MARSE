@@ -438,6 +438,47 @@ results for the same manifest is always called out.
 
     See docs/validation.md, "The Stephan curve".
 
+- **Plaque that spreads, wears and is brushed off: Stage S, increment S2,
+  part one** (`marse.biofilm.spreading`,
+  [docs/networks.md](docs/networks.md#plaque-that-spreads)). A column's
+  plaque now has room to grow. A domain may give it a `plaque`:
+  - the packing concentration of each component that takes up space;
+  - the components carried with them;
+  - a maximum height;
+  - a wear velocity.
+
+  The equations are in docs/theory.md §6.1 and §6.3.
+  - **Spreading.** After every step, the solid is packed up the column by its
+    cumulative volume (`displacement_1d_v1`; Wanner and Gujer 1986). The
+    column is left with full voxels, then at most one partly filled. Every
+    component moves in the proportions of the voxel it came from. The packing
+    conserves exactly and makes nothing negative. Spreading in two and three
+    dimensions stays with Stage 2d, because there the choice of mechanism
+    changes conclusions.
+  - **Detachment and wear.** Solid pushed past the maximum height leaves the
+    column. A stated wear velocity takes the surface off: half before each
+    step and half after, which keeps the step second order. Without a mouth,
+    what leaves goes to the bulk liquid. Under the mouth, it enters the
+    mouth's saliva and is swallowed.
+  - **Brushing and flossing.** A domain's `hygiene` lists timed cleanings.
+    Each takes a share of the plaque off from its surface down, and the same
+    share of any food left on the teeth. A brushing takes 42% unless told
+    otherwise (Slot et al. 2012). A flossing must state its share. The mouth
+    expels what a cleaning takes, and both ledgers book it.
+  - **Outputs.**
+    - `plaque.csv` records the plaque's thickness, and what each filling
+      component holds, has detached and has been brushed off.
+    - The manifest records the spreading provider and what the plaque lost.
+    - `marse check` describes the plaque and its cleanings.
+  - **Verified:**
+    - against the closed form for a film growing against wear, to 9.7e-7;
+    - against the packing done voxel by voxel, on 500 random columns;
+    - with a brushing under the mouth that leaves exactly 58% of the plaque,
+      with both ledgers closed to 1.9e-16.
+
+    A domain without a plaque runs as before. See docs/validation.md,
+    "Plaque that spreads".
+
 - **Ecosystem runs are reproducible.** `marse ecosystem` writes a
   `manifest.json` beside its frames and viewer, and `marse replay` reproduces
   the run exactly, as it already did for batch and biofilm runs. The manifest

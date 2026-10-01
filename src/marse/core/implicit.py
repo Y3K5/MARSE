@@ -61,6 +61,13 @@ face transfers. The limiter scales them like any other, and the ledger counts
 them as imports. Locking turns reversibly bound cells into biomass, as an extra
 row of the stoichiometric matrix acting in the bottom layer.
 
+Where a column's plaque spreads (:mod:`marse.biofilm.spreading`, docs/theory.md,
+section 6.1), every step is followed by packing the solid from the substratum
+up, which detaches whatever passes the plaque's maximum height. Wear is taken
+off in two halves, before the step and after it (Strang splitting), so the
+step stays second order. What detaches leaves the box, and the ledger counts
+it as an export.
+
 The linear systems are solved by :mod:`marse.spatial.multigrid`, or, in a
 column, directly by :mod:`marse.spatial.column`. One matrix, with the
 Jacobian at the start of the step, serves both stages, and it is rebuilt only
@@ -76,6 +83,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from marse.biofilm.spreading import Spreading
 from marse.microbes.adhesion import SurfaceExchange
 from marse.spatial.column import ColumnSystem
 from marse.spatial.multigrid import ImplicitSystem
@@ -152,9 +160,11 @@ class ReactionTransport:
         rates: Callable[[Field], Field],
         jacobian: Callable[[Field], Field],
         surface: SurfaceExchange | None = None,
+        spreading: Spreading | None = None,
     ) -> None:
         self.diffusion = diffusion
         self.surface = surface
+        self.spreading = spreading
         stoichiometry = np.asarray(stoichiometry, dtype=float)  # processes x components
         if surface is not None:
             # Locking runs as one more process per species, in the bottom layer.
@@ -175,6 +185,9 @@ class ReactionTransport:
         self.shape = diffusion.grid.shape
         self.spacing = diffusion.spacing
         self._now = 0.0  # the start of the current step, h
+        components = stoichiometry.shape[1]
+        self.detached = np.zeros(components)  # solid that left the plaque, summed over steps
+        self._detaching = np.zeros(components)  # what the step being tried detached
 
     # -- the right-hand side --------------------------------------------------------------
 
@@ -343,10 +356,32 @@ class ReactionTransport:
     def step(
         self, y: Field, h: float, reference: Field, atol: Tolerance, rtol: float
     ) -> tuple[Field, NDArray[np.float64], Field, int, int]:
-        """One SDIRK2 step: new state, imports, error estimate, limiter rounds, Newton steps."""
+        """One SDIRK2 step: new state, imports, error estimate, limiter rounds, Newton steps.
+
+        Where the plaque spreads, half the step's wear comes off before it and
+        half after, with the packing; what that detaches is subtracted from
+        the imports, and kept in :attr:`_detaching` until the step is accepted.
+        """
         # Traces far below any tolerance may underflow to zero; that loses nothing.
         with np.errstate(under="ignore"):
-            return self._step(y, h, reference, _tolerance(atol, y.ndim - 1), rtol)
+            tolerance = _tolerance(atol, y.ndim - 1)
+            if self.spreading is None:
+                return self._step(y, h, reference, tolerance, rtol)
+            detached = np.zeros(y.shape[0])
+            if self.spreading.wear_um_per_h > 0:
+                y, before = self._detach(y, 0.5 * h)
+                detached += before
+            new, imports, estimate, rounds, iterations = self._step(
+                y, h, reference, tolerance, rtol
+            )
+            new, after = self._detach(new, 0.5 * h)
+            self._detaching = detached + after
+            return new, imports - self._detaching, estimate, rounds, iterations
+
+    def _detach(self, y: Field, hours: float) -> tuple[Field, NDArray[np.float64]]:
+        """Pack the plaque, wear ``hours`` of it away; what passes its top leaves the box."""
+        assert self.spreading is not None
+        return self.spreading.project(y, hours)
 
     def _step(
         self, y: Field, h: float, reference: Field, atol: Tolerance, rtol: float
@@ -455,6 +490,8 @@ class ReactionTransport:
             if error <= 1.0:
                 y = new
                 imports += entered
+                if self.spreading is not None:
+                    self.detached += self._detaching
                 elapsed += step
                 accepted += 1
                 limited += rounds > 0
