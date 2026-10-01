@@ -9,6 +9,12 @@ results for the same manifest is always called out.
 
 ### Changed
 
+- **A plan for Stage 2d** ([docs/stage-2d-plan.md](docs/stage-2d-plan.md)),
+  linked from the roadmap. It proposes spreading biomass on the voxel grid
+  first, by a continuum and a cellular automaton behind one provider
+  contract, with individual cells later. It also covers oxygen roles,
+  variants and mutation, five increments, and criteria D1 to D27, set before
+  any of it is built. No simulation result changes.
 - **Columns are solved directly.** A one-dimensional run's linear systems are
   now solved exactly, by block-tridiagonal elimination, instead of by
   multigrid. The 1-D example runs three times faster, in the same 348 steps.
