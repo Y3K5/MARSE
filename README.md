@@ -123,6 +123,9 @@ Before your first commit, complete the one-time setup in
 
 ## Documentation
 
+- [Evidence context exchange](docs/context-exchange.md): standalone metadata validation and a synthetic example.
+- [Context/numerical-reference handoff](docs/context-integrity-handoff.md): scope, verification commands and unresolved integration work.
+
 - [docs/theory.md](docs/theory.md): every equation, its assumptions, and the
   numerical methods used.
 - [docs/parameters.md](docs/parameters.md): parameter values with units,

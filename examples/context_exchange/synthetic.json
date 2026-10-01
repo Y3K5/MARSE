@@ -1,0 +1,166 @@
+{
+  "schema": "marse.context-exchange/1",
+  "evidence": [
+    {
+      "id": "synthetic-observation",
+      "host": "synthetic",
+      "source": "authored synthetic fixture",
+      "site": "lumen",
+      "method": "authored placeholder",
+      "observation": "Authored synthetic placeholder; no biological observation or parameter estimate.",
+      "limits": "No natural community, contact or physiological inference",
+      "independence_group": "synthetic-fixture",
+      "annotation_digest": {
+        "kind": "annotation_text_sha256",
+        "value": "b963f543ad8d7a0b799648e23b207922d3c5893c3e435111b9f0d0e39c14a140"
+      },
+      "source_digest": null,
+      "statuses": {
+        "implementation": "recorded",
+        "execution": "not_run",
+        "gate": "not_evaluated",
+        "evidence": "synthetic_only",
+        "approval": "review_required"
+      }
+    }
+  ],
+  "contexts": [
+    {
+      "id": "synthetic-context",
+      "host": "synthetic",
+      "site": "synthetic-site",
+      "disease_context": "unresolved",
+      "biofilm_age": "unresolved",
+      "biofilm_phase": "unresolved",
+      "physiology": "unresolved",
+      "host_response": "unresolved",
+      "representation": "density_fields_not_cells",
+      "frame": {
+        "id": "synthetic-frame",
+        "units": "dimensionless",
+        "molecular_transform": null
+      },
+      "engine": {
+        "id": "pocket-numerical-reference",
+        "version": "1.0.0",
+        "run_id": "template-not-executed",
+        "time_units": "dimensionless",
+        "seed_policy": "stable synthetic field and patch identity",
+        "source_digest": {
+          "kind": "source_file_sha256",
+          "value": "3b03eac6b0243cb5176cfdb27c488dc15c9f2679eff3b50471cdf76b8286418c"
+        },
+        "config_digest": {
+          "kind": "config_file_sha256",
+          "value": "9a63790e3bf8a8445d14bff1d42b6048da80d6b9f0c74aa41f36444ade74a1bb"
+        },
+        "output_digest": null
+      },
+      "organism_ids": [
+        "anonymous-a",
+        "anonymous-b"
+      ],
+      "statuses": {
+        "implementation": "recorded",
+        "execution": "not_run",
+        "gate": "not_evaluated",
+        "evidence": "synthetic_only",
+        "approval": "review_required"
+      }
+    }
+  ],
+  "organisms": [
+    {
+      "id": "anonymous-a",
+      "host": "synthetic",
+      "name": "Anonymous field a",
+      "strain": "unresolved",
+      "representation": "synthetic_density_field",
+      "accession": null,
+      "sequence_digest": null,
+      "statuses": {
+        "implementation": "recorded",
+        "execution": "not_run",
+        "gate": "not_evaluated",
+        "evidence": "synthetic_only",
+        "approval": "review_required"
+      }
+    },
+    {
+      "id": "anonymous-b",
+      "host": "synthetic",
+      "name": "Anonymous field b",
+      "strain": "unresolved",
+      "representation": "synthetic_density_field",
+      "accession": null,
+      "sequence_digest": null,
+      "statuses": {
+        "implementation": "recorded",
+        "execution": "not_run",
+        "gate": "not_evaluated",
+        "evidence": "synthetic_only",
+        "approval": "review_required"
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "id": "unknown-resource",
+      "context_id": "synthetic-context",
+      "host": "synthetic",
+      "site": "synthetic-site",
+      "disease_context": "unresolved",
+      "compartment": "lumen",
+      "units": "dimensionless",
+      "method": "not measured",
+      "uncertainty": "unknown",
+      "calibration_role": "not used",
+      "identifiability": "not established",
+      "transfer_limits": "No transfer to physical concentrations or natural host contexts",
+      "needed_observation": "A source-scoped observation with units and sampling uncertainty",
+      "evidence_class": "unresolved",
+      "value": null,
+      "evidence_ids": [],
+      "statuses": {
+        "implementation": "recorded",
+        "execution": "not_run",
+        "gate": "not_evaluated",
+        "evidence": "unresolved",
+        "approval": "review_required"
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "id": "unresolved-relationship",
+      "context_id": "synthetic-context",
+      "host": "synthetic",
+      "site": "synthetic-site",
+      "disease_context": "unresolved",
+      "participants": [
+        "anonymous-a",
+        "anonymous-b"
+      ],
+      "evidence_class": "unresolved",
+      "conditions": "synthetic metadata example",
+      "direction": "unresolved",
+      "alternatives": "Shared environment or unrelated fields",
+      "limits": "No contact, mediator, structural or native-access inference",
+      "evidence_ids": [
+        "synthetic-observation"
+      ],
+      "coupled_to_solver": false,
+      "field_overlap_is_contact": false,
+      "native_access_claim": false,
+      "mediator_id": null,
+      "structure_status": "unresolved",
+      "statuses": {
+        "implementation": "recorded",
+        "execution": "not_run",
+        "gate": "not_evaluated",
+        "evidence": "unresolved",
+        "approval": "review_required"
+      }
+    }
+  ]
+}

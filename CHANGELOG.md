@@ -9,6 +9,8 @@ results for the same manifest is always called out.
 
 ### Added
 
+- Standalone evidence-context validation, an entirely synthetic fixture and rejection tests. Optional anonymous numerical-reference checks and a developer handoff; no change to production simulation behavior.
+
 - **The spatial model is reachable from the kernel.** Until now `marse run`
   could only do well-mixed batch culture: the biofilm code was library-only,
   so MARSE's reproducibility claim did not cover its most interesting output.
