@@ -1,7 +1,10 @@
 # Stage 2d plan: biomass that spreads and shares space
 
 **Status: in progress.** 2d.1, oxygen roles, is done: it met D1 to D3
-([validation.md](validation.md#oxygen-roles)). Nothing else is built yet. The
+([validation.md](validation.md#oxygen-roles)). 2d.2, shared space and
+spreading in a column, is done: it met D4 to D13
+([validation.md](validation.md#spreading-in-a-column)), with the changes
+recorded under its criteria. Nothing else is built yet. The
 criteria below are set before the code is written, as they were for 2c and
 S1, so that the stage can fail them. When an increment lands, its results
 replace its thresholds in [validation.md](validation.md), and this page
@@ -360,6 +363,25 @@ entries.
 | D11 | A run without `spreading`, and all of 2c, E1 and S1, unchanged | Every final digest unchanged, bit for bit |
 | D12 | Overfilled initial states refused at load; a run reaching the top layer stopped with an error naming the time | Tests |
 | D13 | Replay bit for bit, at 1 and 4 threads | Digest equal |
+
+*Done.* What changed from the plan:
+
+- **The sweep keeps material in order.** The well-mixed (donor-cell) sweep
+  planned here failed D8: in a film growing without limit, a labelled lower
+  layer reached the top of the film, and the band between the labels sat 5 to
+  8 µm low without converging as the voxels shrank. In the column, what leaves
+  a voxel through a face is the material nearest that face, and D8 is met.
+  How this extends to faces in three directions is the first question of 2d.3.
+- **The default interval is 0.25 h,** half what the D7 rule gives for the fed
+  film, so that faster species keep within 0.5%. Mixing grows with the number
+  of spreads, which is a second reason not to spread more often than needed.
+- **D9 compares two depths, not two halves of a run.** The liquid above a
+  growing film thins, so its rate rises slowly. That a deep film's rate does
+  not depend on its depth is the signature the criterion was after.
+- **Spreading under a salivary film is refused for now.** It arrives when the
+  oral scenes need it (S2), with the film's lowest voxel as the ceiling.
+- **The first `structure.csv`** holds the biovolume, the maximum thickness and
+  the fullest voxel. 2d.3 adds the rest of D18's metrics.
 
 ### 2d.3 Spreading in two and three dimensions
 

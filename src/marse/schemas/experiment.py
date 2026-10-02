@@ -29,6 +29,7 @@ from marse.core.config import ConfigError
 from marse.schemas._reading import load_json, plain
 from marse.schemas.domain import Domain, read_domain
 from marse.schemas.network import Network, _known, read_document
+from marse.spatial.spreading import CAPACITY_TOLERANCE, volume_fraction
 
 __all__ = [
     "ReactiveTransportConfig",
@@ -230,8 +231,35 @@ def experiment_from_dict(raw: Any) -> RunConfig:
         "absolute_tolerance_mol_per_m3": absolute,
     }
     if in_space:
-        return ReactiveTransportConfig(domain=read_domain(values["domain"], network), **settings)
+        config = ReactiveTransportConfig(domain=read_domain(values["domain"], network), **settings)
+        if config.domain.spreading is not None:
+            _check_packing(config)
+        return config
     return WellMixedConfig(**settings)
+
+
+def _check_packing(config: ReactiveTransportConfig) -> None:
+    """Refuse a start that overfills a voxel, or puts biomass in the top layer."""
+    network = config.network
+    state = config.domain.initial_state(
+        network.component_names, config.initial_mol_per_m3, config.seed
+    )
+    densities = network.densities()
+    phi = volume_fraction(state, densities)
+    fullest = int(np.argmax(phi))
+    if phi.flat[fullest] > 1.0 + CAPACITY_TOLERANCE:
+        height = (fullest + 0.5) * config.domain.voxel_um
+        raise ConfigError(
+            f"experiment: the biomass at the start fills {phi.flat[fullest]:.6g} of the voxel "
+            f"at {height:g} um, more than it can hold; a voxel's components together, each "
+            "over its density_mol_per_m3, may fill at most 1"
+        )
+    top = state[densities > 0][..., -1]
+    if np.any(top > 0):
+        raise ConfigError(
+            "experiment: biomass starts in the top layer of the box, which borders the bulk "
+            "liquid and must stay clear when the domain spreads; make the box taller"
+        )
 
 
 def _absolute_tolerance(values: dict[str, Any], network: Network) -> Tolerance:

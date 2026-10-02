@@ -114,6 +114,36 @@ results for the same manifest is always called out.
 
 ### Added
 
+- **Biomass that spreads, in a column** (Stage 2d, increment 2d.2;
+  [docs/networks.md](docs/networks.md#biomass-that-spreads), theory.md §6.1
+  and §9.10).
+  - A particulate component may declare `density_mol_per_m3`, its packing
+    density. With a domain's new `spreading` block, the species share each
+    voxel's room, φ = Σ c/ρ ≤ 1, all of them together.
+  - Growth runs in place for an interval (default 0.25 h). The excess is then
+    pushed on by the pressure it makes, the continuum of Alpkvist and Klapper
+    (2007) written on voxels, which in a column is Wanner and Gujer's
+    displacement.
+  - Material keeps its order as it moves, so a layer of cells stays a layer.
+    The well-mixed sweep the plan proposed was measured first, and it smeared
+    a labelled band over half the film.
+  - The engine checks every spread, whatever the mechanism: nothing negative,
+    each component's total unchanged, solutes untouched, every voxel within
+    its room, and the top layer clear. A film reaching the top layer stops the
+    run, naming the time. A start that overfills a voxel is refused.
+  - `marse run` writes `structure.csv`: the biovolume, the maximum thickness
+    and the fullest voxel over time. `marse check` reports the packing at the
+    start and the growth per interval. The manifest names the mechanism,
+    `continuum_pressure_v1`.
+  - New example: `examples/networks/spreading_column.json`, which runs in
+    4 s.
+  - Criteria D4 to D13, set in the plan, are met
+    ([validation.md](docs/validation.md#spreading-in-a-column)), with the
+    changes from the plan recorded there.
+  - Boxes in two and three dimensions, and spreading under a salivary film,
+    are refused until they arrive.
+  - Runs without `spreading` are unchanged: every example's final state is
+    the same, bit for bit.
 - **Oxygen roles** (Stage 2d, increment 2d.1;
   [docs/networks.md](docs/networks.md#oxygen-roles), theory.md §3.9).
   - Every species, a particulate component that a growth process forms,

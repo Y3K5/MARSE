@@ -7,8 +7,8 @@
 
 in every voxel at once, integrated implicitly and conservatively by
 :mod:`marse.core.implicit` (docs/theory.md, sections 4.7 and 9.8). Solutes
-diffuse at physical diffusivities; biomass grows where it is, until Stage 2d
-lets colonies spread.
+diffuse at physical diffusivities. Biomass grows where it is, unless the
+domain spreads it.
 
 - **The ledger** (:mod:`marse.core.ledger`) books what crosses the top face,
   computed from the face fluxes, and checks after every step that the carbon,
@@ -29,6 +29,14 @@ records bound cells per cm² of each material, and the area each has covered.
 
 Where the network's charges set a pH (:mod:`marse.chemistry.acid_base`), the
 run records the pH over the substratum and its range in the box.
+
+Where the domain spreads its biomass (:mod:`marse.spatial.spreading`), each
+recording step is cut into spans of at most the spreading interval. After
+each span the excess biomass is spread, and the engine checks what the
+spreading did, whichever mechanism did it (docs/theory.md, section 9.10):
+nothing negative, each component's total unchanged, nothing else moved, every
+voxel within its room, and the top layer still clear. The ledger is then
+checked as after any span. The run also records the biofilm's structure.
 
 Where the domain has a salivary film and a mouth (:mod:`marse.oral`), the
 film is renewed from the mouth's saliva, whose composition is solved with the
@@ -58,11 +66,18 @@ from marse.core.implicit import ReactionTransport
 from marse.core.ledger import Ledger
 from marse.core.provenance import Manifest
 from marse.core.reservoir import ReservoirPath, ReservoirTransport
+from marse.core.simulation import ConservationError
 from marse.microbes.adhesion import AttachingSpecies, SurfaceExchange
 from marse.microbes.kinetics import compile_rates, process_rates, rate_jacobian
 from marse.oral import Diet, Inflow, OralFluid, film_layers, renewal_per_h
 from marse.schemas.experiment import ReactiveTransportConfig
 from marse.spatial.colloids import leveque_transfer_um_per_s, stokes_einstein_um2_per_s
+from marse.spatial.spreading import (
+    CAPACITY_TOLERANCE,
+    ContinuumSpreading,
+    SpreadingError,
+    volume_fraction,
+)
 from marse.spatial.transport import Diffusion
 
 __all__ = ["ENGINE_VERSION", "INTEGRATOR_VERSION", "ReactiveTransportResult", "run"]
@@ -95,6 +110,7 @@ class ReactiveTransportResult:
     surface: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
     ph: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
     mouth: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
+    structure: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
 
     @property
     def component_names(self) -> tuple[str, ...]:
@@ -137,6 +153,19 @@ class ReactiveTransportResult:
             writer.writerow(["time_h", *columns])
             for i, t in enumerate(self.times_h):
                 writer.writerow([f"{t:.6f}"] + [f"{self.mouth[c][i]:.10g}" for c in columns])
+        return destination
+
+    def write_structure(self, path: str | Path) -> Path:
+        """Write the biofilm's biovolume, thickness and fullest voxel, at every recorded time."""
+        if self.structure is None:
+            raise ValueError("this run does not spread its biomass")
+        destination = Path(path)
+        columns = list(self.structure)
+        with destination.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["time_h", *columns])
+            for i, t in enumerate(self.times_h):
+                writer.writerow([f"{t:.6f}"] + [f"{self.structure[c][i]:.10g}" for c in columns])
         return destination
 
     def write_totals(self, path: str | Path) -> Path:
@@ -314,6 +343,80 @@ def _surface_record(
     return record
 
 
+def _structure_record(
+    config: ReactiveTransportConfig, densities: NDArray[np.float64], state: NDArray[np.float64]
+) -> dict[str, float]:
+    """The biofilm's biovolume per area, its thickness and its fullest voxel.
+
+    Biovolume is the volume the biomass fills over each um² of substratum, as
+    COMSTAT reports it (Heydorn et al. 2000); for a film with no gaps it is
+    the film's thickness. The maximum thickness is the top of the highest
+    voxel that holds any biomass.
+    """
+    grid = config.domain.grid
+    phi = volume_fraction(state, densities)
+    occupied = np.flatnonzero(phi.reshape(-1, grid.shape[-1]).max(axis=0) > 0)
+    highest = (int(occupied[-1]) + 1) * grid.voxel_um if occupied.size else 0.0
+    return {
+        "biovolume_um3_per_um2": float(phi.sum() * grid.voxel_volume_um3 / grid.footprint_um2),
+        "maximum_thickness_um": float(highest),
+        "largest_volume_fraction": float(phi.max()),
+    }
+
+
+def _span_ends(now: float, target: float, interval_h: float | None) -> list[float]:
+    """Where the spans of a recording step end: equal spans of at most the interval."""
+    if interval_h is None:
+        return [target]
+    spans = max(1, math.ceil(round((target - now) / interval_h, 9)))
+    return [now + (target - now) * k / spans for k in range(1, spans)] + [target]
+
+
+def _spread(
+    spreader: ContinuumSpreading,
+    densities: NDArray[np.float64],
+    state: NDArray[np.float64],
+    time_h: float,
+) -> tuple[NDArray[np.float64], Any]:
+    """Spread the biomass, then check what the mechanism did, whatever it was.
+
+    These checks belong to the engine, not to the mechanism, so a new
+    mechanism cannot weaken them (docs/theory.md, section 9.10).
+    """
+    try:
+        spread, stats = spreader.spread(state)
+    except SpreadingError as error:
+        raise SpreadingError(f"at t = {time_h:.6g} h: {error}") from None
+    moving = densities > 0
+    if not np.all(spread >= 0):
+        raise ConservationError(f"spreading left a negative value at t = {time_h:.6g} h")
+    if not np.array_equal(spread[~moving], state[~moving]):
+        raise ConservationError(
+            f"spreading changed a component that takes no room at t = {time_h:.6g} h"
+        )
+    before = state[moving].reshape(int(moving.sum()), -1).sum(axis=1)
+    after = spread[moving].reshape(int(moving.sum()), -1).sum(axis=1)
+    drift = np.abs(after - before) / np.maximum(np.abs(before), np.finfo(float).tiny)
+    if not np.all(drift <= 1e-12):
+        raise ConservationError(
+            f"spreading changed the total of a component by {float(drift.max()):.1e} of it at "
+            f"t = {time_h:.6g} h; it may only move what is there"
+        )
+    phi = volume_fraction(spread, densities)
+    if not phi.max() <= 1.0 + CAPACITY_TOLERANCE:
+        raise ConservationError(
+            f"after spreading at t = {time_h:.6g} h a voxel holds {float(phi.max()):.12g} of "
+            "its room; no voxel may hold more than all of it"
+        )
+    if np.any(spread[moving][..., -1] > 0):
+        raise SpreadingError(
+            f"at t = {time_h:.6g} h the biofilm reached the top layer of the box, which borders "
+            "the bulk liquid; make the box taller. Detachment, which would balance growth, "
+            "comes with Stage 3"
+        )
+    return spread, stats
+
+
 def _ph_record(balance: ChargeBalance, state: NDArray[np.float64]) -> dict[str, float]:
     """The pH over the substratum, the bottom layer of voxels, and its range in the whole box."""
     ph = balance.ph(state)
@@ -354,6 +457,12 @@ def run(
     times, totals, imports = [0.0], [state.reshape(len(names), -1).sum(axis=1) * areal], [imported]
     exchange = model.surface
     surface_rows = [] if exchange is None else [_surface_record(config, exchange, state)]
+    spreading = config.domain.spreading
+    densities = network.densities()
+    spreader = None if spreading is None else ContinuumSpreading(grid.shape, densities)
+    structure_rows = [] if spreader is None else [_structure_record(config, densities, state)]
+    spreads = most_rounds = 0
+    moved = largest_before = 0.0
     if frames is not None:
         frames(0, 0.0, state)
     now, substep = 0.0, None  # the first step is estimated from the rates
@@ -362,24 +471,32 @@ def run(
     for step in range(1, steps + 1):
         # Times come from the step count, so they never accumulate rounding.
         target = min(step * config.timestep_h, config.duration_h)
-        state, entered, stats = model.integrate(
-            state,
-            target - now,
-            first_step=substep,
-            relative_tolerance=config.relative_tolerance,
-            absolute_tolerance=config.absolute_tolerances(),
-            peak=peak,
-        )
-        substep, now = stats.next_step, target
-        accepted += stats.accepted
-        rejected += stats.rejected
-        limited += stats.limited
-        failures += stats.newton_failures
-        newton += stats.newton_iterations
-        peak = np.maximum(peak, state)
-        ledger.exchange(entered)
-        ledger.check(state, step=step, time_h=now)
-        imported = imported + entered
+        for end in _span_ends(now, target, None if spreading is None else spreading.interval_h):
+            state, entered, stats = model.integrate(
+                state,
+                end - now,
+                first_step=substep,
+                relative_tolerance=config.relative_tolerance,
+                absolute_tolerance=config.absolute_tolerances(),
+                peak=peak,
+            )
+            substep, now = stats.next_step, end
+            accepted += stats.accepted
+            rejected += stats.rejected
+            limited += stats.limited
+            failures += stats.newton_failures
+            newton += stats.newton_iterations
+            if spreader is not None:
+                state, spread = _spread(spreader, densities, state, now)
+                substep = None  # the biomass has moved: estimate the next first step afresh
+                spreads += 1
+                most_rounds = max(most_rounds, spread.rounds)
+                moved += spread.moved
+                largest_before = max(largest_before, spread.largest_before)
+            peak = np.maximum(peak, state)
+            ledger.exchange(entered)
+            ledger.check(state, step=step, time_h=now)
+            imported = imported + entered
         if step % config.record_every == 0 or step == steps:
             times.append(now)
             totals.append(state.reshape(len(names), -1).sum(axis=1) * areal)
@@ -388,6 +505,8 @@ def run(
                 surface_rows.append(_surface_record(config, exchange, state))
             if balance is not None:
                 ph_rows.append(_ph_record(balance, state))
+            if spreader is not None:
+                structure_rows.append(_structure_record(config, densities, state))
             if frames is not None:
                 frames(len(times) - 1, now, state)
 
@@ -424,9 +543,26 @@ def run(
             "lowest_at_substratum": float(ph["substratum_min"][lowest]),
             "lowest_at_substratum_h": float(times[lowest]),
         }
+    models = {"engine": ENGINE_VERSION, "integrator": INTEGRATOR_VERSION}
+    structure = None
+    if spreader is not None and spreading is not None:
+        models["spreading"] = spreader.version
+        structure = {
+            key: np.array([row[key] for row in structure_rows]) for key in structure_rows[0]
+        }
+        per_area = grid.voxel_volume_um3 / grid.footprint_um2
+        outputs["spreading"] = {
+            "mechanism": spreading.mechanism,
+            "interval_h": spreading.interval_h,
+            "spreads": spreads,
+            "most_rounds": most_rounds,
+            "moved_um3_per_um2": moved * per_area,
+            "fullest_before_spreading": largest_before,
+            "final": dict(structure_rows[-1]),
+        }
     manifest = Manifest.build(
         config=config,
-        models={"engine": ENGINE_VERSION, "integrator": INTEGRATOR_VERSION},
+        models=models,
         random_streams=config.domain.random_streams,
         started=started,
         finished=datetime.now(UTC),
@@ -442,6 +578,7 @@ def run(
         final_state=state,
         surface=surface,
         ph=ph,
+        structure=structure,
     )
 
 

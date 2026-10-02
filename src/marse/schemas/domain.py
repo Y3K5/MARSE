@@ -8,8 +8,8 @@ substratum, height its last axis, with the bulk liquid held above it
 - ``voxels`` and ``voxel_um``: the grid, in one, two or three dimensions;
 - ``bulk_mol_per_m3``: what the liquid above holds, dissolved components only;
 - ``diffusivity_m2_per_s``: one value for every dissolved component;
-  particulate components (biomass) do not diffuse, and grow in place until
-  Stage 2d adds spreading;
+  particulate components (biomass) do not diffuse. They grow in place, unless
+  the domain spreads them;
 - ``colonies``: hemispheres of a particulate component on the substratum, each
   placed at stated coordinates;
 - ``random_colonies``: a number of such hemispheres placed at random, from the
@@ -22,7 +22,11 @@ substratum, height its last axis, with the bulk liquid held above it
   closed to the air and renewed from the mouth's saliva, which is secreted and
   swallowed as the run goes (docs/environments.md, :mod:`marse.oral`);
 - ``diet``, with the mouth: rinses held, drinks sipped and foods that dissolve,
-  each for a stated time, and food some of them leave on the teeth.
+  each for a stated time, and food some of them leave on the teeth;
+- ``spreading``: biomass that outgrows its voxel pushes the excess into its
+  neighbours, every species sharing the room (:mod:`marse.spatial.spreading`).
+  Each species then needs a packing density, and the start must fit. A column
+  spreads; boxes in two and three dimensions arrive with Stage 2d, 2d.3.
 
 The run fields' ``initial_mol_per_m3`` fill every voxel, and the colonies then
 set their component inside their hemispheres. A colony that covers no voxel
@@ -53,6 +57,7 @@ from marse.schemas.network import (
     PATCH_FIELDS,
     RANDOM_COLONY_FIELDS,
     RETAINED_FIELDS,
+    SPREADING_FIELDS,
     SUBSTRATUM_FIELDS,
     SUSPENSION_FIELDS,
     Network,
@@ -343,6 +348,25 @@ class Intake:
         return written
 
 
+DEFAULT_SPREADING_INTERVAL_H = 0.25
+"""The default spreading interval, from the measurement of criterion D7 (docs/validation.md)."""
+
+
+@dataclass(frozen=True, slots=True)
+class Spreading:
+    """How biomass spreads, and how often.
+
+    Each recording step is cut into equal spans of at most ``interval_h``, and
+    the biomass is spread at the end of every span.
+    """
+
+    mechanism: str
+    interval_h: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"mechanism": self.mechanism, "interval_h": self.interval_h}
+
+
 @dataclass(frozen=True, slots=True)
 class Domain:
     """The grid, the liquid above it, how each component moves, and where the colonies are."""
@@ -361,6 +385,7 @@ class Domain:
     film: Film | None = None
     mouth: Mouth | None = None
     diet: tuple[Intake, ...] = ()
+    spreading: Spreading | None = None
 
     @property
     def grid(self) -> Grid:
@@ -444,6 +469,9 @@ class Domain:
             written["mouth"] = self.mouth.to_dict()
             if self.diet:
                 written["diet"] = [intake.to_dict() for intake in self.diet]
+        # And only a domain that spreads writes this.
+        if self.spreading is not None:
+            written["spreading"] = self.spreading.to_dict()
         return written
 
 
@@ -521,7 +549,7 @@ def read_domain(raw: Any, network: Network, where: str = "experiment.domain") ->
         if components[name].phase != "dissolved":
             raise ConfigError(
                 f"{where}.diffusivity_m2_per_s: '{name}' is particulate and does not diffuse; "
-                "biomass grows in place until colonies can spread (Stage 2d)"
+                "biomass grows in place, or moves when the domain spreads it"
             )
         if value < 0:
             raise ConfigError(f"{where}.diffusivity_m2_per_s: '{name}' must not be negative")
@@ -598,6 +626,11 @@ def read_domain(raw: Any, network: Network, where: str = "experiment.domain") ->
             f"{where}.bulk_mol_per_m3: under a film, the liquid comes from the mouth; give its "
             "composition as mouth.saliva_mol_per_m3 and leave the bulk out"
         )
+    spreading = (
+        _read_spreading(values["spreading"], grid, network, bool(oral), f"{where}.spreading")
+        if "spreading" in values
+        else None
+    )
 
     return Domain(
         voxels=tuple(values["voxels"]),
@@ -616,7 +649,44 @@ def read_domain(raw: Any, network: Network, where: str = "experiment.domain") ->
         random_colonies=tuple(random_colonies),
         **scene,
         **oral,
+        spreading=spreading,
     )
+
+
+def _read_spreading(raw: Any, grid: Grid, network: Network, oral: bool, where: str) -> Spreading:
+    """The spreading block, and what a network must state to spread."""
+    values = read_object(raw, where, SPREADING_FIELDS)
+    if grid.dimensions != 1:
+        raise ConfigError(
+            f"{where}: a column spreads; spreading in two and three dimensions arrives with "
+            "Stage 2d, increment 2d.3 (docs/stage-2d-plan.md)"
+        )
+    if grid.shape[-1] < 2:
+        raise ConfigError(
+            f"{where}: a column that spreads needs at least two voxels, since biomass must stay "
+            "out of the top one"
+        )
+    if oral:
+        raise ConfigError(
+            f"{where}: spreading under a salivary film is not supported yet; it arrives when the "
+            "oral scenes need it"
+        )
+    interval = (
+        float(plain(values["interval_h"]))
+        if "interval_h" in values
+        else DEFAULT_SPREADING_INTERVAL_H
+    )
+    if not interval > 0:
+        raise ConfigError(f"{where}.interval_h: must be positive")
+    species = {p.growth.biomass: p.name for p in network.processes if p.growth is not None}
+    for name, process in species.items():
+        if network.component(name).density_mol_per_m3 is None:
+            raise ConfigError(
+                f"{where}: '{name}' grows in process '{process}', so it takes up room as it "
+                "spreads; give it a density_mol_per_m3, its concentration when it alone fills "
+                "a voxel"
+            )
+    return Spreading(values["mechanism"], interval)
 
 
 def _composition(

@@ -109,6 +109,7 @@ key is an error, not a silently ignored typo.
 | `charge` | number | no, default `0` | The charge of one formula unit, in elementary charges: `1` for ammonium, `-1` for lactate. |
 | `acid_base` | object | no | Makes the component an acid–base total, such as lactic acid and lactate together; see [Acids, bases and pH](#acids-bases-and-ph). |
 | `oxygen_role` | `obligate_aerobe`, `microaerophile`, `facultative`, `aerotolerant` or `obligate_anaerobe` | for a species | How a species lives with oxygen, checked against its processes; see [Oxygen roles](#oxygen-roles). A species is a particulate component that some growth process forms. |
+| `density_mol_per_m3` | number | for a species, when the domain spreads | Its packing density: its concentration when it alone fills a voxel, in mol per m³. Particulate components only. One without a density takes no room and does not move; see [Biomass that spreads](#biomass-that-spreads). |
 
 A component is counted in mol of its formula unit. Biomass written per carbon
 atom, as `CH1.8O0.5N0.2`, is therefore counted in C-mol. The formula rules:
@@ -362,8 +363,9 @@ biofilm:
 
 Dissolved components diffuse between voxels at the stated diffusivities. Every
 process runs in every voxel at once, at the rates described in [Rates](#rates). Biomass
-grows where it is. Colonies spreading, and sharing space as they do, come in the
-next stage.
+grows where it is, unless the domain spreads it: then the species share each
+voxel's room, and biomass that outgrows its voxel pushes the excess on
+([Biomass that spreads](#biomass-that-spreads)).
 
 ```bash
 marse check examples/networks/surface_biofilm_3d.json   # the space, and what an explicit step would cost
@@ -442,6 +444,7 @@ chemistry in a single column in three seconds.
 | `film` | object | no | The top voxels are a salivary film, closed to the air and renewed from the mouth. [A salivary film and the mouth](#a-salivary-film-and-the-mouth): these two fields go together, and replace `bulk_mol_per_m3`. |
 | `mouth` | object | with `film` | The mouth's saliva: what is secreted, how much the mouth holds, and when it swallows. |
 | `diet` | list of intakes | no, with `mouth` | What is eaten and drunk: rinses, drinks and foods, each from a start for a duration. [The diet](#the-diet). |
+| `spreading` | object | no | Biomass that outgrows its voxel pushes the excess on. [Biomass that spreads](#biomass-that-spreads). |
 
 `initial_mol_per_m3` fills every voxel. Each colony then sets its component to
 its concentration in the voxels whose centres lie inside it. A colony that
@@ -553,6 +556,54 @@ material, species by species, and the area each material has covered.
 | `efficiency` | number | yes | The fraction of the cells delivered to this material that binds, 0 to 1, under the conditioning film. |
 | `detachment_per_h` | number | yes | How fast reversibly bound cells detach, per hour. |
 | `locking_per_h` | number | yes | How fast they lock into the biomass, per hour. |
+
+### Biomass that spreads
+
+With `spreading`, the species in a column share its room, and the biofilm
+grows by pushing the excess biomass up into the liquid
+([theory.md §6.1 and §9.10](theory.md#61-biomass-balance)):
+
+- **Room.** Each species has a packing density, ρ: its concentration when it
+  alone fills a voxel. A voxel's biomass fills the fraction
+  φ = Σ c<sub>j</sub>/ρ<sub>j</sub>, every species counted together, and no
+  voxel may hold more than all of it, φ ≤ 1.
+- **Growth, then spreading.** Growth runs in place for a spreading interval.
+  The biomass that no longer fits is then pushed on, from high pressure to
+  low, until every voxel fits again.
+- **Order is kept.** What leaves a voxel through a face is the material
+  nearest that face, so a layer of cells stays a layer as the film grows.
+- **What moves.** Species, and every particulate component with a density,
+  move together. A particulate component without a density takes no room and
+  stays where it is, and dissolved components only diffuse.
+- **The top layer stays clear.** It borders the bulk liquid. A film that would
+  reach it stops the run with an error naming the time; give it a taller box.
+  Detachment, which would balance growth, comes with Stage 3.
+
+The start must fit: a voxel that the initial amounts and colonies overfill is
+refused, and so is biomass in the top layer. A column spreads; boxes in two and
+three dimensions arrive with the next increment, and spreading under a salivary
+film when the oral scenes need it ([the Stage 2d plan](stage-2d-plan.md)).
+
+```bash
+marse check examples/networks/spreading_column.json   # the packing, and growth per interval
+marse run examples/networks/spreading_column.json -o runs/column
+```
+
+The example spreads 40 µm of heterotroph and fermenter, each packed at
+1000 C-mol per m³, under the liquid of `surface_biofilm_1d.json`. In four hours
+the film grows to 92 µm, with the heterotroph respiring at its top and the
+fermenter below. `marse run` then also writes `structure.csv`, with the
+biovolume per µm² of substratum (for a film without gaps, its thickness), its
+maximum thickness and its fullest voxel at every recorded time. Every run
+checks, after every spread, that nothing went negative, each component's
+total is unchanged, nothing else moved and every voxel fits.
+
+### Spreading fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `mechanism` | `continuum` | yes | How the excess moves: `continuum`, pushed by the pressure it makes. A cellular automaton is to follow. |
+| `interval_h` | number | no, default `0.25` | How long growth runs in place between spreads, in hours: at most `timestep_h`, which is cut into equal spans no longer than it. The error is first order in it, and smaller intervals mix layers more ([validation.md](validation.md#spreading-in-a-column)). |
 
 ### A salivary film and the mouth
 
@@ -754,8 +805,8 @@ schema will carry these grades itself once the examples are rebuilt on it.
 The next increments, in the order of
 [the roadmap](roadmap.md#order-of-work-correctness-first):
 
-- biomass that spreads as it grows and shares space between species, and
-  heritable lineages ([the plan](stage-2d-plan.md));
+- biomass that spreads in two and three dimensions, and heritable lineages
+  ([the plan](stage-2d-plan.md));
 - the examples and the periodontal study rebuilt on version 2, after which
   version 1 is removed;
 - dead biomass, the extracellular matrix, and a diffusivity that depends on

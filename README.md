@@ -64,8 +64,16 @@ marse run examples/networks/surface_biofilm_3d.json -o runs/surface    # minutes
 marse replay runs/surface/manifest.json
 ```
 
-[docs/networks.md](docs/networks.md) describes the format. Colonies that spread
-and share space come next.
+[docs/networks.md](docs/networks.md) describes the format.
+
+Biomass can spread as it grows. In a column, species share each voxel's room,
+and growth that no longer fits pushes the film up into the liquid, a layer
+staying a layer as it goes. Boxes in two and three dimensions spread next
+([the Stage 2d plan](docs/stage-2d-plan.md)):
+
+```bash
+marse run examples/networks/spreading_column.json -o runs/spreading   # seconds; writes structure.csv
+```
 
 The surface need not be seeded by hand. Cells suspended in the liquid reach it,
 bind, and lock or leave again. The surface can be patterned in several

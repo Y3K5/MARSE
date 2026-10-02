@@ -155,6 +155,19 @@ def _summarise_in_space(result: ReactiveTransportResult) -> None:
         _summarise_surface(result)
     if "mouth" in outputs:
         _summarise_mouth(result)
+    if "spreading" in outputs:
+        spreading = outputs["spreading"]
+        final = spreading["final"]
+        print(
+            f"spreading   {spreading['mechanism']}, every {spreading['interval_h']:g} h: "
+            f"{spreading['spreads']} spreads, at most {spreading['most_rounds']} round(s) each, "
+            f"{spreading['moved_um3_per_um2']:.4g} um3 per um2 moved"
+        )
+        print(
+            f"  biovolume {final['biovolume_um3_per_um2']:.4g} um3 per um2, maximum thickness "
+            f"{final['maximum_thickness_um']:g} um, "
+            f"fullest voxel {final['largest_volume_fraction']:.6f}"
+        )
     if "ph" in outputs:
         ph = outputs["ph"]
         final = ph["final"]
@@ -217,6 +230,9 @@ def _comparable(outputs: dict) -> dict[str, float | str]:
         if "surface" in outputs:
             final = outputs["surface"]["final"]
             values.update({f"surface[{k}]": float(v) for k, v in final.items()})
+        if "spreading" in outputs:
+            final = outputs["spreading"]["final"]
+            values.update({f"structure[{k}]": float(v) for k, v in final.items()})
         return values
     if "final_mol_per_m3" in outputs:  # a reaction network in a closed box
         values = {
@@ -306,6 +322,8 @@ def _run_in_space(
         written.append(result.write_ph(output_dir / "ph.csv"))
     if result.mouth is not None:
         written.append(result.write_mouth(output_dir / "mouth.csv"))
+    if result.structure is not None:
+        written.append(result.write_structure(output_dir / "structure.csv"))
     return result, (*written, index, pvd, manifest)
 
 
@@ -619,6 +637,8 @@ def _report_domain(config: ReactiveTransportConfig) -> None:
         print(f"  colonies: {placed} ({', '.join(kinds)})")
     if domain.surface is not None:
         _report_surface(config)
+    if domain.spreading is not None:
+        _report_spreading(config)
     limit = build_model(config).diffusion.explicit_step_limit_h()
     if math.isfinite(limit):
         stability = f"an explicit step would have to be at most {limit * 3600 * 1000:.3g} ms"
@@ -644,6 +664,42 @@ def _report_domain(config: ReactiveTransportConfig) -> None:
             f"time scales diffusion across the box {scales['diffusion_h'] * 3600:.3g} s, "
             f"fastest process {scales['growth_h']:.3g} h (ratio {scales['ratio']:.2g})"
         )
+
+
+def _report_spreading(config: ReactiveTransportConfig) -> None:
+    from marse.core.reactive_transport import build_model
+    from marse.spatial.spreading import volume_fraction
+
+    spreading = config.domain.spreading
+    assert spreading is not None
+    network = config.network
+    densities = network.densities()
+    rooms = ", ".join(
+        f"{c.name} {float(c.density_mol_per_m3):g}"
+        for c in network.components
+        if c.density_mol_per_m3 is not None
+    )
+    print(
+        f"  spreading: {spreading.mechanism}, every {spreading.interval_h:g} h; "
+        f"packing densities, mol per m3: {rooms}"
+    )
+    state = config.domain.initial_state(
+        network.component_names, config.initial_mol_per_m3, config.seed
+    )
+    phi = volume_fraction(state, densities)
+    model = build_model(config)
+    inverse = np.divide(1.0, densities, out=np.zeros_like(densities), where=densities > 0)
+    volume_per_h = np.einsum(
+        "pj,j,p...->...",
+        model.stoichiometry[: len(network.processes)],
+        inverse,
+        model.rates(state)[: len(network.processes)],
+    )
+    growth = float(volume_per_h.max(initial=0.0)) * spreading.interval_h
+    print(
+        f"  the fullest voxel starts {float(phi.max()):.4g} full; at the starting rates, the "
+        f"fastest grows by {growth:.3g} of a voxel per interval"
+    )
 
 
 def _report_mouth(config: ReactiveTransportConfig) -> None:

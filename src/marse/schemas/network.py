@@ -55,6 +55,7 @@ from marse.schemas.formula import (
 )
 
 __all__ = [
+    "MECHANISMS",
     "OXYGEN_ROLES",
     "SCHEMA",
     "SCHEMA_VERSION",
@@ -110,6 +111,7 @@ DOMAIN_FIELDS = {
     "film": Field("object", required=False),
     "mouth": Field("object", required=False),
     "diet": Field("objects", required=False),
+    "spreading": Field("object", required=False),
 }
 """The box of voxels a network runs in; read by :mod:`marse.schemas.domain`."""
 
@@ -184,6 +186,12 @@ INTAKE_FIELDS = {
     "mixing_per_s": Field("number", required=False),
     "retained": Field("object", required=False),
 }
+MECHANISMS = ("continuum",)
+"""How biomass spreads (docs/stage-2d-plan.md); the cellular automaton arrives in 2d.5."""
+SPREADING_FIELDS = {
+    "mechanism": Field("choice", choices=MECHANISMS),
+    "interval_h": Field("number", required=False),
+}
 RETAINED_FIELDS = {
     "component": Field("name"),
     "amount_mol_per_m2": Field("number"),
@@ -205,6 +213,7 @@ COMPONENT_FIELDS = {
     "charge": Field("number", required=False),
     "acid_base": Field("object", required=False),
     "oxygen_role": Field("choice", choices=OXYGEN_ROLES, required=False),
+    "density_mol_per_m3": Field("number", required=False),
 }
 ACID_BASE_FIELDS = {
     "pka": Field("vector"),
@@ -262,6 +271,7 @@ SCHEMA = {
     "mouth": MOUTH_FIELDS,
     "intake": INTAKE_FIELDS,
     "retained": RETAINED_FIELDS,
+    "spreading": SPREADING_FIELDS,
 }
 """Every object of the network format and its fields, as docs/networks.md lists them."""
 
@@ -299,6 +309,10 @@ class Component:
 
     A species, a component that some growth process forms, has an
     ``oxygen_role``, one of :data:`OXYGEN_ROLES`.
+
+    A particulate component that takes up room in the biofilm has a packing
+    density, ``density_mol_per_m3``: its concentration when it alone fills a
+    voxel (docs/theory.md, section 6.1).
     """
 
     name: str
@@ -306,6 +320,7 @@ class Component:
     formula: Formula
     pka: tuple[Fraction, ...] = ()
     oxygen_role: str | None = None
+    density_mol_per_m3: Fraction | None = None
 
     def to_dict(self) -> dict[str, Any]:
         written = {
@@ -318,6 +333,8 @@ class Component:
             written["acid_base"] = {"pka": [plain(k) for k in self.pka]}
         if self.oxygen_role is not None:
             written["oxygen_role"] = self.oxygen_role
+        if self.density_mol_per_m3 is not None:
+            written["density_mol_per_m3"] = plain(self.density_mol_per_m3)
         return written
 
     @property
@@ -535,6 +552,10 @@ class Network:
         rows = [[float(p.coefficient(n)) for n in names] for p in self.processes]
         return np.array(rows, dtype=float).reshape(len(self.processes), len(names))
 
+    def densities(self) -> NDArray[np.float64]:
+        """Each component's packing density in mol per m3, or 0 if it takes no room."""
+        return np.array([float(c.density_mol_per_m3 or 0) for c in self.components], dtype=float)
+
     def composition_matrix(self) -> NDArray[np.float64]:
         """Components by quantities: each of :attr:`quantities` per mol."""
         quantities = self.quantities
@@ -600,7 +621,16 @@ def _component(raw: Any, index: int) -> Component:
             f"{where}.oxygen_role: '{values['name']}' is dissolved; an oxygen role belongs to a "
             "species, a particulate component"
         )
-    return Component(values["name"], values["phase"], formula, pka, role)
+    density = values.get("density_mol_per_m3")
+    if density is not None:
+        if values["phase"] != "particulate":
+            raise ConfigError(
+                f"{where}.density_mol_per_m3: '{values['name']}' is dissolved; only a particulate "
+                "component takes up room in the biofilm"
+            )
+        if not density > 0:
+            raise ConfigError(f"{where}.density_mol_per_m3: must be positive")
+    return Component(values["name"], values["phase"], formula, pka, role, density)
 
 
 def _acid_base(raw: Any, where: str, formula: Formula) -> tuple[Fraction, ...]:
