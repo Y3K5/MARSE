@@ -13,6 +13,7 @@ from marse.schemas.domain import Colony, Domain, RandomColonies
 from marse.schemas.experiment import ReactiveTransportConfig, WellMixedConfig, experiment_from_dict
 from marse.schemas.formula import QUANTITIES, Formula, parse_formula
 from marse.schemas.network import (
+    OXYGEN_ROLES,
     Component,
     ContinuityError,
     Factor,
@@ -25,6 +26,7 @@ from marse.schemas.network import (
 )
 
 __all__ = [
+    "OXYGEN_ROLES",
     "QUANTITIES",
     "Colony",
     "Component",

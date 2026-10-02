@@ -771,6 +771,42 @@ because $h$ is not part of the state but a function of it.
 Implemented as `marse.chemistry.acid_base`, and the factor in
 `marse.microbes.kinetics`.
 
+### 3.9 Oxygen roles
+
+How a species lives with oxygen decides where in a biofilm it can grow, so it
+is declared rather than left implicit in its rates
+([networks.md](networks.md#oxygen-roles)). With the rate of §3.7,
+
+$$
+r_p = k_p \, c_{a(p)} \prod_i f_i(\mathbf{c}),
+$$
+
+a growth process *needs* oxygen if it consumes oxygen ($N_{p,\mathrm{O_2}} < 0$)
+or has a monod or haldane factor on it, either of which is zero at
+$c_{\mathrm{O_2}} = 0$. An inhibition factor $K_I/(K_I + c_{\mathrm{O_2}})$
+instead equals 1 without oxygen and falls as oxygen rises. Each role constrains
+the processes of its species:
+
+| Role | Constraint |
+|---|---|
+| obligate aerobe | every growth process consumes oxygen |
+| microaerophile | every growth process consumes oxygen, through a haldane factor $c/(K + c + c^2/K_I)$, which falls at high oxygen |
+| facultative | at least one growth process consumes oxygen and at least one does not |
+| aerotolerant | no process needs oxygen |
+| obligate anaerobe | no process needs oxygen, and every growth process has an inhibition factor on it |
+
+So an anaerobe's growth rate at $c_{\mathrm{O_2}} = 0$ is exactly what its
+other factors give. The version 1 periodontal anaerobes, whose growth carried
+a Monod term on oxygen and was therefore exactly zero without it (known
+defect 3), cannot be written in version 2.
+
+The roles state what the network models, not every capability the organism
+has. They constrain the form of the rates, not their constants: whether an
+inhibition constant is small enough to stop growth in air is a parameter, and
+is graded like any other ([parameters.md](parameters.md)).
+
+Implemented in `marse.schemas.network`.
+
 ---
 
 ## 4. Transport
@@ -1917,6 +1953,7 @@ reader can see exactly what those were.
 | V7 | Perturbation and recovery | §2, §8 |
 | V8 | Reproducibility from manifest | §9.3, §9.4 |
 | S1 | pH, the mouth, the diet and the Stephan curve (criteria G1 to G7) | §3.8, §4.8, §4.9, §9.9 |
+| 2d.1 | Oxygen roles (criteria D1 to D3) | §3.9 |
 
 Full definitions in [`docs/validation.md`](validation.md).
 

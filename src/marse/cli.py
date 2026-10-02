@@ -530,6 +530,18 @@ def _report_network(network: Network, source: str) -> None:
             f"  {c.name:<24} {c.phase:<12} {c.formula.label():<16} {carbon:>6} {nitrogen:>6} "
             f"{electrons:>6}{counts} {c.formula.molar_mass_g_per_mol:>9.3f}"
         )
+    roles = ", ".join(
+        f"{c.name} {c.oxygen_role}" for c in network.components if c.oxygen_role is not None
+    )
+    if roles:
+        print(
+            textwrap.fill(
+                f"oxygen roles, each checked against its processes: {roles}",
+                88,
+                initial_indent="  ",
+                subsequent_indent="    ",
+            )
+        )
     if network.has_ph:
         pkw = 14.0 if network.pkw is None else float(network.pkw)
         totals = ", ".join(

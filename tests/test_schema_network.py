@@ -41,7 +41,10 @@ CLOSE_AEROBICALLY = ["oxygen", "carbon_dioxide", "ammonium"]
 
 def component(name: str) -> dict:
     phase, formula, charge = COMPONENTS[name]
-    return {"name": name, "phase": phase, "formula": formula, "charge": charge}
+    raw = {"name": name, "phase": phase, "formula": formula, "charge": charge}
+    if phase == "particulate":
+        raw["oxygen_role"] = "obligate_aerobe"  # the growth rows below respire
+    return raw
 
 
 def raw_network(*processes: dict) -> dict:

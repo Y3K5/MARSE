@@ -44,7 +44,12 @@ def yeast(duration_h=6.0, timestep_h=0.5, **run_settings) -> dict:
             {"name": "glucose", "phase": "dissolved", "formula": "C6H12O6"},
             {"name": "ethanol", "phase": "dissolved", "formula": "C2H6O"},
             {"name": "carbon_dioxide", "phase": "dissolved", "formula": "CO2"},
-            {"name": "yeast", "phase": "particulate", "formula": "CH1.8O0.5"},
+            {
+                "name": "yeast",
+                "phase": "particulate",
+                "formula": "CH1.8O0.5",
+                "oxygen_role": "aerotolerant",
+            },
         ],
         "processes": [
             {

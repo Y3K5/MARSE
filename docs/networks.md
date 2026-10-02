@@ -108,6 +108,7 @@ key is an error, not a silently ignored typo.
 | `formula` | text | yes | The chemical formula of one unit of the component, such as `C6H12O6` or `CH1.8O0.5N0.2`. |
 | `charge` | number | no, default `0` | The charge of one formula unit, in elementary charges: `1` for ammonium, `-1` for lactate. |
 | `acid_base` | object | no | Makes the component an acid–base total, such as lactic acid and lactate together; see [Acids, bases and pH](#acids-bases-and-ph). |
+| `oxygen_role` | `obligate_aerobe`, `microaerophile`, `facultative`, `aerotolerant` or `obligate_anaerobe` | for a species | How a species lives with oxygen, checked against its processes; see [Oxygen roles](#oxygen-roles). A species is a particulate component that some growth process forms. |
 
 A component is counted in mol of its formula unit. Biomass written per carbon
 atom, as `CH1.8O0.5N0.2`, is therefore counted in C-mol. The formula rules:
@@ -269,6 +270,43 @@ Two rules are checked when the file is read:
   `assumed_in_excess`; activated-sludge models make that assumption for
   ammonium, for example. The assumption is then recorded, and a run in which
   it fails stops with an error rather than continuing on a false premise.
+
+## Oxygen roles
+
+Every species states how it lives with oxygen, as its `oxygen_role`. A species
+is a particulate component that some growth process forms. The role is a rule
+that the species' processes must obey, checked when the file is read:
+
+- **Its growth processes** are the processes that form it.
+- **Its processes** are those, and the reactions whose rate is
+  `proportional_to` it, such as its endogenous respiration.
+- **Oxygen** is the dissolved component whose formula is `O2`. No field names
+  it.
+
+| Role | Its processes |
+|---|---|
+| `obligate_aerobe` | Every growth process consumes oxygen. |
+| `microaerophile` | Every growth process consumes oxygen, and every one with a rate has a `haldane` factor on it, so that too much oxygen slows it. |
+| `facultative` | At least one growth process consumes oxygen, and at least one does not. |
+| `aerotolerant` | No process consumes oxygen, and none has a `monod` or `haldane` factor on it. |
+| `obligate_anaerobe` | As `aerotolerant`. In a network with oxygen, every growth process with a rate also has an `inhibition` factor on oxygen, because oxygen stops it growing. |
+
+A network that breaks a rule is refused, with a message naming the species,
+the process and the factor. An anaerobe with a Monod term on oxygen cannot be
+loaded. That was the version 1 engine's
+[known defect 3](validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified),
+in which the periodontal anaerobes needed oxygen to grow.
+
+**A role describes the model, not only the organism.** *S. oralis* is usually
+described as a facultative anaerobe, but a scene that models only its
+fermentation declares it `aerotolerant`, because no process of it uses oxygen
+there. The dental scene
+does so. `facultative` asks for both ways of growing, so that a species
+declared to switch can switch.
+
+`marse check` prints each species' role. Variants, when they arrive, will
+inherit the role of their species
+([Stage 2d plan](stage-2d-plan.md#variants-and-lineages)).
 
 ## Running a network
 
@@ -716,8 +754,8 @@ schema will carry these grades itself once the examples are rebuilt on it.
 The next increments, in the order of
 [the roadmap](roadmap.md#order-of-work-correctness-first):
 
-- biomass that spreads as it grows and shares space between species, with
-  oxygen roles for species and heritable lineages;
+- biomass that spreads as it grows and shares space between species, and
+  heritable lineages ([the plan](stage-2d-plan.md));
 - the examples and the periodontal study rebuilt on version 2, after which
   version 1 is removed;
 - dead biomass, the extracellular matrix, and a diffusivity that depends on

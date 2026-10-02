@@ -32,12 +32,14 @@
     {
       "name": "heterotroph",
       "phase": "particulate",
-      "formula": "CH1.8O0.5N0.2"
+      "formula": "CH1.8O0.5N0.2",
+      "oxygen_role": "obligate_aerobe"
     },
     {
       "name": "fermenter",
       "phase": "particulate",
-      "formula": "CH1.8O0.5N0.2"
+      "formula": "CH1.8O0.5N0.2",
+      "oxygen_role": "aerotolerant"
     }
   ],
   "processes": [

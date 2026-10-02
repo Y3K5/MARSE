@@ -1,16 +1,16 @@
 {
   "schema_version": 2,
   "experiment_id": "dental-surfaces-early-colonizers",
-  "description": "A dental scene: one surface patterned in four stripes, enamel, titanium, zirconia and acrylic (PMMA), all under a salivary pellicle, side by side under the same salivary film for 24 hours. The early colonizers Streptococcus oralis and S. sanguinis are suspended in the saliva, bind to the pellicle-coated surfaces, lock, and grow on salivary glucose by lactic fermentation, taking nitrogen from ammonium. The film is 80 um thick and moves at 2 mm per min (70 to 100 um, Collins and Dawes 1987; 0.8 to 7.6 mm per min, Dawes et al. 1989), so its wall shear is 3 u / delta = 1.25 per s; cells are delivered by the Leveque flux. Only one contrast between materials is backed by data: in the mouth, bacteria covered 19.3% of titanium against 12.1% of zirconia after 24 h (Scarano et al. 2004), and the early colonizers bind less to zirconia than to titanium (Oda et al. 2020). So zirconia's attachment efficiency is 0.63 of titanium's; a study of low-roughness surfaces in situ found no difference (docs/parameters.md). Enamel, titanium and PMMA share one efficiency because no comparison was found. Every rate, yield, efficiency, suspension level and the salivary glucose (a daytime average; meals come with the saliva-and-diet stage) is illustrative (confidence C). Colonies grow in place until Stage 2d lets them spread.",
+  "description": "A dental scene: one surface patterned in four stripes, enamel, titanium, zirconia and acrylic (PMMA), all under a salivary pellicle, side by side under the same salivary film for 24 hours. The early colonizers Streptococcus oralis and S. sanguinis are suspended in the saliva, bind to the pellicle-coated surfaces, lock, and grow on salivary glucose by lactic fermentation, taking nitrogen from ammonium. Both are declared aerotolerant: the scene holds no oxygen, and they only ferment. The film is 80 um thick and moves at 2 mm per min (70 to 100 um, Collins and Dawes 1987; 0.8 to 7.6 mm per min, Dawes et al. 1989), so its wall shear is 3 u / delta = 1.25 per s; cells are delivered by the Leveque flux. Only one contrast between materials is backed by data: in the mouth, bacteria covered 19.3% of titanium against 12.1% of zirconia after 24 h (Scarano et al. 2004), and the early colonizers bind less to zirconia than to titanium (Oda et al. 2020). So zirconia's attachment efficiency is 0.63 of titanium's; a study of low-roughness surfaces in situ found no difference (docs/parameters.md). Enamel, titanium and PMMA share one efficiency because no comparison was found. Every rate, yield, efficiency, suspension level and the salivary glucose (a daytime average; meals come with the saliva-and-diet stage) is illustrative (confidence C). Colonies grow in place until Stage 2d lets them spread.",
   "components": [
     {"name": "glucose", "phase": "dissolved", "formula": "C6H12O6"},
     {"name": "ammonium", "phase": "dissolved", "formula": "NH4", "charge": 1},
     {"name": "carbon_dioxide", "phase": "dissolved", "formula": "CO2"},
     {"name": "lactate", "phase": "dissolved", "formula": "C3H5O3", "charge": -1},
     {"name": "s_oralis_reversible", "phase": "particulate", "formula": "CH1.8O0.5N0.2"},
-    {"name": "s_oralis", "phase": "particulate", "formula": "CH1.8O0.5N0.2"},
+    {"name": "s_oralis", "phase": "particulate", "formula": "CH1.8O0.5N0.2", "oxygen_role": "aerotolerant"},
     {"name": "s_sanguinis_reversible", "phase": "particulate", "formula": "CH1.8O0.5N0.2"},
-    {"name": "s_sanguinis", "phase": "particulate", "formula": "CH1.8O0.5N0.2"}
+    {"name": "s_sanguinis", "phase": "particulate", "formula": "CH1.8O0.5N0.2", "oxygen_role": "aerotolerant"}
   ],
   "processes": [
     {

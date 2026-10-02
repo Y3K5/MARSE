@@ -24,6 +24,11 @@ A process may also carry a :class:`RateLaw`, which makes the network runnable
 (docs/theory.md, section 3.7). A rate is refused if it lets a process consume a
 component its rate does not depend on, unless the configuration states that the
 component is assumed to be in excess.
+
+Every species, the biomass of a growth process, declares how it lives with
+oxygen: one of :data:`OXYGEN_ROLES`. The role is a rule its processes must obey,
+checked once every process is read. An anaerobe whose growth needs oxygen, the
+error behind known defect 3 of the version 1 engine, is refused.
 """
 
 from __future__ import annotations
@@ -50,6 +55,7 @@ from marse.schemas.formula import (
 )
 
 __all__ = [
+    "OXYGEN_ROLES",
     "SCHEMA",
     "SCHEMA_VERSION",
     "Component",
@@ -67,6 +73,14 @@ SCHEMA_VERSION = 2
 PHASES = ("dissolved", "particulate")
 KINDS = ("growth", "reaction")
 FORMS = ("monod", "inhibition", "haldane", "ph", "dissociated")
+OXYGEN_ROLES = (
+    "obligate_aerobe",
+    "microaerophile",
+    "facultative",
+    "aerotolerant",
+    "obligate_anaerobe",
+)
+"""How a species lives with oxygen (docs/networks.md, "Oxygen roles")."""
 
 RUN_FIELDS = {
     "experiment_id": Field("text", required=False),
@@ -190,6 +204,7 @@ COMPONENT_FIELDS = {
     "formula": Field("text"),
     "charge": Field("number", required=False),
     "acid_base": Field("object", required=False),
+    "oxygen_role": Field("choice", choices=OXYGEN_ROLES, required=False),
 }
 ACID_BASE_FIELDS = {
     "pka": Field("vector"),
@@ -281,12 +296,16 @@ class Component:
     and lactate together. Its formula is then its most protonated form, and each
     pKa, in ascending order, removes one proton from it (docs/theory.md, section
     3.8). Any other charged component keeps its charge whatever the pH.
+
+    A species, a component that some growth process forms, has an
+    ``oxygen_role``, one of :data:`OXYGEN_ROLES`.
     """
 
     name: str
     phase: Literal["dissolved", "particulate"]
     formula: Formula
     pka: tuple[Fraction, ...] = ()
+    oxygen_role: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         written = {
@@ -297,7 +316,15 @@ class Component:
         }
         if self.pka:
             written["acid_base"] = {"pka": [plain(k) for k in self.pka]}
+        if self.oxygen_role is not None:
+            written["oxygen_role"] = self.oxygen_role
         return written
+
+    @property
+    def is_oxygen(self) -> bool:
+        """Whether this is dissolved oxygen: formula O2, uncharged."""
+        counts = {symbol: n for symbol, n in self.formula.counts if n}
+        return self.phase == "dissolved" and self.formula.charge == 0 and counts == {"O": 2}
 
 
 @dataclass(frozen=True, slots=True)
@@ -567,7 +594,13 @@ def _component(raw: Any, index: int) -> Component:
     pka: tuple[Fraction, ...] = ()
     if "acid_base" in values:
         pka = _acid_base(values["acid_base"], f"{where}.acid_base", formula)
-    return Component(values["name"], values["phase"], formula, pka)
+    role = values.get("oxygen_role")
+    if role is not None and values["phase"] != "particulate":
+        raise ConfigError(
+            f"{where}.oxygen_role: '{values['name']}' is dissolved; an oxygen role belongs to a "
+            "species, a particulate component"
+        )
+    return Component(values["name"], values["phase"], formula, pka, role)
 
 
 def _acid_base(raw: Any, where: str, formula: Formula) -> tuple[Fraction, ...]:
@@ -950,6 +983,118 @@ def _process(
     )
 
 
+_ROLE_NAMES = {
+    "obligate_aerobe": "an obligate aerobe",
+    "microaerophile": "a microaerophile",
+    "facultative": "a facultative species",
+    "aerotolerant": "an aerotolerant species",
+    "obligate_anaerobe": "an obligate anaerobe",
+}
+
+
+def _oxygen_factor(process: Process, oxygen: Sequence[str], forms: Sequence[str]) -> Factor | None:
+    """The process's factor on oxygen, if it has one of ``forms``."""
+    if process.rate is None:
+        return None
+    return next(
+        (f for f in process.rate.factors if f.component in oxygen and f.form in forms), None
+    )
+
+
+def _check_oxygen_role(
+    species: Component, processes: Sequence[Process], oxygen: Sequence[str]
+) -> None:
+    """Refuse a species whose processes break its oxygen role.
+
+    Its growth processes are those that form it. Its processes are those, and
+    the reactions whose rate is proportional to it. Rules on rate factors apply
+    to the processes that have a rate.
+    """
+    role = species.oxygen_role
+    assert role is not None
+    where = f"network.components '{species.name}'"
+    who = _ROLE_NAMES[role]
+    grown = [p for p in processes if p.growth is not None and p.growth.biomass == species.name]
+    own = grown + [
+        p
+        for p in processes
+        if p.growth is None and p.rate is not None and p.rate.proportional_to == species.name
+    ]
+    breathing = [p for p in grown if any(p.coefficient(o) < 0 for o in oxygen)]
+    if role in ("obligate_aerobe", "microaerophile", "facultative") and grown and not oxygen:
+        raise ConfigError(
+            f"{where}: is {who}, so it grows on oxygen, but no component of this network is "
+            "oxygen, a dissolved component with formula O2"
+        )
+    if role in ("obligate_aerobe", "microaerophile"):
+        for p in grown:
+            if p not in breathing:
+                raise ConfigError(
+                    f"{where}: is {who}, but its growth process '{p.name}' does not consume "
+                    "oxygen; every growth process of an aerobe respires it"
+                )
+    if role == "microaerophile":
+        for p in grown:
+            if p.rate is not None and _oxygen_factor(p, oxygen, ("haldane",)) is None:
+                raise ConfigError(
+                    f"{where}: is {who}, but its growth process '{p.name}' has no haldane "
+                    "factor on oxygen; a microaerophile is slowed by too much oxygen, which a "
+                    "haldane factor expresses"
+                )
+    if role == "facultative" and grown:
+        if not breathing:
+            raise ConfigError(
+                f"{where}: is {who}, but none of its growth processes consumes oxygen; give it "
+                "one that respires, or declare it aerotolerant or an obligate_anaerobe"
+            )
+        if len(breathing) == len(grown):
+            raise ConfigError(
+                f"{where}: is {who}, but every one of its growth processes consumes oxygen; "
+                "give it one that grows without oxygen, or declare it an obligate_aerobe"
+            )
+    if role in ("aerotolerant", "obligate_anaerobe"):
+        for p in own:
+            if any(p.coefficient(o) < 0 for o in oxygen):
+                raise ConfigError(
+                    f"{where}: is {who}, but its process '{p.name}' consumes oxygen; an "
+                    "anaerobe does not use oxygen"
+                )
+            needs = _oxygen_factor(p, oxygen, ("monod", "haldane"))
+            if needs is not None:
+                raise ConfigError(
+                    f"{where}: is {who}, but its process '{p.name}' has a {needs.form} factor on "
+                    f"'{needs.component}', so it could not run without oxygen; an anaerobe "
+                    "grows without it"
+                )
+    if role == "obligate_anaerobe" and oxygen:
+        for p in grown:
+            if p.rate is not None and _oxygen_factor(p, oxygen, ("inhibition",)) is None:
+                raise ConfigError(
+                    f"{where}: is {who}, but its growth process '{p.name}' has no inhibition "
+                    "factor on oxygen; oxygen stops an obligate anaerobe growing, which an "
+                    "inhibition factor expresses"
+                )
+
+
+def _check_oxygen_roles(components: Sequence[Component], processes: Sequence[Process]) -> None:
+    oxygen = [c.name for c in components if c.is_oxygen]
+    for component in components:
+        if component.oxygen_role is not None:
+            _check_oxygen_role(component, processes, oxygen)
+            continue
+        grown = next(
+            (p for p in processes if p.growth is not None and p.growth.biomass == component.name),
+            None,
+        )
+        if grown is not None:
+            raise ConfigError(
+                f"network.components '{component.name}': grows in process '{grown.name}', so "
+                f"it is a species and needs an oxygen_role: one of {', '.join(OXYGEN_ROLES[:-1])} "
+                f"or {OXYGEN_ROLES[-1]} "
+                "(docs/networks.md, 'Oxygen roles')"
+            )
+
+
 def network_from_dict(raw: Any) -> Network:
     """Read a network and prove every process balances.
 
@@ -985,6 +1130,7 @@ def read_document(raw: Any) -> tuple[Network, dict[str, Any]]:
         _process(item, i, by_name, quantities) for i, item in enumerate(values["processes"])
     )
     _require_unique([p.name for p in processes], "network.processes")
+    _check_oxygen_roles(components, processes)
     network = Network(components, processes, values.get("description", ""), values.get("pkw"))
     if network.has_ph and not any(c.formula.charge or c.pka for c in components):
         raise ConfigError(

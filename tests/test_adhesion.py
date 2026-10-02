@@ -295,6 +295,9 @@ def test_an_impossible_scene_is_refused_with_the_reason(change, message):
 def test_reversibly_bound_cells_take_part_in_no_process():
     raw = json.loads(DENTAL.read_text("utf-8"))
     raw["processes"][0]["biomass"] = "s_oralis_reversible"
+    # Growing makes it a species, which needs a role before the scene is read.
+    reversible = next(c for c in raw["components"] if c["name"] == "s_oralis_reversible")
+    reversible["oxygen_role"] = "aerotolerant"
     with pytest.raises(ConfigError, match="reversibly bound cells only detach or lock"):
         experiment_from_dict(raw)
 

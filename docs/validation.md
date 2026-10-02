@@ -91,7 +91,7 @@ flips its test, which must then become an ordinary regression test.
 |---|---|---|---|
 | 1 | The examples give oxygen a diffusivity of 10 µm²/h. The physical value in a biofilm is about 4×10⁶ µm²/h (`oxygen_diffusivity_um2_per_h` at 37 °C × 0.43). At 10 µm cells the explicit scheme could only run that value with 22 ms steps. | Oxygen spreads about 30 µm in 24 h instead of about 20 mm | Every oxygen gradient in the examples is set by the numerics, not the physics. The version 2 spatial engine runs oxygen at its physical diffusivity: transport is implicit, so no step limit applies ([theory.md §9.8](theory.md#98-implicit-reactiontransport-integration)) |
 | 2 | Uptake follows *potential* growth, not actual growth. Production adds material that no consumed substrate pays for. | With growth held at zero, 22% of the carbon is consumed in an hour. With a yield of 1, 1.3–1.6 units are consumed per unit of biomass formed. | Yield and mass balance are both broken. Configuration schema version 2 refuses such a process when it loads ([networks.md](networks.md)), and the version 2 network engine meets the requirement: consumption is growth divided by yield, exactly, and nothing is consumed without growth |
-| 3 | The periodontal species need oxygen to grow (a Monod term), although all three are anaerobes ([Holt and Ebersole 2005](https://pubmed.ncbi.nlm.nih.gov/15853938/)) | With no oxygen, growth is exactly zero | The study's oxygen-limited control points the wrong way |
+| 3 | The periodontal species need oxygen to grow (a Monod term), although all three are anaerobes ([Holt and Ebersole 2005](https://pubmed.ncbi.nlm.nih.gov/15853938/)) | With no oxygen, growth is exactly zero | The study's oxygen-limited control points the wrong way. Version 2 refuses an anaerobe whose growth needs oxygen ([oxygen roles](#oxygen-roles)) |
 | 4 | A species capability applies the substrate Monod term a second time | 50% of the intended rate at C = K, 13% at C = K/7 | Growth at low substrate is strongly understated. Version 2 refuses a second factor for one component, and a Monod factor gives exactly half the rate at C = K |
 | 5 | Negative values are clipped instead of refused, and chemotaxis has no stability limit | One unstable chemotaxis step doubles total biomass | Mass is created silently. For reactions, the version 2 engine is positive without clipping at any step size; chemotaxis waits for the spatial engine |
 | 6 | Mutation marks grid cells, including empty ones, not lineages, and every species draws from one shared random stream | At probability 1, every empty cell becomes "mutant" | Resistance does not move with the cells that carry it |
@@ -210,7 +210,8 @@ checks, in `tests/test_well_mixed.py` and `tests/test_integrators.py`:
 - **Selectivity.** A process that consumes nothing scarce runs at exactly the
   rate it would have alone.
 - **The requirements behind known defects 2, 4, 5 and 7** hold on this engine,
-  as the defect table above notes. The version 1 expected-failure tests stay
+  as the defect table above notes, and the requirement behind defect 3 holds
+  in its schema ([oxygen roles](#oxygen-roles)). The version 1 expected-failure tests stay
   until version 1 is removed.
 - **Replay.** Runs replay bit for bit from their manifests. An edited manifest
   is refused.
@@ -599,6 +600,27 @@ Dawes and Dibdin (1986) found an optimum thickness at which plaque reaches
 its lowest pH, so a thicker plaque need not fall further; the test asks only
 that it stays acid longer. `python examples/stephan_curve.py` runs the first
 three and checks G5 and the first two directions (44 s).
+
+## Oxygen roles
+
+Every species declares how it lives with oxygen, and its processes must obey
+the role ([theory.md §3.9](theory.md#39-oxygen-roles)). These criteria were set
+in the [Stage 2d plan](stage-2d-plan.md#2d1-oxygen-roles) before increment
+2d.1 was built, and are checked in `tests/test_oxygen_roles.py`:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| D1 | Every role refuses each of its violations, and the message names the species and the process | All 5 roles, each rule | 11 violations refused, each naming both; 9 networks that obey a role accepted, including an anaerobe in a network without oxygen |
+| D2 | An `obligate_anaerobe` grows at zero oxygen in a closed box, at the rate its other factors give | Exact, to the integrator's tolerance | Bit for bit the same trajectory as the same culture in a network without oxygen, over 12 h and a 61-fold growth |
+| D3 | The examples gain roles, and their results do not change | Every final digest unchanged | Unchanged, bit for bit, for all six: `glucose_cross_feeding`, `surface_biofilm_1d`, `surface_biofilm_3d`, `flow_chamber`, `dental_surfaces` and `stephan_rinse` |
+
+The version 1 periodontal anaerobes, whose growth had a Monod term on oxygen
+([known defect 3](#the-two-dimensional-ecosystem-engine-is-not-yet-verified)),
+are refused in version 2: `obligate_anaerobe` or `aerotolerant` with a monod
+factor on oxygen does not load. Oxygen held at an anaerobe's inhibition
+constant halves its rate, and forty times that constant leaves 1/41 of it, to
+1e-4. The expected-failure test of defect 3 runs the version 1 engine, so it
+stays until 2e removes that engine.
 
 ## Running the suite
 

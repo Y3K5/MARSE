@@ -114,6 +114,24 @@ results for the same manifest is always called out.
 
 ### Added
 
+- **Oxygen roles** (Stage 2d, increment 2d.1;
+  [docs/networks.md](docs/networks.md#oxygen-roles), theory.md §3.9).
+  - Every species, a particulate component that a growth process forms,
+    declares an `oxygen_role`: `obligate_aerobe`, `microaerophile`,
+    `facultative`, `aerotolerant` or `obligate_anaerobe`.
+  - Each role is a rule on the species' processes, checked as the network
+    loads. An anaerobe whose growth has a Monod factor on oxygen, the version
+    1 engine's known defect 3, is refused with a message naming the species
+    and the process.
+  - Oxygen is recognised by its formula, O2.
+  - `marse check` prints every species' role.
+  - Criteria D1 to D3, set in the plan, are met
+    ([validation.md](docs/validation.md#oxygen-roles)). An anaerobe without
+    oxygen grows bit for bit as it would in a network with no oxygen at all.
+  - **Breaking:** a network whose species have no role is refused. The
+    examples declare roles, and every example's final state is unchanged bit
+    for bit. Manifests written before this change name no roles, so they no
+    longer replay.
 - **Reaction networks: configuration schema version 2, part one**
   (`marse.schemas`, `marse check`, [docs/networks.md](docs/networks.md)). A
   network lists components, each with a chemical formula, and processes, each

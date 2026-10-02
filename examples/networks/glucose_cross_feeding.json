@@ -7,8 +7,8 @@
     {"name": "ammonium", "phase": "dissolved", "formula": "NH4", "charge": 1},
     {"name": "carbon_dioxide", "phase": "dissolved", "formula": "CO2"},
     {"name": "lactate", "phase": "dissolved", "formula": "C3H5O3", "charge": -1},
-    {"name": "heterotroph", "phase": "particulate", "formula": "CH1.8O0.5N0.2"},
-    {"name": "fermenter", "phase": "particulate", "formula": "CH1.8O0.5N0.2"}
+    {"name": "heterotroph", "phase": "particulate", "formula": "CH1.8O0.5N0.2", "oxygen_role": "obligate_aerobe"},
+    {"name": "fermenter", "phase": "particulate", "formula": "CH1.8O0.5N0.2", "oxygen_role": "aerotolerant"}
   ],
   "processes": [
     {

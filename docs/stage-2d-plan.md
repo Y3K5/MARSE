@@ -1,10 +1,11 @@
 # Stage 2d plan: biomass that spreads and shares space
 
-**Status: proposed.** Nothing here is built yet. The criteria below are set
-before the code is written, as they were for 2c and S1, so that the stage can
-fail them. When an increment lands, its results replace its thresholds in
-[validation.md](validation.md), and this page records what changed from the
-plan.
+**Status: in progress.** 2d.1, oxygen roles, is done: it met D1 to D3
+([validation.md](validation.md#oxygen-roles)). Nothing else is built yet. The
+criteria below are set before the code is written, as they were for 2c and
+S1, so that the stage can fail them. When an increment lands, its results
+replace its thresholds in [validation.md](validation.md), and this page
+records what changed from the plan.
 
 Stage 2d is the fourth increment of the material core
 ([roadmap](roadmap.md#order-of-work-correctness-first)). Its deliverables are
@@ -323,6 +324,17 @@ roadmap requires of a new mechanism.
 ### 2d.1 Oxygen roles
 
 This increment changes no engine code, only what a network may declare.
+
+*Done.* What changed from the plan, each found while writing the rules:
+
+- **Rules on factors apply to processes with a rate.** A network written for
+  `marse check` alone has none.
+- **An obligate anaerobe needs an inhibition factor only in a network with
+  oxygen.** Without an oxygen component there is nothing for the factor to
+  name, and nothing to inhibit.
+- **A role is refused on a dissolved component.** It is not required on a
+  particulate component that no growth process forms, such as reversibly
+  bound cells or retained food.
 
 | | Criterion | Threshold |
 |---|---|---|
