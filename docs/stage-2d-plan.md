@@ -382,6 +382,19 @@ entries.
   oral scenes need it (S2), with the film's lowest voxel as the ceiling.
 - **The first `structure.csv`** holds the biovolume, the maximum thickness and
   the fullest voxel. 2d.3 adds the rest of D18's metrics.
+- **One spreading block with Stage S2.** Stage S2 built its own column
+  spreading for plaque at the same time: packing from the substratum up, with
+  a maximum height, wear, brushing and a film riding on the plaque. The two
+  were merged into one `spreading` block:
+  - `mechanism: packed` is S2's (`displacement_1d_v1`), and `continuum` is
+    this increment's;
+  - densities live on the components, and `carried` works for both;
+  - every S2 and 2d.2 result is unchanged.
+
+  The packed mechanism settles where plaque shrinks, and the continuum leaves
+  voids, so they differ only where biomass is lost. Packed spreading stays
+  one-dimensional. 2d.3 extends the continuum, and 2d.5's comparison of
+  mechanisms can include it in a column.
 
 ### 2d.3 Spreading in two and three dimensions
 

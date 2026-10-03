@@ -682,6 +682,140 @@ on two scenes, both of a fermenting species packed at 1000 C-mol per m³:
 The 1-D example, `spreading_column.json`, runs four hours in 4 s: 16 spreads,
 965 implicit substeps, and carbon, nitrogen and electrons balanced to 3.4e-16.
 
+## Plaque that spreads
+
+Plaque in a column spreads up it as it grows, is worn at its surface and
+detached above a maximum height, and is brushed off
+([theory.md §6.1](theory.md#61-biomass-balance) and
+[§6.3](theory.md#63-detachment)). The criteria set before Stage S2 was built,
+in `tests/test_spreading.py`:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| P2 | After every packing, no voxel is filled past full, and the front is sharp: full voxels, then at most one partly filled. Checked on 500 random columns, against the remap done voxel by voxel | rounding | at most 4.7e-15 past full; at most one partly filled voxel |
+| P3 | A film growing at 0.1 per hour and worn at 4 µm per hour, from 20 µm and from 60 µm, follows L(t) = u/μ + (L₀ − u/μ) e^{μt} (Wanner and Gujer 1986) | 1% | 9.7e-7 and 3.1e-8 |
+| P4 | Under the mouth, a brushing 15 minutes into a half hour takes 42% of 150 µm of plaque off from the surface down, and the mouth expels it | rounding | 87.000000000 µm left; what was removed within 1.1e-16 of 42% |
+| P1, in part | The box and the mouth together conserve every quantity over that half hour, counting what was brushed off and expelled | 1e-12 | 1.9e-16; the box alone 5.1e-16 |
+
+The half hour takes 1.1 s: 30 swallows. P1 in full, with oxygen and chewing,
+comes with them.
+
+Other checks:
+
+- **Wear alone** takes the surface off at its velocity, to 1.4e-14 µm, and
+  books all of it as detached, with the buffer's groups it carried.
+- **Growth past the maximum height** is detached. Over six hours, 1.0e-3 more
+  was detached than in the continuous solution, the first-order error of
+  cutting after each step (theory.md §6.1).
+- **The splitting of wear** matters. With half the wear before each step and
+  half after, P3's error follows the integrator's tolerance. With all of it
+  after, the error is 3.6e-3 at the same tolerance (theory.md §6.3).
+- **Carried components**, such as the buffer's groups, move with the solid
+  and are never lost. Where a voxel holds no solid, they stay.
+- **Food left on the teeth** loses the same share to a brushing as the
+  plaque, to 1e-12, and the mouth expels it. A plaque that lists that food
+  as part of itself is refused.
+- **A plaque that grows nothing** stays packed where it was, so S1's rinse
+  runs as before, within 1e-12.
+- **The books** close to rounding in every case: every ledger to 1.2e-15 or
+  better.
+- **Replay** reproduces a run whose plaque spreads exactly. `marse check`
+  describes the plaque and its cleanings, and every impossible plaque or
+  cleaning is refused with the reason.
+
+## Oxygen from the air
+
+The top face at the air, which holds each gas it lists at its saturation
+([theory.md §4.10](theory.md#410-oxygen-from-the-air)). The criterion set
+before Stage S2 was built, in `tests/test_oxygen.py`:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| P5a | Oxygen filling a slab 200 µm deep from the air, against the series solution (Crank 1975), at 2, 7, 18 and 72 s | 2% after the grid is refined | at most 2.2e-4 of saturation on 5 µm voxels and 5.5e-5 on 2.5 µm: second order, a ratio of 4.06 |
+| P5b | Under uptake of zero order, oxygen reaches δ = √(2DC_s/k₀) = 150 µm, falling to 1% of saturation 135.0 µm in | 2% | 135.3 µm on 5 µm voxels; the profile within 2.7e-4 of saturation of (1 − x/δ)², the difference being the Monod saturation constant of 1e-5 mol m⁻³ near the front |
+
+Both ledgers count what the air gave and took. In the column, the air's
+book and the oxygen gained agree to 4.7e-17. Under the mouth, S1's rinse with
+plaque that respires sugar closes the box to 9.5e-16 and the box and the
+mouth together to 3.5e-16, over 15 minutes and 27 swallows; the mouth's
+oxygen stays at saturation throughout, whatever the swallows and the rinse
+take or bring. The film's surface sits within 0.3% of saturation, and the
+oxygen falls from there into the plaque.
+
+Other checks:
+
+- **Nothing else crosses the face.** A component the air does not list
+  neither enters nor leaves through it.
+- **A rinse that brings oxygen of its own** is brought back to saturation,
+  and the difference is booked.
+- **What is refused:** a gas that is particulate, an ion or an acid-base
+  total (carbon dioxide stays with carbonate), a negative saturation, a gas
+  also stated in the saliva, and a bulk liquid at the air.
+- **Replay** reproduces a run at the air exactly, and `marse check` describes
+  the air.
+
+## Chewing
+
+A chewed food adds the mouth's chewing flow while it lasts
+([theory.md §4.9](theory.md#49-the-diet)). In `tests/test_mouth.py`:
+
+- **The flow** is 1.3 mL per minute while 1.0 mL per minute of chewing is
+  added to the resting 0.3, and back to 0.3 when it ends, to rounding. The
+  mouth swallows 43 times in the 10 minutes of chewing, and 5 times in the 5
+  minutes after.
+- **The saliva** comes half way to stimulated saliva at that flow: the
+  mouth's carbonate rises from 5.0 to 10.0 mM.
+- **The books** close to 5.0e-16 for the box and 1.8e-16 for the box and the
+  mouth together.
+
+The criterion set before Stage S2 was built, as a slow test on S1's rinse
+with 1 mL per minute of chewing:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| P7 | Sugar-free gum chewed after a rinse of 10% sucrose brings the plaque's pH back sooner (Dibdin, Dawes and Macpherson 1995) | the direction | Chewed from minute 2, the fall stops at pH 5.64 at 2.4 minutes, and the plaque is back above 6 at 3.9 minutes. Chewed from minute 10, it is back above 6 at 13.7 minutes. The rinse alone: 4.87 at 15.6 minutes, back at 42.9. |
+
+The size of the effect rests on mixing the film once a second while gum is
+chewed, as for any intake, which is confidence C.
+
+## A day of plaque
+
+The two scenes Stage S2 added to `examples/environments/oral`
+([environments.md](environments.md#a-day-of-plaque)): oxygen in 400 µm of
+plaque before and after a rinse of 10% sucrose, and a day of meals, sweets,
+gum, two brushings, wear and the air. The last criteria set before Stage S2
+was built, in `tests/test_plaque_scenes.py`, as slow tests:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| P6 | Under saliva, plaque is anoxic below about 220 µm; after sucrose, oxygen reaches less far, about 150 µm (von Ohle et al. 2010) | 200 to 250 µm; shallower after sucrose | 216 µm under saliva; 151 µm, 9 minutes after the sucrose; back to 216 µm 45 minutes later |
+| P1 | The box, and the box and the mouth together, conserve every element over a day with growth, packing, wear, brushing, chewing and the air | 1e-12 | 9.8e-15 for the box; 4.6e-16 for the box and the mouth |
+| P8 | The cost of that day in a column of 100 voxels | set from S1's rate, 152 s a day | 130 s: 3,000 steps, 2,156 swallows |
+
+**What calibration took.** In the prototype, the plaque respired its own
+biomass between meals. Over a day that thinned it from 150 to 33 µm, since it
+grew only on meals. In MARSE it lives on saliva instead. Saliva's mucins carry
+about 1.5 mM of hexose (Payment et al. 2000; Levine et al. 1987), of which the
+scenes take 1 mM as available. Where oxygen reaches, the plaque grows on it
+with a yield of 3 C-mol per hexose, and respires a little of it for
+maintenance. Three rates were calibrated to P6, all confidence C
+([parameters.md §8](parameters.md#8-saliva-plaque-and-diet)): growth on
+saliva at up to 0.06 per hour, maintenance at 0.0015 per hour, and
+respiration of sugar at 0.0035 per hour. Against them, the wear of 0.5 µm per
+hour was chosen so that the day returns the plaque within 5% of where it
+started, 62.8 µm against 60.
+
+Other checks:
+
+- **Each brushing** takes 42% of the plaque. The record five minutes after
+  07:45 finds it 41.9% thinner, having grown back a little since.
+- **The plaque grows back** between the brushings, from 39.5 to 84.3 µm, on
+  its meals and on saliva.
+- **Replay** is the same on 1 and on 4 threads, for both scenes. The day's
+  first hour, with breakfast and a brushing, is a slow test.
+- **The example** `python examples/plaque_day.py` runs both scenes and checks
+  P6, the brushings, the regrowth and P1 itself, in about three minutes.
+
 ## Running the suite
 
 `python -m pytest` runs the pull-request suite, which leaves out tests marked

@@ -12,7 +12,8 @@ for a duration (docs/theory.md, section 4.9):
 - **a drink** flows in steadily over the duration, and is swallowed as the
   mouth fills;
 - **a food** releases its amounts into the saliva steadily over the
-  duration, as a sweet sucked slowly does, and adds no liquid.
+  duration, as a sweet sucked slowly does, and adds no liquid. A food that is
+  chewed, as gum or a meal is, adds the mouth's chewing flow while it lasts.
 
 While an intake is in the mouth, the film over the plaque is mixed with the
 mouth's liquid (Dibdin 1990), at a rate the intake may state. Food it leaves
@@ -29,7 +30,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from marse.oral.film import film_layers
+from marse.oral.film import film_layers, film_share
 from marse.schemas.domain import Film, Intake
 from marse.spatial.grid import Grid
 from marse.spatial.surface import faces_within
@@ -47,8 +48,9 @@ class Inflow:
 
     ``liquid_m3_per_s`` of a drink of ``liquid_mol_per_m3``;
     ``released_mol_per_s`` from a food, without liquid; ``held`` while a rinse
-    is held, when the mouth does not swallow; and ``mixing_per_h``, how fast
-    the film mixes with the mouth's liquid in each of its voxels.
+    is held, when the mouth does not swallow; ``mixing_per_h``, how fast the
+    film mixes with the mouth's liquid in each of its voxels; and ``chewing``,
+    while a food is chewed.
     """
 
     liquid_m3_per_s: float = 0.0
@@ -56,6 +58,7 @@ class Inflow:
     released_mol_per_s: NDArray[np.float64] | None = None
     held: bool = False
     mixing_per_h: float = 0.0
+    chewing: bool = False
 
     def stimulus_mol_per_s(self, stimulus: int | None) -> float:
         """How fast the stimulus enters the mouth, which tastes it and secretes faster."""
@@ -143,6 +146,7 @@ class Diet:
         return Inflow(
             released_mol_per_s=self.vector(intake.released_mmol) * _MMOL / seconds,
             mixing_per_h=mixing,
+            chewing=intake.chewing,
         )
 
     def rinse(self, intake: Intake) -> tuple[float, NDArray[np.float64]]:
@@ -151,17 +155,25 @@ class Diet:
         volume = intake.volume_ml * _ML
         return volume, self.vector(intake.composition_mol_per_m3) * volume
 
-    def pocket(self, intake: Intake, grid: Grid, film: Film) -> NDArray[np.float64] | None:
+    def pocket(
+        self, intake: Intake, grid: Grid, film: Film, surface_um: float | None = None
+    ) -> NDArray[np.float64] | None:
         """The food an intake leaves on the teeth, as concentrations to add to the box.
 
         The amount per m² of the region is spread evenly through the film's
-        depth above each face of the substratum the region covers.
+        depth above each face of the substratum the region covers: the top of
+        the box, or, over a plaque that spreads, the film's thickness above the
+        plaque's surface, ``surface_um`` up.
         """
         retained = intake.retained
         if retained is None:
             return None
-        column = np.zeros(grid.shape[-1])
-        column[-film_layers(grid, film) :] = retained.amount_mol_per_m2 / (film.thickness_um * _UM)
+        per_um3 = retained.amount_mol_per_m2 / (film.thickness_um * _UM)
+        if surface_um is None:
+            column = np.zeros(grid.shape[-1])
+            column[-film_layers(grid, film) :] = per_um3
+        else:
+            column = film_share(grid, film, surface_um).reshape(-1, grid.shape[-1])[0] * per_um3
         field = np.zeros((len(self.names), *grid.shape))
         faces = faces_within(grid, retained.region_um)
         field[self.names.index(retained.component)] = faces[..., None] * column

@@ -252,8 +252,12 @@ def test_a_domain_that_cannot_spread_is_refused_with_the_reason(change, message)
 
 def test_spreading_under_a_salivary_film_is_refused_until_it_is_supported():
     raw = json.loads((ROOT / "examples/environments/oral/stephan_rinse.json").read_text("utf-8"))
+    bacteria = next(c for c in raw["components"] if c["name"] == "bacteria")
+    bacteria["density_mol_per_m3"] = 800.0
     raw["domain"]["spreading"] = {"mechanism": "continuum"}
-    with pytest.raises(ConfigError, match="spreading under a salivary film is not supported"):
+    with pytest.raises(
+        ConfigError, match="continuum spreading under a salivary film is not supported"
+    ):
         experiment_from_dict(raw)
 
 
@@ -292,7 +296,11 @@ def test_the_default_interval_is_the_measured_one():
 def test_a_domain_that_spreads_survives_the_trip_through_json():
     config = experiment_from_dict(labelled_film())
     written = json.loads(json.dumps(config.to_dict()))
-    assert written["domain"]["spreading"] == {"mechanism": "continuum", "interval_h": 0.05}
+    assert written["domain"]["spreading"] == {
+        "mechanism": "continuum",
+        "interval_h": 0.05,
+        "carried": [],
+    }
     assert written["components"][3]["density_mol_per_m3"] == RHO
     assert experiment_from_dict(written) == config
 
@@ -471,7 +479,9 @@ def test_a_mechanism_that_moves_a_solute_is_caught(monkeypatch):
         return spread, stats
 
     monkeypatch.setattr(ContinuumSpreading, "spread", stirring)
-    with pytest.raises(ConservationError, match="changed a component that takes no room"):
+    with pytest.raises(
+        ConservationError, match="changed a component that neither takes room nor is carried"
+    ):
         run(experiment_from_dict(labelled_film(duration_h=1.0)))
 
 

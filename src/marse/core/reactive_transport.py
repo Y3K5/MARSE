@@ -45,6 +45,19 @@ minute that end at every swallow, and at the start and end of every intake of
 the diet. A second ledger checks the box and the mouth together, against what
 the glands secreted, what was eaten and drunk, and what was swallowed or
 expelled, and the run records the mouth's volume, flow and composition.
+
+Where a column's plaque spreads (:mod:`marse.biofilm.spreading`), the solid
+packs the column from the substratum up after every step, wears at its
+surface, and what passes its maximum height is detached: into the bulk liquid,
+or under a film into the mouth, which swallows it. Brushing and flossing take
+a share of it off at their times, and the mouth expels it. The run records
+the plaque's thickness and what left it. The film rides on the plaque's
+surface, wherever it is (:mod:`marse.oral.film`).
+
+Where the top face is at the air (:mod:`marse.spatial.air`), the gases the
+air holds cross it; under a film, the air holds the mouth's saliva at their
+saturation too. Both ledgers count what the air gave and took, and the run
+records it.
 """
 
 from __future__ import annotations
@@ -61,7 +74,9 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from marse.biofilm.spreading import SPREADING_VERSION, Spreading
 from marse.chemistry import ChargeBalance
+from marse.core.config import ConfigError
 from marse.core.implicit import ReactionTransport
 from marse.core.ledger import Ledger
 from marse.core.provenance import Manifest
@@ -69,8 +84,17 @@ from marse.core.reservoir import ReservoirPath, ReservoirTransport
 from marse.core.simulation import ConservationError
 from marse.microbes.adhesion import AttachingSpecies, SurfaceExchange
 from marse.microbes.kinetics import compile_rates, process_rates, rate_jacobian
-from marse.oral import Diet, Inflow, OralFluid, film_layers, renewal_per_h
+from marse.oral import (
+    Diet,
+    Inflow,
+    OralFluid,
+    film_layers,
+    liquid_share,
+    renewal_over,
+    renewal_per_h,
+)
 from marse.schemas.experiment import ReactiveTransportConfig
+from marse.spatial.air import AirExchange
 from marse.spatial.colloids import leveque_transfer_um_per_s, stokes_einstein_um2_per_s
 from marse.spatial.spreading import (
     CAPACITY_TOLERANCE,
@@ -110,6 +134,7 @@ class ReactiveTransportResult:
     surface: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
     ph: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
     mouth: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
+    plaque: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
     structure: dict[str, NDArray[np.float64]] | None = None  # column -> value per record
 
     @property
@@ -155,18 +180,17 @@ class ReactiveTransportResult:
                 writer.writerow([f"{t:.6f}"] + [f"{self.mouth[c][i]:.10g}" for c in columns])
         return destination
 
+    def write_plaque(self, path: str | Path) -> Path:
+        """Write the plaque's thickness, and what it holds and has lost, at every recorded time."""
+        if self.plaque is None:
+            raise ValueError("this run's plaque does not spread")
+        return _write_rows(path, self.times_h, self.plaque)
+
     def write_structure(self, path: str | Path) -> Path:
         """Write the biofilm's biovolume, thickness and fullest voxel, at every recorded time."""
         if self.structure is None:
-            raise ValueError("this run does not spread its biomass")
-        destination = Path(path)
-        columns = list(self.structure)
-        with destination.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.writer(handle)
-            writer.writerow(["time_h", *columns])
-            for i, t in enumerate(self.times_h):
-                writer.writerow([f"{t:.6f}"] + [f"{self.structure[c][i]:.10g}" for c in columns])
-        return destination
+            raise ValueError("this run does not spread its biomass by the continuum mechanism")
+        return _write_rows(path, self.times_h, self.structure)
 
     def write_totals(self, path: str | Path) -> Path:
         """Write the areal totals and what has crossed the top face, as CSV with units."""
@@ -269,11 +293,92 @@ def surface_exchange(config: ReactiveTransportConfig) -> SurfaceExchange | None:
     return SurfaceExchange(species, len(names), domain.grid.voxel_um)
 
 
+def spreading_of(config: ReactiveTransportConfig) -> Spreading | None:
+    """The plaque's solid phase, if the domain says its plaque spreads."""
+    plaque = config.domain.plaque
+    if plaque is None:
+        return None
+    network = config.network
+    names = network.component_names
+    occupying = [c.name for c in network.components if c.density_mol_per_m3 is not None]
+    densities = network.densities()
+    voxel_um = config.domain.grid.voxel_um
+    assert plaque.maximum_um is not None
+    return Spreading(
+        occupying=np.array([names.index(n) for n in occupying], dtype=np.intp),
+        packing_mol_per_m3=np.array([densities[names.index(n)] for n in occupying]),
+        moving=np.array([names.index(n) for n in [*occupying, *plaque.carried]], dtype=np.intp),
+        maximum_voxels=plaque.maximum_um / voxel_um,
+        voxel_um=voxel_um,
+        wear_um_per_h=plaque.wear_um_per_h,
+    )
+
+
+def air_of(config: ReactiveTransportConfig) -> AirExchange | None:
+    """The gases exchanged with the air at the top face, if the domain is open to it."""
+    domain = config.domain
+    if domain.air is None:
+        return None
+    names = config.network.component_names
+    saturation = domain.air.saturation_mol_per_m3
+    return AirExchange.at(
+        np.array([names.index(n) for n in saturation], dtype=np.intp),
+        np.array(list(saturation.values())),
+        domain.diffusivities_um2_per_h(names),
+        domain.grid.voxel_um,
+        domain.grid.shape,
+    )
+
+
+def _air_outputs(
+    air: AirExchange, names: tuple[str, ...], exchanged: NDArray[np.float64]
+) -> dict[str, Any]:
+    """The manifest's account of the air: what it held each gas at, and what it exchanged."""
+    return {
+        "saturation_mol_per_m3": {
+            names[j]: float(s) for j, s in zip(air.gases, air.saturation_mol_per_m3, strict=True)
+        },
+        "exchanged_mol_per_m2": {names[j]: float(exchanged[j]) for j in air.gases},
+    }
+
+
+def _packed(spreading: Spreading, state: NDArray[np.float64]) -> NDArray[np.float64]:
+    """The initial plaque packed from the substratum up; one taller than its maximum is refused."""
+    packed, excess = spreading.project(state, 0.0)
+    if np.any(excess > 0):
+        height = spreading.height_um(state)
+        raise ConfigError(
+            f"experiment.domain.spreading: the colonies hold {height:g} um of solid, more than the "
+            f"plaque's maximum of {spreading.maximum_voxels * spreading.voxel_um:g} um"
+        )
+    return packed
+
+
+def _plaque_record(
+    spreading: Spreading,
+    state: NDArray[np.float64],
+    names: tuple[str, ...],
+    areal: float,
+    detached: NDArray[np.float64],
+    removed: NDArray[np.float64] | None = None,
+) -> dict[str, float]:
+    """The plaque's thickness, and per filling component what it holds and what it has lost."""
+    record = {"thickness_um": spreading.height_um(state)}
+    held = state.reshape(len(names), -1).sum(axis=1) * areal
+    for j in spreading.occupying:
+        record[f"{names[j]}_mol_per_m2"] = float(held[j])
+        record[f"{names[j]}_detached_mol_per_m2"] = float(detached[j] * areal)
+        if removed is not None:
+            record[f"{names[j]}_removed_mol_per_m2"] = float(removed[j])
+    return record
+
+
 def build_model(config: ReactiveTransportConfig) -> ReactionTransport:
     """The discretised system a configuration describes.
 
     Under a film, a :class:`~marse.core.reservoir.ReservoirTransport`, closed at
-    the top and bordered by the mouth's pool.
+    the top and bordered by the mouth's pool. At the air, the top face is
+    closed to all but the air's gases.
     """
     network = config.network
     names = network.component_names
@@ -302,11 +407,14 @@ def build_model(config: ReactiveTransportConfig) -> ReactionTransport:
             exchanged=[j for j, c in enumerate(network.components) if c.phase == "dissolved"],
             reference_um=fluid.reference_um,
             surface=surface_exchange(config),
+            spreading=spreading_of(config),
+            air=air_of(config),
         )
     diffusion = Diffusion(
         domain.grid,
         domain.diffusivities_um2_per_h(names),
         domain.bulk(names),
+        closed_top=domain.air is not None,
     )
     return ReactionTransport(
         diffusion,
@@ -314,6 +422,8 @@ def build_model(config: ReactiveTransportConfig) -> ReactionTransport:
         rates,
         jacobian,
         surface_exchange(config),
+        spreading_of(config),
+        air_of(config),
     )
 
 
@@ -364,6 +474,25 @@ def _structure_record(
     }
 
 
+def carried_mask(network: Any, spreading: Any) -> NDArray[np.bool_]:
+    """Which components the spreading carries along without their taking any room."""
+    return np.array([c.name in spreading.carried for c in network.components], dtype=bool)
+
+
+def _write_rows(
+    path: str | Path, times_h: NDArray[np.float64], rows: dict[str, NDArray[np.float64]]
+) -> Path:
+    """A CSV of one value per column at every recorded time."""
+    destination = Path(path)
+    columns = list(rows)
+    with destination.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["time_h", *columns])
+        for i, t in enumerate(times_h):
+            writer.writerow([f"{t:.6f}"] + [f"{rows[c][i]:.10g}" for c in columns])
+    return destination
+
+
 def _span_ends(now: float, target: float, interval_h: float | None) -> list[float]:
     """Where the spans of a recording step end: equal spans of at most the interval."""
     if interval_h is None:
@@ -373,10 +502,7 @@ def _span_ends(now: float, target: float, interval_h: float | None) -> list[floa
 
 
 def _spread(
-    spreader: ContinuumSpreading,
-    densities: NDArray[np.float64],
-    state: NDArray[np.float64],
-    time_h: float,
+    spreader: ContinuumSpreading, state: NDArray[np.float64], time_h: float
 ) -> tuple[NDArray[np.float64], Any]:
     """Spread the biomass, then check what the mechanism did, whatever it was.
 
@@ -387,12 +513,13 @@ def _spread(
         spread, stats = spreader.spread(state)
     except SpreadingError as error:
         raise SpreadingError(f"at t = {time_h:.6g} h: {error}") from None
-    moving = densities > 0
+    densities, moving = spreader.densities, spreader.moving
     if not np.all(spread >= 0):
         raise ConservationError(f"spreading left a negative value at t = {time_h:.6g} h")
     if not np.array_equal(spread[~moving], state[~moving]):
         raise ConservationError(
-            f"spreading changed a component that takes no room at t = {time_h:.6g} h"
+            f"spreading changed a component that neither takes room nor is carried, at "
+            f"t = {time_h:.6g} h"
         )
     before = state[moving].reshape(int(moving.sum()), -1).sum(axis=1)
     after = spread[moving].reshape(int(moving.sum()), -1).sum(axis=1)
@@ -448,6 +575,9 @@ def run(
     grid = config.domain.grid
     model = build_model(config)
     state = config.domain.initial_state(names, config.initial_mol_per_m3, config.seed)
+    spreading = model.spreading
+    if spreading is not None:
+        state = _packed(spreading, state)
     ledger = Ledger(network.composition_matrix(), state, network.quantities)
     balance = ChargeBalance.of(network) if network.has_ph else None
     ph_rows = [] if balance is None else [_ph_record(balance, state)]
@@ -457,9 +587,16 @@ def run(
     times, totals, imports = [0.0], [state.reshape(len(names), -1).sum(axis=1) * areal], [imported]
     exchange = model.surface
     surface_rows = [] if exchange is None else [_surface_record(config, exchange, state)]
-    spreading = config.domain.spreading
+    plaque_rows = []
+    if spreading is not None:
+        plaque_rows.append(_plaque_record(spreading, state, names, areal, model.detached))
+    continuum = config.domain.spreading
+    if continuum is not None and continuum.mechanism != "continuum":
+        continuum = None
     densities = network.densities()
-    spreader = None if spreading is None else ContinuumSpreading(grid.shape, densities)
+    spreader = None
+    if continuum is not None:
+        spreader = ContinuumSpreading(grid.shape, densities, carried_mask(network, continuum))
     structure_rows = [] if spreader is None else [_structure_record(config, densities, state)]
     spreads = most_rounds = 0
     moved = largest_before = 0.0
@@ -471,7 +608,9 @@ def run(
     for step in range(1, steps + 1):
         # Times come from the step count, so they never accumulate rounding.
         target = min(step * config.timestep_h, config.duration_h)
-        for end in _span_ends(now, target, None if spreading is None else spreading.interval_h):
+        interval = None if continuum is None else continuum.interval_h
+        for end in _span_ends(now, target, interval):
+            detached = model.detached.copy()
             state, entered, stats = model.integrate(
                 state,
                 end - now,
@@ -487,7 +626,7 @@ def run(
             failures += stats.newton_failures
             newton += stats.newton_iterations
             if spreader is not None:
-                state, spread = _spread(spreader, densities, state, now)
+                state, spread = _spread(spreader, state, now)
                 substep = None  # the biomass has moved: estimate the next first step afresh
                 spreads += 1
                 most_rounds = max(most_rounds, spread.rounds)
@@ -496,13 +635,16 @@ def run(
             peak = np.maximum(peak, state)
             ledger.exchange(entered)
             ledger.check(state, step=step, time_h=now)
-            imported = imported + entered
+            # What crossed the faces; what the plaque detached is counted apart.
+            imported = imported + entered + (model.detached - detached)
         if step % config.record_every == 0 or step == steps:
             times.append(now)
             totals.append(state.reshape(len(names), -1).sum(axis=1) * areal)
             imports.append(imported * areal)
             if exchange is not None:
                 surface_rows.append(_surface_record(config, exchange, state))
+            if spreading is not None:
+                plaque_rows.append(_plaque_record(spreading, state, names, areal, model.detached))
             if balance is not None:
                 ph_rows.append(_ph_record(balance, state))
             if spreader is not None:
@@ -544,22 +686,31 @@ def run(
             "lowest_at_substratum_h": float(times[lowest]),
         }
     models = {"engine": ENGINE_VERSION, "integrator": INTEGRATOR_VERSION}
+    plaque = None
+    if spreading is not None:
+        models["spreading"] = SPREADING_VERSION
+        plaque = {key: np.array([row[key] for row in plaque_rows]) for key in plaque_rows[0]}
+        outputs["plaque"] = _plaque_outputs(
+            spreading, names, plaque_rows[-1], model.detached * areal
+        )
     structure = None
-    if spreader is not None and spreading is not None:
+    if spreader is not None and continuum is not None:
         models["spreading"] = spreader.version
         structure = {
             key: np.array([row[key] for row in structure_rows]) for key in structure_rows[0]
         }
         per_area = grid.voxel_volume_um3 / grid.footprint_um2
         outputs["spreading"] = {
-            "mechanism": spreading.mechanism,
-            "interval_h": spreading.interval_h,
+            "mechanism": continuum.mechanism,
+            "interval_h": continuum.interval_h,
             "spreads": spreads,
             "most_rounds": most_rounds,
             "moved_um3_per_um2": moved * per_area,
             "fullest_before_spreading": largest_before,
             "final": dict(structure_rows[-1]),
         }
+    if model.air is not None:
+        outputs["air"] = _air_outputs(model.air, names, model.aired * areal)
     manifest = Manifest.build(
         config=config,
         models=models,
@@ -578,8 +729,30 @@ def run(
         final_state=state,
         surface=surface,
         ph=ph,
+        plaque=plaque,
         structure=structure,
     )
+
+
+def _plaque_outputs(
+    spreading: Spreading,
+    names: tuple[str, ...],
+    final: dict[str, float],
+    detached: NDArray[np.float64],
+    removed: NDArray[np.float64] | None = None,
+) -> dict[str, Any]:
+    """The manifest's account of the plaque: how it spreads, how thick it ended, what it lost."""
+    moving = [names[j] for j in spreading.moving]
+    summary: dict[str, Any] = {
+        "spreading": SPREADING_VERSION,
+        "wear_um_per_h": spreading.wear_um_per_h,
+        "maximum_um": spreading.maximum_voxels * spreading.voxel_um,
+        "final_thickness_um": final["thickness_um"],
+        "detached_mol_per_m2": {n: float(detached[names.index(n)]) for n in moving},
+    }
+    if removed is not None:
+        summary["removed_mol_per_m2"] = {n: float(removed[names.index(n)]) for n in moving}
+    return summary
 
 
 def _path(
@@ -611,13 +784,14 @@ def _mouth_record(
     pool: NDArray[np.float64],
     names: tuple[str, ...],
     balance: ChargeBalance | None,
+    chewing: bool = False,
 ) -> dict[str, float]:
     """The mouth's volume, flow and swallows, and the composition of its pool."""
     concentration = pool * engine.reference_um / fluid.thickness_um(fluid.volume_m3)
     stimulus = 0.0 if fluid.stimulus is None else float(concentration[fluid.stimulus])
     record = {
         "volume_ml": fluid.volume_m3 * _ML_PER_M3,
-        "flow_ml_per_min": fluid.flow_m3_per_s(stimulus) * _ML_PER_M3 * 60.0,
+        "flow_ml_per_min": fluid.flow_m3_per_s(stimulus, chewing) * _ML_PER_M3 * 60.0,
         "swallows": float(fluid.swallows),
     }
     for j in engine.exchanged:
@@ -639,7 +813,8 @@ def _run_with_mouth(
     left on the teeth is placed in the film. The box's ledger books what
     crossed into the film and the food placed in it; the second ledger checks
     the box and the mouth together, against what was secreted, eaten,
-    swallowed and expelled.
+    swallowed and expelled. Brushing and flossing end spans too: the plaque
+    they take off, and food left on the teeth, are expelled.
     """
     started = datetime.now(UTC)
     network = config.network
@@ -656,7 +831,16 @@ def _run_with_mouth(
     in_film[..., -film_layers(grid, domain.film) :] = 1.0
     diet = Diet(domain.diet, names)
     box = domain.initial_state(names, config.initial_mol_per_m3, config.seed)
+    spreading = engine.spreading
+    if spreading is not None:
+        box = _packed(spreading, box)
+    cleanings = list(domain.hygiene)
+    # Food left on the teeth is not plaque: a brush takes the same share of it.
+    food = sorted({names.index(i.retained.component) for i in domain.diet if i.retained})
     pool = np.array([domain.mouth.initial_mol_per_m3.get(n, 0.0) for n in names])
+    air = engine.air
+    if air is not None:  # the air holds the mouth's gases at saturation
+        pool[engine.held_gases] = engine.held(engine.reference_um)
     y = engine.pack(box, pool)  # at the resting volume, the pool's unknowns are its concentrations
     areal = grid.voxel_volume_um3 / grid.footprint_um2 * _AMOL_PER_UM2_TO_MOL_PER_M2
     to_mol_per_m2 = engine.reference_um * 1e-6  # the pool's unknowns, per unit area
@@ -673,11 +857,16 @@ def _run_with_mouth(
     swallowed = np.zeros(len(names))
     eaten = np.zeros(len(names))
     expelled = np.zeros(len(names))
+    removed = np.zeros(len(names))  # taken off by brushing and flossing, mol/m2
+    aired = np.zeros(len(names))  # what the air gave less what it took, mol/m2
     times, totals, imports = [0.0], [box.reshape(len(names), -1).sum(axis=1) * areal], [imported]
     exchange = engine.surface
     surface_rows = [] if exchange is None else [_surface_record(config, exchange, box)]
     ph_rows = [] if balance is None else [_ph_record(balance, box)]
     mouth_rows = [_mouth_record(fluid, engine, pool, names, balance)]
+    plaque_rows = []
+    if spreading is not None:
+        plaque_rows.append(_plaque_record(spreading, box, names, areal, engine.detached, removed))
     if frames is not None:
         frames(0, 0.0, box)
     now, substep = 0.0, None
@@ -687,6 +876,25 @@ def _run_with_mouth(
     for step in range(1, steps + 1):
         target = min(step * config.timestep_h, config.duration_h)
         while target - now > 1e-12 * target:
+            # A brushing or a flossing: the plaque it takes off, and the same share of any
+            # food left on the teeth, leave the mouth.
+            while cleanings and cleanings[0].start_h <= now + 1e-12 * max(1.0, now):
+                assert spreading is not None
+                cleaning = cleanings.pop(0)
+                box, pool = engine.unpack(y)
+                box, taken = spreading.remove(box, cleaning.removes_fraction)
+                if food:
+                    loose = box[food] * cleaning.removes_fraction
+                    box[food] = box[food] - loose
+                    taken[food] += loose.reshape(len(food), -1).sum(axis=1)
+                ledger.exchange(-taken)
+                gone = taken * areal
+                removed += gone
+                expelled += gone
+                whole.exchange(-gone)
+                y = engine.pack(box, pool)
+                ledger.check(box, step=step, time_h=now)
+                whole.check(everything(box, pool), step=step, time_h=now)
             # An intake starts or ends: a rinse is taken in or expelled, and food left on
             # the teeth is placed in the film.
             events = diet.due(now)
@@ -708,7 +916,10 @@ def _run_with_mouth(
                         expelled += gone
                         whole.exchange(-gone)
                         pool = pool * kept
-                    pocket = None if event.starts else diet.pocket(intake, grid, domain.film)
+                    surface = None if spreading is None else spreading.height_um(box)
+                    pocket = (
+                        None if event.starts else diet.pocket(intake, grid, domain.film, surface)
+                    )
                     if pocket is not None:
                         box = box + pocket
                         placed = pocket.reshape(len(names), -1).sum(axis=1)
@@ -716,19 +927,31 @@ def _run_with_mouth(
                         imported = imported + placed
                         eaten += placed * areal
                         whole.exchange(placed * areal)
+                if air is not None:  # a rinse brings gases of its own; the air takes them back
+                    gases = engine.held_gases
+                    held = engine.held(fluid.thickness_um(fluid.volume_m3))
+                    gained = np.zeros(len(names))
+                    gained[gases] = (held - pool[gases]) * to_mol_per_m2
+                    pool[gases] = held
+                    aired += gained
+                    whole.exchange(gained)
                 y = engine.pack(box, pool)
                 ledger.check(box, step=step, time_h=now)
                 whole.check(everything(box, pool), step=step, time_h=now)
                 peak = np.maximum(peak, y)
             inflow = diet.inflow()
+            box, pool = engine.unpack(y)
+            if spreading is not None:  # the film rides on the plaque's surface
+                surface = spreading.height_um(box)
+                renewal = renewal_over(grid, domain.film, surface)
+                in_film = liquid_share(grid, surface)
             engine.exchange_per_h = (
                 renewal if inflow.mixing_per_h == 0.0 else renewal + inflow.mixing_per_h * in_film
             )
-            box, pool = engine.unpack(y)
             stimulus = 0.0
             if fluid.stimulus is not None:
                 stimulus = pool[fluid.stimulus] * to_mol_per_m2 * fluid.area_m2
-            stop = min(target, diet.next_h())
+            stop = min(target, diet.next_h(), cleanings[0].start_h if cleanings else math.inf)
             left = (stop - now) * 3600.0
             stretch = fluid.run_ahead(stimulus, min(_LONGEST_SPAN_S, left), inflow, returned)
             # Land exactly on the step's end, or the intake's, when the span reaches it, so
@@ -738,7 +961,13 @@ def _run_with_mouth(
             if span > 0:
                 growth = stretch.volumes_m3[-1] - stretch.volumes_m3[0]
                 saliva = growth / stretch.seconds - inflow.liquid_m3_per_s
-                engine.path = _path(fluid, now, stretch, fluid.secreted(saliva), inflow)
+                # The span keeps its own clock, from zero. On the run's clock, a step of
+                # seconds an hour or a day in would be the difference of two large times,
+                # which loses digits in proportion to the time: enough, over a day of
+                # meals, to leave 4e-13 of the sugar eaten unaccounted for.
+                engine.path = _path(fluid, 0.0, stretch, fluid.secreted(saliva), inflow)
+                detached = engine.detached.copy()
+                aired_before = engine.aired.copy()
                 y, entered, stats = engine.integrate(
                     y,
                     span,
@@ -746,7 +975,7 @@ def _run_with_mouth(
                     relative_tolerance=config.relative_tolerance,
                     absolute_tolerance=config.absolute_tolerances(),
                     peak=peak,
-                    start_h=now,
+                    start_h=0.0,
                 )
                 substep = stats.next_step
                 accepted += stats.accepted
@@ -756,15 +985,20 @@ def _run_with_mouth(
                 newton += stats.newton_iterations
                 spans += 1
                 ledger.exchange(entered)
-                imported = imported + entered
+                # What crossed into the film; what the plaque detached into it is counted apart.
+                imported = imported + entered + (engine.detached - detached)
                 if fluid.stimulus is not None:
                     given = entered[fluid.stimulus] * areal * fluid.area_m2  # mol, into the box
                     returned = -given / (span * 3600.0)
-                added = engine.path.added(now, end) * 1e-6  # mol/m2
-                taken = engine.path.taken(now, end) * 1e-6
+                added = engine.path.added(0.0, span) * 1e-6  # mol/m2
+                taken = engine.path.taken(0.0, span) * 1e-6
                 secreted += added - taken
                 eaten += taken
                 whole.exchange(added)
+                if air is not None:
+                    gained = (engine.aired - aired_before) * areal
+                    aired += gained
+                    whole.exchange(gained)
             kept = fluid.end(stretch)
             box, pool = engine.unpack(y)
             if kept < 1.0:
@@ -787,7 +1021,13 @@ def _run_with_mouth(
                 surface_rows.append(_surface_record(config, exchange, box))
             if balance is not None:
                 ph_rows.append(_ph_record(balance, box))
-            mouth_rows.append(_mouth_record(fluid, engine, pool, names, balance))
+            mouth_rows.append(
+                _mouth_record(fluid, engine, pool, names, balance, diet.inflow().chewing)
+            )
+            if spreading is not None:
+                plaque_rows.append(
+                    _plaque_record(spreading, box, names, areal, engine.detached, removed)
+                )
             if frames is not None:
                 frames(len(times) - 1, now, box)
 
@@ -811,6 +1051,15 @@ def _run_with_mouth(
         mouth["intakes"] = diet.taken
         mouth["eaten_mol_per_m2"] = per_component(eaten)
         mouth["expelled_mol_per_m2"] = per_component(expelled)
+    plaque = None
+    if spreading is not None:
+        models["spreading"] = SPREADING_VERSION
+        plaque = {key: np.array([row[key] for row in plaque_rows]) for key in plaque_rows[0]}
+    if domain.hygiene:
+        mouth["cleanings"] = len(domain.hygiene) - len(cleanings)
+        mouth["removed_mol_per_m2"] = per_component(removed)
+        if "expelled_mol_per_m2" not in mouth:
+            mouth["expelled_mol_per_m2"] = per_component(expelled)
     mouth["balance"] = whole.summary(everything(box, pool))
     outputs: dict[str, Any] = {
         "final_time_h": now,
@@ -829,6 +1078,16 @@ def _run_with_mouth(
         "mouth": mouth,
         "final_state_sha256": _digest(names, box, pool),
     }
+    if spreading is not None:
+        outputs["plaque"] = _plaque_outputs(
+            spreading,
+            names,
+            plaque_rows[-1],
+            engine.detached * areal,
+            removed if domain.hygiene else None,
+        )
+    if air is not None:
+        outputs["air"] = _air_outputs(air, names, aired)
     surface = None
     if exchange is not None:
         surface = {key: np.array([row[key] for row in surface_rows]) for key in surface_rows[0]}
@@ -865,4 +1124,5 @@ def _run_with_mouth(
         surface=surface,
         ph=ph,
         mouth={key: np.array([row[key] for row in mouth_rows]) for key in mouth_rows[0]},
+        plaque=plaque,
     )

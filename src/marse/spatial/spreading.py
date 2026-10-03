@@ -27,8 +27,10 @@ Alpkvist and Klapper (2007) does, written on voxels (docs/theory.md, section
 
 Every transfer leaves one voxel and enters another, so the sweep conserves
 each component exactly, and a voxel never sends more than it holds, so it is
-positive at any interval. Components without a density take no room and do
-not move, and dissolved components are left to diffusion.
+positive at any interval. Components that the spreading carries (such as the
+buffer of cell walls) move with the biomass without taking room. Other
+components without a density stay where they are, and dissolved components
+are left to diffusion.
 
 This increment (Stage 2d, 2d.2) solves the pressure in a column. Boxes in two
 and three dimensions come with increment 2d.3.
@@ -84,12 +86,20 @@ class ContinuumSpreading:
     name = "continuum_pressure"
     version = "continuum_pressure_v1"
 
-    def __init__(self, shape: tuple[int, ...], densities: NDArray[np.float64]) -> None:
+    def __init__(
+        self,
+        shape: tuple[int, ...],
+        densities: NDArray[np.float64],
+        carried: NDArray[np.bool_] | None = None,
+    ) -> None:
         if len(shape) != 1:
             raise ValueError("spreading in two and three dimensions arrives in increment 2d.3")
         self.shape = shape
         self.densities = np.asarray(densities, dtype=float)
+        # What moves: what takes room, and what it carries along without taking any.
         self.moving = self.densities > 0
+        if carried is not None:
+            self.moving = self.moving | np.asarray(carried, dtype=bool)
 
     def spread(self, state: NDArray[np.float64]) -> tuple[NDArray[np.float64], SpreadStats]:
         """Move every voxel's excess on until each fits; returns the new state."""

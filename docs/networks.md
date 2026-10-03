@@ -432,7 +432,7 @@ chemistry in a single column in three seconds.
 |---|---|---|---|
 | `voxels` | list of 1 to 3 whole numbers | yes | Voxels along each axis. The last axis is height above the surface. `[64]` is a column, `[32, 64]` a vertical slice, `[32, 32, 16]` a box. Counts divisible by 2 several times make the solver fastest. |
 | `voxel_um` | number | yes | The edge of a cubic voxel, in µm. |
-| `bulk_mol_per_m3` | object of numbers | no, default `0` each | What the liquid above holds, held at the top face. Dissolved components only. |
+| `bulk_mol_per_m3` | object of numbers | no, default `0` each | What the liquid above holds, held at the top face. Dissolved components only. Left out under a film or at the air. |
 | `diffusivity_m2_per_s` | object of numbers | yes | One value for every dissolved component, in m² per s, as tables give them. Particulate components (biomass) do not diffuse. |
 | `colonies` | list of colonies | no | Hemispheres of biomass on the surface, placed where stated. |
 | `random_colonies` | list of random colonies | no | Hemispheres of biomass scattered over the surface from the run's `seed`. |
@@ -441,10 +441,12 @@ chemistry in a single column in three seconds.
 | `flow` | object | with `substratum` | The flow's shear at the substratum. |
 | `suspension` | list of suspended species | with `substratum` | The cells in the liquid that bind. |
 | `adhesion` | list of bindings | with `substratum` | How each species binds to each material. |
-| `film` | object | no | The top voxels are a salivary film, closed to the air and renewed from the mouth. [A salivary film and the mouth](#a-salivary-film-and-the-mouth): these two fields go together, and replace `bulk_mol_per_m3`. |
+| `film` | object | no | The top voxels are a salivary film, renewed from the mouth; its surface is closed unless `air` opens it to gases. [A salivary film and the mouth](#a-salivary-film-and-the-mouth): these two fields go together, and replace `bulk_mol_per_m3`. |
 | `mouth` | object | with `film` | The mouth's saliva: what is secreted, how much the mouth holds, and when it swallows. |
 | `diet` | list of intakes | no, with `mouth` | What is eaten and drunk: rinses, drinks and foods, each from a start for a duration. [The diet](#the-diet). |
-| `spreading` | object | no | Biomass that outgrows its voxel pushes the excess on. [Biomass that spreads](#biomass-that-spreads). |
+| `spreading` | object | no, in a column | Biomass that outgrows its room moves on, packed from the substratum up as plaque is, or pushed by its pressure. [Biomass that spreads](#biomass-that-spreads). |
+| `hygiene` | list of cleanings | no, with packed `spreading` and `mouth` | Brushings and flossings, each taking a share of the plaque off at its time. [Plaque that spreads](#plaque-that-spreads). |
+| `air` | object | no | The top face is at the air, which holds the gases it lists at their saturation there: the film's surface, or, without a film, the top of the box in place of a bulk liquid. [Oxygen and the air](#oxygen-and-the-air). |
 
 `initial_mol_per_m3` fills every voxel. Each colony then sets its component to
 its concentration in the voxels whose centres lie inside it. A colony that
@@ -559,30 +561,43 @@ material, species by species, and the area each material has covered.
 
 ### Biomass that spreads
 
-With `spreading`, the species in a column share its room, and the biofilm
-grows by pushing the excess biomass up into the liquid
-([theory.md §6.1 and §9.10](theory.md#61-biomass-balance)):
+With `spreading`, the species in a column share its room, and biomass that
+outgrows it moves on ([theory.md §6.1 and §9.10](theory.md#61-biomass-balance)).
 
-- **Room.** Each species has a packing density, ρ: its concentration when it
-  alone fills a voxel. A voxel's biomass fills the fraction
-  φ = Σ c<sub>j</sub>/ρ<sub>j</sub>, every species counted together, and no
-  voxel may hold more than all of it, φ ≤ 1.
-- **Growth, then spreading.** Growth runs in place for a spreading interval.
-  The biomass that no longer fits is then pushed on, from high pressure to
-  low, until every voxel fits again.
-- **Order is kept.** What leaves a voxel through a face is the material
-  nearest that face, so a layer of cells stays a layer as the film grows.
-- **What moves.** Species, and every particulate component with a density,
-  move together. A particulate component without a density takes no room and
-  stays where it is, and dissolved components only diffuse.
-- **The top layer stays clear.** It borders the bulk liquid. A film that would
-  reach it stops the run with an error naming the time; give it a taller box.
-  Detachment, which would balance growth, comes with Stage 3.
+- **Room.** Each component that takes up room declares a packing density,
+  `density_mol_per_m3`: its concentration when it alone fills a voxel. A
+  voxel's biomass fills the fraction φ = Σ c<sub>j</sub>/ρ<sub>j</sub>, every
+  species counted together, and no voxel may hold more than all of it, φ ≤ 1.
+  Every species needs a density.
+- **What moves.** Components with a density, and the particulate components
+  listed in `carried`, which move with them without taking room, such as the
+  fixed buffer of cell walls and its counter-ions. Other particulate
+  components, such as food left on the teeth, stay where they are, and
+  dissolved components only diffuse.
+- **Two mechanisms.** How biomass spreads changes conclusions about
+  competition ([modeling-landscape.md §2](modeling-landscape.md#2-the-biomass-spreading-decision)),
+  so `mechanism` states it, and the manifest records it:
+  - **`packed`** (`displacement_1d_v1`): after every step of the integration
+    the column is packed from the substratum up. Where it shrinks, it settles,
+    so the front stays sharp: full voxels, then at most one partly filled. It
+    wears at its surface and is detached above a maximum height, and it can lie
+    under a salivary film; [Plaque that spreads](#plaque-that-spreads) gives
+    the rest.
+  - **`continuum`** (`continuum_pressure_v1`): growth runs in place for an
+    interval, and then the biomass that no longer fits is pushed on, from high
+    pressure to low, until every voxel fits again. What leaves a voxel through
+    a face is the material nearest that face, so a layer of cells stays a
+    layer. A voxel that empties stays empty. This is the mechanism that
+    extends to two and three dimensions ([the Stage 2d plan](stage-2d-plan.md)).
+- **The top of the box.** Under `continuum`, the top layer borders the bulk
+  liquid and must stay clear: a film that would reach it stops the run with an
+  error naming the time, and a start with biomass there, or that overfills a
+  voxel, is refused. Under `packed`, the plaque is packed as the run starts, and
+  what passes its maximum height is detached.
 
-The start must fit: a voxel that the initial amounts and colonies overfill is
-refused, and so is biomass in the top layer. A column spreads; boxes in two and
-three dimensions arrive with the next increment, and spreading under a salivary
-film when the oral scenes need it ([the Stage 2d plan](stage-2d-plan.md)).
+Both mechanisms spread a column for now. Boxes in two and three dimensions
+arrive with Stage 2d, increment 2d.3, and `continuum` under a salivary film
+when the oral scenes need it.
 
 ```bash
 marse check examples/networks/spreading_column.json   # the packing, and growth per interval
@@ -590,20 +605,25 @@ marse run examples/networks/spreading_column.json -o runs/column
 ```
 
 The example spreads 40 µm of heterotroph and fermenter, each packed at
-1000 C-mol per m³, under the liquid of `surface_biofilm_1d.json`. In four hours
-the film grows to 92 µm, with the heterotroph respiring at its top and the
-fermenter below. `marse run` then also writes `structure.csv`, with the
-biovolume per µm² of substratum (for a film without gaps, its thickness), its
-maximum thickness and its fullest voxel at every recorded time. Every run
-checks, after every spread, that nothing went negative, each component's
-total is unchanged, nothing else moved and every voxel fits.
+1000 C-mol per m³, under the liquid of `surface_biofilm_1d.json`, by the
+continuum mechanism. In four hours the film grows to 92 µm, with the
+heterotroph respiring at its top and the fermenter below. `marse run` then
+also writes `structure.csv`, with the biovolume per µm² of substratum (for a
+film without gaps, its thickness), its maximum thickness and its fullest voxel
+at every recorded time. Every run checks, after every spread, that nothing
+went negative, each component's total is unchanged, nothing else moved and
+every voxel fits. The oral scenes `oxygen_profile.json` and `plaque_day.json`
+spread their plaque by the packed mechanism.
 
 ### Spreading fields
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `mechanism` | `continuum` | yes | How the excess moves: `continuum`, pushed by the pressure it makes. A cellular automaton is to follow. |
-| `interval_h` | number | no, default `0.25` | How long growth runs in place between spreads, in hours: at most `timestep_h`, which is cut into equal spans no longer than it. The error is first order in it, and smaller intervals mix layers more ([validation.md](validation.md#spreading-in-a-column)). |
+| `mechanism` | `packed` or `continuum` | yes | How biomass that outgrows its room moves on. A cellular automaton is to follow. |
+| `interval_h` | number | no, default `0.25`; `continuum` only | How long growth runs in place between spreads, in hours: at most `timestep_h`, which is cut into equal spans no longer than it. The error is first order in it, and smaller intervals mix layers more ([validation.md](validation.md#spreading-in-a-column)). |
+| `carried` | list of component names | no | Particulate components that move with the biofilm without taking room. |
+| `maximum_um` | number | no, default up to the film, or the top of the box; `packed` only | How high the plaque can be. Biomass pushed above it is detached. Under a film, no higher than the film's underside. |
+| `wear_um_per_h` | number | no, default `0`; `packed` only | How fast the surface wears away. |
 
 ### A salivary film and the mouth
 
@@ -613,10 +633,12 @@ mouth fills with saliva and empties by swallowing. With `film` and `mouth`,
 a run in space models exactly that
 ([theory.md §4.8 and §9.9](theory.md#48-a-salivary-film-and-the-mouth)):
 
-- **The film** is the top `thickness_um` of the box. Its surface is open to the
-  air, so nothing crosses the top face. Saliva replaces each of its voxels at
-  the rate u(z) / l, where u is the film's speed at that height and l the
-  length of plaque the film has crossed to reach the site.
+- **The film** is the top `thickness_um` of the box. Its surface is at the
+  air, so nothing crosses the top face, unless `air` lists gases, which do.
+  Saliva replaces each of its voxels at the rate u(z) / l, where u is the
+  film's speed at that height and l the length of plaque the film has crossed
+  to reach the site. Over a plaque that spreads, the film lies on the
+  plaque's surface wherever that is, and is renewed from there up.
 - **The mouth** holds a pool of saliva between a resting volume and the volume
   at which it swallows (Dawes 1983). The glands secrete saliva into it, faster
   while it tastes the stimulus, and a swallow takes it back to the resting
@@ -650,6 +672,7 @@ a run in space models exactly that
 | `stimulus_half_mol_per_m3` | number | with `stimulus` | The concentration in the mouth that raises the flow by half the stimulated flow. |
 | `plaque_area_cm2` | number | yes | The plaque this box stands for, which exchanges with the mouth through its film. |
 | `initial_mol_per_m3` | object of numbers | no, default the saliva | What the mouth holds at the start. |
+| `chewing_flow_ml_per_min` | number | with an intake that is chewed | The flow chewing adds while it lasts. |
 
 ### The diet
 
@@ -671,6 +694,10 @@ at a time, each from `start_h` for `duration_min`
 - **Mixing.** While an intake is in the mouth, the film is mixed with the
   mouth's liquid at `mixing_per_s` in each of its voxels (Dibdin 1990), on top
   of its own renewal. The taste of what it brings raises the flow.
+- **Chewing.** A food that is `chewing`, as gum or a meal is, adds the
+  mouth's `chewing_flow_ml_per_min` to the flow while it lasts, and the saliva
+  secreted moves towards stimulated saliva. Gum without sugar is a food that
+  releases nothing.
 - **Food left on the teeth.** `retained` places an amount of a particulate
   component in the film when the intake ends. A process of the network, such
   as a first-order reaction to sugar, releases what dissolves from it.
@@ -691,6 +718,7 @@ counts food placed in the film as entering the box.
 | `composition_mol_per_m3` | object of numbers | no, default water | What a rinse or a drink holds. Dissolved components only. |
 | `released_mmol` | object of numbers | for a food | What a food releases into the saliva over its duration, in the whole mouth. Dissolved components only. |
 | `mixing_per_s` | number | no, default `1` | How fast the film mixes with the mouth's liquid while the intake lasts, per second. `0` leaves the film's own renewal alone. |
+| `chewing` | true or false | no, default `false` | Whether a food is chewed, adding the mouth's chewing flow while it lasts. |
 | `retained` | object | no | Food it leaves on the teeth when it ends. |
 
 ### Retained fields
@@ -700,6 +728,65 @@ counts food placed in the film as entering the box.
 | `component` | component name | yes | A particulate component, such as the sugar held in food particles. A process of the network must consume it: what that process makes is what dissolves. |
 | `amount_mol_per_m2` | number | yes | How much, per m² of the substratum it covers, spread evenly through the film's depth. |
 | `region_um` | list of numbers | no, default the whole substratum | Where, with a patch's bounds: `[x0, x1]` in 2-D, `[x0, x1, y0, y1]` in 3-D, none in 1-D. |
+
+### Plaque that spreads
+
+Plaque spreads by the `packed` mechanism
+([Biomass that spreads](#biomass-that-spreads),
+[theory.md §6.1 and §6.3](theory.md#61-biomass-balance)). Beyond packing the
+column from the substratum up, it is cleared:
+
+- **What takes it off.** Biomass pushed above `maximum_um` is detached: under
+  a film, into the mouth, which swallows it; otherwise into the bulk liquid.
+  The surface wears at `wear_um_per_h`, for the friction of the tongue and
+  cheeks.
+- **Brushing and flossing.** A cleaning in `hygiene` takes a share of the
+  plaque off from its surface down, and the same share of any food left on
+  the teeth, and the mouth expels it.
+- **The film rides on it.** Under a film, the film is renewed from the
+  plaque's surface up, wherever that is after growth or a brushing.
+
+`marse run` writes `plaque.csv`: the thickness, and for each component that
+takes room, the amount in the plaque, detached and taken off, at every
+recorded time. The manifest names the mechanism, `displacement_1d_v1`, and
+adds what left the plaque; both balances count it.
+
+### Hygiene fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `kind` | `brushing` or `flossing` | yes | What cleans the plaque. In a single column both take plaque off its surface; where each reaches comes with sites. |
+| `start_h` | number | yes | When, in hours from the start of the run, in time order. |
+| `removes_fraction` | number | brushing: no, default `0.42`; flossing: yes | The share of the plaque taken off, from its surface down. A brushing removes 42% of plaque on average (Slot et al. 2012). |
+
+### Oxygen and the air
+
+Where the box's top face is at the air, the gases the air holds cross it, and
+nothing else does. With `air`
+([theory.md §4.10](theory.md#410-oxygen-from-the-air)):
+
+- **At the face**, each gas is held at its saturation: its concentration in
+  water in equilibrium with the air. For oxygen at 37 °C under air at one
+  atmosphere, that is 0.210 mol per m³ in pure water
+  ([theory.md §4.4](theory.md#44-oxygen-solubility)); salts lower it a little.
+- **Under a film**, the face is the film's surface. The mouth's saliva is at
+  the air too, spread over the mouth's surfaces, so the air holds it at
+  saturation as well, and the film is renewed with saturated saliva. A gas
+  the air holds is left out of the saliva's composition.
+- **Without a film**, the box borders the air instead of a bulk liquid, as a
+  colony biofilm on a membrane does. Leave `bulk_mol_per_m3` out.
+- **What it exchanges.** Both balances count what the air gave and took, and
+  the manifest records it for each gas.
+
+A gas must be a neutral dissolved component that is not an acid-base total.
+Carbon dioxide belongs to the carbonate total, which stays closed to the air,
+so the buffer calibrated in Stage S1 is unchanged.
+
+### Air fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `saturation_mol_per_m3` | object of numbers | yes | Each gas the air holds, and its concentration in water in equilibrium with the air. |
 
 ## Balancing: `balanced_by`
 

@@ -112,6 +112,8 @@ DOMAIN_FIELDS = {
     "mouth": Field("object", required=False),
     "diet": Field("objects", required=False),
     "spreading": Field("object", required=False),
+    "hygiene": Field("objects", required=False),
+    "air": Field("object", required=False),
 }
 """The box of voxels a network runs in; read by :mod:`marse.schemas.domain`."""
 
@@ -174,6 +176,7 @@ MOUTH_FIELDS = {
     "stimulus_half_mol_per_m3": Field("number", required=False),
     "plaque_area_cm2": Field("number"),
     "initial_mol_per_m3": Field("numbers", required=False),
+    "chewing_flow_ml_per_min": Field("number", required=False),
 }
 INTAKES = ("rinse", "drink", "food")
 INTAKE_FIELDS = {
@@ -184,13 +187,28 @@ INTAKE_FIELDS = {
     "composition_mol_per_m3": Field("numbers", required=False),
     "released_mmol": Field("numbers", required=False),
     "mixing_per_s": Field("number", required=False),
+    "chewing": Field("flag", required=False),
     "retained": Field("object", required=False),
 }
-MECHANISMS = ("continuum",)
-"""How biomass spreads (docs/stage-2d-plan.md); the cellular automaton arrives in 2d.5."""
+MECHANISMS = ("packed", "continuum")
+"""How biomass spreads (docs/networks.md, "Biomass that spreads"): packed from the
+substratum up, as plaque is, or pushed by the pressure of its excess. The cellular
+automaton arrives with Stage 2d, increment 2d.5."""
 SPREADING_FIELDS = {
     "mechanism": Field("choice", choices=MECHANISMS),
     "interval_h": Field("number", required=False),
+    "carried": Field("names", required=False),
+    "maximum_um": Field("number", required=False),
+    "wear_um_per_h": Field("number", required=False),
+}
+HYGIENES = ("brushing", "flossing")
+HYGIENE_FIELDS = {
+    "kind": Field("choice", choices=HYGIENES),
+    "start_h": Field("number"),
+    "removes_fraction": Field("number", required=False),
+}
+AIR_FIELDS = {
+    "saturation_mol_per_m3": Field("numbers"),
 }
 RETAINED_FIELDS = {
     "component": Field("name"),
@@ -272,6 +290,8 @@ SCHEMA = {
     "intake": INTAKE_FIELDS,
     "retained": RETAINED_FIELDS,
     "spreading": SPREADING_FIELDS,
+    "hygiene": HYGIENE_FIELDS,
+    "air": AIR_FIELDS,
 }
 """Every object of the network format and its fields, as docs/networks.md lists them."""
 

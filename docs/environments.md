@@ -256,7 +256,68 @@ What the scenes show, and what they do not:
   literature reports. Those directions are predictions of the model, and the
   tests check each one.
 - **One population, one site.** Which species make the acid, and how the pH
-  selects among them, is Stage S2. Enamel dissolving below the critical pH is
-  Stage S3, and many sites and years of diet are S4.
+  selects among them, is Stage S3. Many sites are S4, enamel dissolving below
+  the critical pH S5, and years of diet S6.
 - **Nothing makes base.** Urea and arginine, which plaque turns into ammonia,
   are not yet modelled, so the return to neutral relies on the saliva alone.
+
+### A day of plaque
+
+Stage S2 gave the plaque room to grow, a brush to fear and air to breathe
+([theory.md §4.10](theory.md#410-oxygen-from-the-air),
+[§6.1](theory.md#61-biomass-balance) and [§6.3](theory.md#63-detachment)). Two
+more scenes in the same folder use all of it, on a network that extends the
+Stephan curve's:
+
+- **Oxygen** enters from the air at the film's surface, held at 0.21 mM, its
+  solubility at 37 °C, and the air keeps the mouth's saliva at saturation.
+- **Saliva feeds the plaque between meals.** Its mucins carry about 1.5 mM of
+  hexose (Payment et al. 2000; Levine et al. 1987), of which the scenes take
+  1 mM as available. Where oxygen reaches, the plaque grows on it and
+  respires a little of it; it respires sugar too.
+- **Growth on sugar** makes lactic acid as before, and new biomass brings its
+  share of the buffer, packing the column from the substratum up.
+
+The scenes:
+
+- [`oxygen_profile.json`](../examples/environments/oral/oxygen_profile.json):
+  400 µm of plaque under saliva for half an hour, then the rinse of 10%
+  sucrose.
+- [`plaque_day.json`](../examples/environments/oral/plaque_day.json): a day
+  from 07:00, starting from 60 µm of plaque. Breakfast, lunch and dinner are
+  chewed, two sweets are sucked, and sugar-free gum follows the second. The
+  teeth are brushed at 07:45 and 22:00, and the tongue and cheeks wear the
+  surface at 0.5 µm per hour.
+
+```bash
+marse run examples/environments/oral/plaque_day.json   # about 2 minutes
+python examples/plaque_day.py   # both scenes and their checks, about 3 minutes
+```
+
+`marse run` adds `plaque.csv`: the plaque's thickness, and what it holds, has
+detached and has been brushed off. Over the day:
+
+| Time | Plaque | |
+|---|---|---|
+| 07:00 | 60.0 µm | |
+| 08:00 | 39.5 µm | brushed at 07:45 |
+| 13:00 | 54.0 µm | after lunch |
+| 22:00 | 84.3 µm | |
+| 23:00 | 50.2 µm | brushed at 22:00 |
+| 07:00 | 62.8 µm | the next morning |
+
+What the scenes show, and what they do not:
+
+- **How far oxygen reaches is a calibration.** The three respiration rates
+  were chosen so that oxygen reaches as deep into thick plaque as von Ohle et
+  al. (2010) measured with microsensors in plaque grown in the mouth. Under
+  saliva it reaches 216 µm (about 220), and 9 minutes after sucrose 151 µm
+  (about 150), as the plaque respires the sugar
+  ([validation.md](validation.md#a-day-of-plaque)).
+- **A plaque that grows back.** Each brushing takes 42% of the plaque, and
+  between brushings it grows back, on its meals and on saliva, so that the
+  next morning it is within 5% of where it started. That balance rests on
+  the growth and wear rates, which are confidence C.
+- **One population.** Every cell grows, ferments and respires alike.
+  Aerobes and anaerobes, early and late colonizers, and new cells arriving
+  from saliva are Stage S3.

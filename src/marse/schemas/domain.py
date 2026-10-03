@@ -23,10 +23,20 @@ substratum, height its last axis, with the bulk liquid held above it
   swallowed as the run goes (docs/environments.md, :mod:`marse.oral`);
 - ``diet``, with the mouth: rinses held, drinks sipped and foods that dissolve,
   each for a stated time, and food some of them leave on the teeth;
-- ``spreading``: biomass that outgrows its voxel pushes the excess into its
-  neighbours, every species sharing the room (:mod:`marse.spatial.spreading`).
-  Each species then needs a packing density, and the start must fit. A column
-  spreads; boxes in two and three dimensions arrive with Stage 2d, 2d.3.
+- ``spreading``: biomass that outgrows its room moves on (docs/networks.md,
+  "Biomass that spreads"). Each component that takes up room has a packing
+  density, every species sharing a voxel's room. ``packed`` packs a column from
+  the substratum up after every step, as plaque does, wears its surface and
+  detaches what passes a maximum height (:mod:`marse.biofilm.spreading`).
+  ``continuum`` pushes the excess on by the pressure it makes, after each
+  interval (:mod:`marse.spatial.spreading`). Both run in a column for now;
+  boxes in two and three dimensions arrive with Stage 2d, increment 2d.3;
+- ``hygiene``, with packed spreading and a mouth: brushing and flossing, each
+  taking a share of the plaque off from its surface down at a stated time;
+- ``air``: the top face is open to the air, which holds the gases it lists at
+  their saturation there. Under a film, the film's surface is at the air and
+  the air holds the mouth's saliva at saturation too; without one, the box
+  borders the air instead of a bulk liquid, as a colony biofilm does.
 
 The run fields' ``initial_mol_per_m3`` fill every voxel, and the colonies then
 set their component inside their hemispheres. A colony that covers no voxel
@@ -47,10 +57,12 @@ from marse.core.seeds import SeedRegistry
 from marse.schemas._reading import plain, read_object
 from marse.schemas.network import (
     ADHESION_FIELDS,
+    AIR_FIELDS,
     COLONY_FIELDS,
     DOMAIN_FIELDS,
     FILM_FIELDS,
     FLOW_FIELDS,
+    HYGIENE_FIELDS,
     INTAKE_FIELDS,
     LIQUID_FIELDS,
     MOUTH_FIELDS,
@@ -70,15 +82,18 @@ __all__ = [
     "DEFAULT_MIXING_PER_S",
     "M2_PER_S_TO_UM2_PER_H",
     "Adhesion",
+    "Air",
     "Colony",
     "Domain",
     "Film",
     "Flow",
+    "Hygiene",
     "Intake",
     "Liquid",
     "Mouth",
     "RandomColonies",
     "Retained",
+    "Spreading",
     "Surface",
     "Suspension",
     "read_domain",
@@ -89,6 +104,8 @@ MAX_VOXELS = 2**24
 COLONY_STREAM = "colonies"
 DEFAULT_MIXING_PER_S = 1.0
 """How fast an intake mixes the film with the mouth's liquid, per second, unless it says."""
+BRUSHING_REMOVES = 0.42
+"""The share of plaque one brushing removes, unless it says: 42% on average (Slot et al. 2012)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -248,7 +265,8 @@ class Mouth:
     from ``saliva_mol_per_m3`` towards ``stimulated_saliva_mol_per_m3`` as the
     flow rises. ``plaque_area_cm2`` is the plaque the box stands for, which
     exchanges with the mouth through its film. Every composition names every
-    dissolved component.
+    dissolved component. Chewing adds ``chewing_flow_ml_per_min`` to the flow
+    while it lasts.
     """
 
     saliva_mol_per_m3: dict[str, float]
@@ -261,6 +279,7 @@ class Mouth:
     stimulus_half_mol_per_m3: float | None
     plaque_area_cm2: float
     initial_mol_per_m3: dict[str, float]
+    chewing_flow_ml_per_min: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         written: dict[str, Any] = {"saliva_mol_per_m3": dict(self.saliva_mol_per_m3)}
@@ -277,6 +296,8 @@ class Mouth:
             written["stimulus_half_mol_per_m3"] = self.stimulus_half_mol_per_m3
         written["plaque_area_cm2"] = self.plaque_area_cm2
         written["initial_mol_per_m3"] = dict(self.initial_mol_per_m3)
+        if self.chewing_flow_ml_per_min:
+            written["chewing_flow_ml_per_min"] = self.chewing_flow_ml_per_min
         return written
 
 
@@ -314,7 +335,9 @@ class Intake:
       duration, as a sweet sucked slowly does, and adds no liquid.
 
     While it lasts, the film mixes with the mouth's liquid at ``mixing_per_s``
-    in each of its voxels. ``retained`` is food it leaves on the teeth.
+    in each of its voxels. ``retained`` is food it leaves on the teeth. A food
+    that is ``chewing`` adds the mouth's chewing flow while it lasts, as gum
+    and a meal do.
     """
 
     kind: str
@@ -325,6 +348,7 @@ class Intake:
     released_mmol: dict[str, float] | None = None
     mixing_per_s: float = DEFAULT_MIXING_PER_S
     retained: Retained | None = None
+    chewing: bool = False
 
     @property
     def end_h(self) -> float:
@@ -343,6 +367,8 @@ class Intake:
         if self.released_mmol is not None:
             written["released_mmol"] = dict(self.released_mmol)
         written["mixing_per_s"] = self.mixing_per_s
+        if self.chewing:
+            written["chewing"] = True
         if self.retained is not None:
             written["retained"] = self.retained.to_dict()
         return written
@@ -354,17 +380,65 @@ DEFAULT_SPREADING_INTERVAL_H = 0.25
 
 @dataclass(frozen=True, slots=True)
 class Spreading:
-    """How biomass spreads, and how often.
+    """How biomass that outgrows its room moves on (docs/theory.md, sections 6.1 and 9.10).
 
-    Each recording step is cut into equal spans of at most ``interval_h``, and
-    the biomass is spread at the end of every span.
+    Every component with a ``density_mol_per_m3`` takes up room, and
+    ``carried`` lists the particulate components that move with it without
+    taking any, such as the buffer of cell walls.
+
+    - ``packed``: after every step the column is packed from the substratum up
+      (:mod:`marse.biofilm.spreading`). What passes ``maximum_um`` is
+      detached, and the surface wears at ``wear_um_per_h``.
+    - ``continuum``: growth runs in place for spans of at most ``interval_h``,
+      after each of which the excess is pushed on by the pressure it makes
+      (:mod:`marse.spatial.spreading`).
     """
 
     mechanism: str
-    interval_h: float
+    interval_h: float | None = None
+    carried: tuple[str, ...] = ()
+    maximum_um: float | None = None
+    wear_um_per_h: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
-        return {"mechanism": self.mechanism, "interval_h": self.interval_h}
+        written: dict[str, Any] = {"mechanism": self.mechanism}
+        if self.mechanism == "continuum":
+            written["interval_h"] = self.interval_h
+        written["carried"] = list(self.carried)
+        if self.mechanism == "packed":
+            written["maximum_um"] = self.maximum_um
+            written["wear_um_per_h"] = self.wear_um_per_h
+        return written
+
+
+@dataclass(frozen=True, slots=True)
+class Hygiene:
+    """A brushing or a flossing at ``start_h``, taking ``removes_fraction`` of the plaque off."""
+
+    kind: str
+    start_h: float
+    removes_fraction: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "start_h": self.start_h,
+            "removes_fraction": self.removes_fraction,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class Air:
+    """The air above the box's top face, holding each gas it lists at its saturation there.
+
+    ``saturation_mol_per_m3`` is each gas's concentration in water in
+    equilibrium with the air (docs/theory.md, sections 4.4 and 4.10).
+    """
+
+    saturation_mol_per_m3: dict[str, float]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"saturation_mol_per_m3": dict(self.saturation_mol_per_m3)}
 
 
 @dataclass(frozen=True, slots=True)
@@ -386,10 +460,19 @@ class Domain:
     mouth: Mouth | None = None
     diet: tuple[Intake, ...] = ()
     spreading: Spreading | None = None
+    hygiene: tuple[Hygiene, ...] = ()
+    air: Air | None = None
 
     @property
     def grid(self) -> Grid:
         return Grid(self.voxels, self.voxel_um)
+
+    @property
+    def plaque(self) -> Spreading | None:
+        """The spreading, when it packs the column from the substratum up, as plaque does."""
+        if self.spreading is not None and self.spreading.mechanism == "packed":
+            return self.spreading
+        return None
 
     @property
     def substratum(self) -> Substratum | None:
@@ -472,6 +555,10 @@ class Domain:
         # And only a domain that spreads writes this.
         if self.spreading is not None:
             written["spreading"] = self.spreading.to_dict()
+            if self.hygiene:
+                written["hygiene"] = [event.to_dict() for event in self.hygiene]
+        if self.air is not None:
+            written["air"] = self.air.to_dict()
         return written
 
 
@@ -626,11 +713,36 @@ def read_domain(raw: Any, network: Network, where: str = "experiment.domain") ->
             f"{where}.bulk_mol_per_m3: under a film, the liquid comes from the mouth; give its "
             "composition as mouth.saliva_mol_per_m3 and leave the bulk out"
         )
+    film = oral.get("film")
     spreading = (
-        _read_spreading(values["spreading"], grid, network, bool(oral), f"{where}.spreading")
+        _read_spreading(values["spreading"], grid, network, scene, film, f"{where}.spreading")
         if "spreading" in values
         else None
     )
+    if spreading is not None and spreading.mechanism == "packed":
+        lodged = {i.retained.component for i in oral.get("diet", ()) if i.retained is not None}
+        moved = {c.name for c in network.components if c.density_mol_per_m3 is not None}
+        for name in sorted(lodged & (moved | set(spreading.carried))):
+            raise ConfigError(
+                f"{where}.spreading: '{name}' is food left on the teeth, which lies on the plaque, "
+                "in the film; give it no density and leave it out of carried"
+            )
+    hygiene: tuple[Hygiene, ...] = ()
+    if "hygiene" in values:
+        if spreading is None or spreading.mechanism != "packed" or "mouth" not in values:
+            raise ConfigError(
+                f"{where}.hygiene: brushing and flossing take plaque off the teeth; give the "
+                "domain a mouth, and spreading with the packed mechanism"
+            )
+        hygiene = _read_hygiene(values["hygiene"], f"{where}.hygiene")
+    air = None
+    if "air" in values:
+        air = _read_air(values["air"], network, oral.get("mouth"), f"{where}.air")
+        if not oral and any(amount for amount in bulk.values()):
+            raise ConfigError(
+                f"{where}.bulk_mol_per_m3: at the air, the box borders no bulk liquid; leave "
+                "the bulk out"
+            )
 
     return Domain(
         voxels=tuple(values["voxels"]),
@@ -650,43 +762,9 @@ def read_domain(raw: Any, network: Network, where: str = "experiment.domain") ->
         **scene,
         **oral,
         spreading=spreading,
+        hygiene=hygiene,
+        air=air,
     )
-
-
-def _read_spreading(raw: Any, grid: Grid, network: Network, oral: bool, where: str) -> Spreading:
-    """The spreading block, and what a network must state to spread."""
-    values = read_object(raw, where, SPREADING_FIELDS)
-    if grid.dimensions != 1:
-        raise ConfigError(
-            f"{where}: a column spreads; spreading in two and three dimensions arrives with "
-            "Stage 2d, increment 2d.3 (docs/stage-2d-plan.md)"
-        )
-    if grid.shape[-1] < 2:
-        raise ConfigError(
-            f"{where}: a column that spreads needs at least two voxels, since biomass must stay "
-            "out of the top one"
-        )
-    if oral:
-        raise ConfigError(
-            f"{where}: spreading under a salivary film is not supported yet; it arrives when the "
-            "oral scenes need it"
-        )
-    interval = (
-        float(plain(values["interval_h"]))
-        if "interval_h" in values
-        else DEFAULT_SPREADING_INTERVAL_H
-    )
-    if not interval > 0:
-        raise ConfigError(f"{where}.interval_h: must be positive")
-    species = {p.growth.biomass: p.name for p in network.processes if p.growth is not None}
-    for name, process in species.items():
-        if network.component(name).density_mol_per_m3 is None:
-            raise ConfigError(
-                f"{where}: '{name}' grows in process '{process}', so it takes up room as it "
-                "spreads; give it a density_mol_per_m3, its concentration when it alone fills "
-                "a voxel"
-            )
-    return Spreading(values["mechanism"], interval)
 
 
 def _composition(
@@ -778,6 +856,9 @@ def _read_oral(values: dict[str, Any], grid: Grid, network: Network, where: str)
         half = _positive(m["stimulus_half_mol_per_m3"], f"{here}.stimulus_half_mol_per_m3")
     elif "stimulus_half_mol_per_m3" in m:
         raise ConfigError(f"{here}.stimulus_half_mol_per_m3: applies only with a stimulus")
+    chewing_flow = float(plain(m.get("chewing_flow_ml_per_min", 0)))
+    if chewing_flow < 0:
+        raise ConfigError(f"{here}.chewing_flow_ml_per_min: must not be negative")
     area = _positive(m["plaque_area_cm2"], f"{here}.plaque_area_cm2")
     film_ml = area * thickness * 1e-4  # cm2 x um, in mL
     if not film_ml < resting:
@@ -796,8 +877,15 @@ def _read_oral(values: dict[str, Any], grid: Grid, network: Network, where: str)
         stimulus_half_mol_per_m3=half,
         plaque_area_cm2=area,
         initial_mol_per_m3=initial,
+        chewing_flow_ml_per_min=chewing_flow,
     )
     diet = _read_diet(values.get("diet", []), grid, network, f"{where}.diet")
+    for i, intake in enumerate(diet):
+        if intake.chewing and not chewing_flow:
+            raise ConfigError(
+                f"{where}.diet[{i}].chewing: chewing adds the mouth's chewing flow; give the "
+                "mouth chewing_flow_ml_per_min"
+            )
     return {"film": film, "mouth": mouth, "diet": diet}
 
 
@@ -847,6 +935,11 @@ def _read_diet(items: list[Any], grid: Grid, network: Network, where: str) -> tu
             mixing = float(plain(v["mixing_per_s"]))
         if mixing < 0:
             raise ConfigError(f"{here}.mixing_per_s: must not be negative")
+        chewing = v.get("chewing", False)
+        if chewing and kind != "food":
+            raise ConfigError(
+                f"{here}.chewing: only food is chewed; a {kind} is drunk or held in the mouth"
+            )
         retained = None
         if "retained" in v:
             retained = _read_retained(v["retained"], grid, network, f"{here}.retained")
@@ -855,7 +948,9 @@ def _read_diet(items: list[Any], grid: Grid, network: Network, where: str) -> tu
                 f"{here}.start_h: starts at {start:g} h, before intake {i - 1} ends at "
                 f"{diet[-1].end_h:g} h; list the intakes in order, one at a time"
             )
-        diet.append(Intake(kind, start, duration, volume, composition, released, mixing, retained))
+        diet.append(
+            Intake(kind, start, duration, volume, composition, released, mixing, retained, chewing)
+        )
     return tuple(diet)
 
 
@@ -884,6 +979,165 @@ def _read_retained(raw: Any, grid: Grid, network: Network, where: str) -> Retain
     except ValueError as error:
         raise ConfigError(f"{where}.region_um: {error}") from None
     return Retained(name, amount, region)
+
+
+def _read_spreading(
+    raw: Any,
+    grid: Grid,
+    network: Network,
+    scene: dict[str, Any],
+    film: Film | None,
+    where: str,
+) -> Spreading:
+    """The spreading block, and what a network must state to spread."""
+    v = read_object(raw, where, SPREADING_FIELDS)
+    mechanism = v["mechanism"]
+    if grid.dimensions != 1:
+        raise ConfigError(
+            f"{where}: a column spreads; spreading in two and three dimensions arrives with "
+            "Stage 2d, increment 2d.3 (docs/stage-2d-plan.md)"
+        )
+    if grid.shape[-1] < 2:
+        raise ConfigError(
+            f"{where}: a column that spreads needs at least two voxels, since biomass must stay "
+            "out of the top one"
+        )
+    components = {c.name: c for c in network.components}
+    reversible = {s.reversible for s in scene.get("suspension", ())}
+    occupying = [c.name for c in network.components if c.density_mol_per_m3 is not None]
+    if not occupying:
+        raise ConfigError(
+            f"{where}: give at least one particulate component a density_mol_per_m3, its "
+            "concentration when it alone fills a voxel"
+        )
+    for name in occupying:
+        if name in reversible:
+            raise ConfigError(
+                f"{where}: '{name}' is reversibly bound to the substratum, not part of the "
+                "biofilm; give it no density"
+            )
+    species = {p.growth.biomass: p.name for p in network.processes if p.growth is not None}
+    for name, process in species.items():
+        if name not in reversible and components[name].density_mol_per_m3 is None:
+            raise ConfigError(
+                f"{where}: '{name}' grows in process '{process}', so it takes up room as it "
+                "spreads; give it a density_mol_per_m3, its concentration when it alone fills "
+                "a voxel"
+            )
+    carried = tuple(v.get("carried", []))
+    _known(list(carried), components, f"{where}.carried")
+    for name in carried:
+        if components[name].phase != "particulate":
+            raise ConfigError(
+                f"{where}.carried: '{name}' is dissolved; only particulate components move "
+                "with the biofilm"
+            )
+        if name in reversible:
+            raise ConfigError(
+                f"{where}.carried: '{name}' is reversibly bound to the substratum, not part of "
+                "the biofilm"
+            )
+        if name in occupying:
+            raise ConfigError(f"{where}.carried: '{name}' already takes up room; list it once")
+    if mechanism == "continuum":
+        if film is not None:
+            raise ConfigError(
+                f"{where}: continuum spreading under a salivary film is not supported yet; use "
+                "the packed mechanism, which plaque under a film spreads by"
+            )
+        for key in ("maximum_um", "wear_um_per_h"):
+            if key in v:
+                raise ConfigError(
+                    f"{where}.{key}: applies to the packed mechanism; continuum spreading "
+                    "detaches nothing until Stage 3"
+                )
+        interval = (
+            float(plain(v["interval_h"])) if "interval_h" in v else DEFAULT_SPREADING_INTERVAL_H
+        )
+        if not interval > 0:
+            raise ConfigError(f"{where}.interval_h: must be positive")
+        return Spreading(mechanism, interval, carried)
+    if "interval_h" in v:
+        raise ConfigError(
+            f"{where}.interval_h: applies to the continuum mechanism; packed spreading packs "
+            "the column after every step"
+        )
+    height = grid.size_um[-1] - (film.thickness_um if film is not None else 0.0)
+    below = "the film" if film is not None else "the top of the box"
+    maximum = float(plain(v["maximum_um"])) if "maximum_um" in v else height
+    if not 0 < maximum <= height * (1 + 1e-12):
+        raise ConfigError(
+            f"{where}.maximum_um: must be positive and fit below {below}, {height:g} um up"
+        )
+    wear = float(plain(v["wear_um_per_h"])) if "wear_um_per_h" in v else 0.0
+    if wear < 0:
+        raise ConfigError(f"{where}.wear_um_per_h: must not be negative")
+    return Spreading(mechanism, None, carried, min(maximum, height), wear)
+
+
+def _read_hygiene(items: list[Any], where: str) -> tuple[Hygiene, ...]:
+    """Brushings and flossings, in time order, each with the share of plaque it removes."""
+    events: list[Hygiene] = []
+    for i, item in enumerate(items):
+        here = f"{where}[{i}]"
+        v = read_object(item, here, HYGIENE_FIELDS)
+        start = float(plain(v["start_h"]))
+        if start < 0:
+            raise ConfigError(f"{here}.start_h: must not be negative")
+        if events and start < events[-1].start_h:
+            raise ConfigError(f"{here}.start_h: list brushings and flossings in time order")
+        if "removes_fraction" in v:
+            fraction = float(plain(v["removes_fraction"]))
+        elif v["kind"] == "brushing":
+            fraction = BRUSHING_REMOVES
+        else:
+            raise ConfigError(
+                f"{here}: a flossing needs removes_fraction, the share of plaque it takes; only "
+                "brushing has a measured default"
+            )
+        if not 0 < fraction <= 1:
+            raise ConfigError(f"{here}.removes_fraction: must be more than 0 and at most 1")
+        events.append(Hygiene(v["kind"], start, fraction))
+    return tuple(events)
+
+
+def _read_air(raw: Any, network: Network, mouth: Mouth | None, where: str) -> Air:
+    """The gases the air holds at the top face, each a neutral dissolved component."""
+    v = read_object(raw, where, AIR_FIELDS)
+    here = f"{where}.saturation_mol_per_m3"
+    saturation = v["saturation_mol_per_m3"]
+    if not saturation:
+        raise ConfigError(f"{here}: name at least one gas the air holds, such as oxygen")
+    components = {c.name: c for c in network.components}
+    _known(list(saturation), components, here)
+    for name, value in saturation.items():
+        component = components[name]
+        if component.phase != "dissolved":
+            raise ConfigError(
+                f"{here}: '{name}' is particulate; only dissolved gases cross to the air"
+            )
+        if component.pka:
+            raise ConfigError(
+                f"{here}: '{name}' is an acid-base total, of which only the neutral form is a "
+                "gas; carbon dioxide stays with its total, closed to the air"
+            )
+        if component.formula.charge:
+            raise ConfigError(f"{here}: '{name}' is an ion, which does not leave the water")
+        if value < 0:
+            raise ConfigError(f"{here}: '{name}' must not be negative")
+    if mouth is not None:
+        for field, held in (
+            ("saliva_mol_per_m3", mouth.saliva_mol_per_m3),
+            ("stimulated_saliva_mol_per_m3", mouth.stimulated_saliva_mol_per_m3 or {}),
+            ("initial_mol_per_m3", mouth.initial_mol_per_m3),
+        ):
+            for name in saturation:
+                if held.get(name):
+                    raise ConfigError(
+                        f"{where}: the air holds the mouth's '{name}' at saturation; leave it "
+                        f"out of mouth.{field}"
+                    )
+    return Air({name: float(plain(value)) for name, value in saturation.items()})
 
 
 def _same_formula(a: Any, b: Any) -> bool:

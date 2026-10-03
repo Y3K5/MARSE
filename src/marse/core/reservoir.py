@@ -31,6 +31,13 @@ spans of 60 s and 5 s. So the pool is solved with the box, implicitly:
 The state holds both, shape ``(J, voxels + 1)``: the box flattened, then the
 pool. :meth:`ReservoirTransport.pack` and :meth:`~ReservoirTransport.unpack`
 convert.
+
+Where the film's surface is at the air (:mod:`marse.spatial.air`), so is the
+mouth's liquid, spread over the mouth's surfaces as a film of its own: a film
+0.1 mm deep comes to equilibrium with the air within seconds. The pool holds
+each gas at its saturation, so the film is renewed with saturated saliva, and
+what holding it takes is booked as exchanged with the air (docs/theory.md,
+section 4.10).
 """
 
 from __future__ import annotations
@@ -42,6 +49,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+from marse.biofilm.spreading import Spreading
 from marse.core.implicit import (  # the engine's own step, reused
     GAMMA,
     ReactionTransport,
@@ -51,6 +59,7 @@ from marse.core.implicit import (  # the engine's own step, reused
     _Stage,
 )
 from marse.microbes.adhesion import SurfaceExchange
+from marse.spatial.air import AirExchange
 from marse.spatial.column import ColumnSystem
 from marse.spatial.multigrid import ImplicitSystem
 from marse.spatial.transport import Diffusion, divergence
@@ -237,7 +246,8 @@ class ReservoirTransport(ReactionTransport):
     ``exchanged`` lists the components the pool and the box exchange: the
     dissolved ones. ``reference_um`` is H_ref, the thickness that turns the
     pool's amounts into its unknowns. Before each span, the caller sets
-    :attr:`path` and :attr:`exchange_per_h`, the rate k in every voxel.
+    :attr:`path` and :attr:`exchange_per_h`, the rate k in every voxel. With
+    ``air``, the pool holds each gas at its saturation.
     """
 
     def __init__(
@@ -250,12 +260,24 @@ class ReservoirTransport(ReactionTransport):
         exchanged: Sequence[int],
         reference_um: float,
         surface: SurfaceExchange | None = None,
+        spreading: Spreading | None = None,
+        air: AirExchange | None = None,
     ) -> None:
         if not diffusion.closed_top:
             raise ValueError("a box under a film exchanges through the film: close its top face")
-        super().__init__(diffusion, stoichiometry, rates, jacobian, surface)
+        super().__init__(diffusion, stoichiometry, rates, jacobian, surface, spreading, air)
         self.exchanged = np.asarray(exchanged, dtype=np.intp)
         count = self.exchanged.size
+        # The gases the pool holds at saturation, where they fall among the exchanged.
+        self._held = np.zeros(count, dtype=bool)
+        self._saturation = np.zeros(count)
+        if air is not None:
+            if not np.isin(air.gases, self.exchanged).all():
+                raise ValueError("the air's gases must be exchanged with the pool")
+            for gas, saturation in zip(air.gases, air.saturation_mol_per_m3, strict=True):
+                at = int(np.flatnonzero(self.exchanged == gas)[0])
+                self._held[at] = True
+                self._saturation[at] = saturation
         components = self.stoichiometry.shape[1]
         self._reacting = self.stoichiometry.shape[0]
         rows = np.zeros((2 * count, components))
@@ -284,10 +306,31 @@ class ReservoirTransport(ReactionTransport):
         """Summed over the box, per unit area of substratum: mol/m3 x um."""
         return field.reshape(field.shape[0], -1).sum(axis=1) * self.areal_um
 
+    def _detach(self, y: Field, hours: float) -> tuple[Field, NDArray[np.float64]]:
+        """Pack the plaque and wear it; what leaves the box enters the pool, carried by the film."""
+        assert self.spreading is not None
+        box, pool = self.unpack(y)
+        box, detached = self.spreading.project(box, hours)
+        return self.pack(box, pool + detached * self.areal_um / self.reference_um), detached
+
     def _pool_concentration(self, pool: NDArray[np.float64]) -> tuple[NDArray, float]:
         assert self.path is not None, "set the path before each span"
         thickness, _ = self.path.at(self._time)
-        return pool * self.reference_um / thickness, thickness
+        concentration = pool * self.reference_um / thickness
+        concentration[self.held_gases] = self._saturation[self._held]
+        return concentration, thickness
+
+    @property
+    def held_gases(self) -> NDArray[np.intp]:
+        """The components the pool holds at the air's saturation, in the order of :meth:`held`."""
+        return self.exchanged[self._held]
+
+    def held(self, thickness_um: float) -> NDArray[np.float64]:
+        """The pool's unknowns for the gases it holds, at a thickness of the pool.
+
+        Given the pool's rate of growth instead, the rate at which they grow.
+        """
+        return self._saturation[self._held] * thickness_um / self.reference_um
 
     # -- the right-hand side and its Jacobian --------------------------------------------
 
@@ -309,6 +352,8 @@ class ReservoirTransport(ReactionTransport):
         assert self.path is not None
         pool_rate = self.path.rate(self._time) / self.reference_um
         pool_rate[self.exchanged] -= self._per_area(inflow - outflow) / self.reference_um
+        if self._held.any():  # held at saturation as the pool grows
+            pool_rate[self.held_gases] = self.held(self.path.at(self._time)[1])
         return _Stage(self.pack(rate, pool_rate), fluxes, reactions, substratum)
 
     def _system(self, y: Field, a: float) -> BorderedSystem:  # type: ignore[override]
@@ -332,12 +377,17 @@ class ReservoirTransport(ReactionTransport):
             closed_top=True,
         )
         k = self.exchange_per_h
-        alive = concentration[self.exchanged] >= 0
+        # A gas the pool holds neither responds to the box nor moves the box through it.
+        alive = (concentration[self.exchanged] >= 0) & ~self._held
         dims = len(self.shape)
         to_box = np.where(
             alive.reshape((-1,) + (1,) * dims), k * self.reference_um / thickness, 0.0
         )
-        to_pool = np.where(live, k * self.areal_um / self.reference_um, 0.0)
+        to_pool = np.where(
+            live & ~self._held.reshape((-1,) + (1,) * dims),
+            k * self.areal_um / self.reference_um,
+            0.0,
+        )
         own = np.where(alive, -float(k.sum()) * self.areal_um / thickness, 0.0)
         return BorderedSystem(system, a, self.exchanged, to_box, to_pool, own, self.shape)
 
@@ -369,7 +419,7 @@ class ReservoirTransport(ReactionTransport):
             returned = self._per_area(extents[first + count :])
             new_pool = pool + added / self.reference_um
             new_pool[self.exchanged] += (returned - given) / self.reference_um
-            short = new_pool[self.exchanged] < 0
+            short = (new_pool[self.exchanged] < 0) & ~self._held  # the air keeps the gases
             if not short.any():
                 return new_box, new_pool, extents, substratum, rounds
             available = pool[self.exchanged] * self.reference_um + added[self.exchanged] + returned
@@ -408,6 +458,12 @@ class ReservoirTransport(ReactionTransport):
         new_box, new_pool, extents, substratum, rounds = self._conserve(
             box, pool, added, transfers, extents, substratum
         )
+        pool_air = np.zeros(y.shape[0])  # what holding the pool's gases took from the air
+        if self._held.any():
+            gases = self.held_gases
+            held = self.held(self.path.at(start + h)[0])
+            pool_air[gases] = (held - new_pool[gases]) * self.reference_um / self.areal_um
+            new_pool[gases] = held
         new = self.pack(new_box, new_pool)
         scale = atol + rtol * np.maximum(reference, _magnitude(y, new))
         estimate, _ = system.solve(g * h * (s2.rate - s1.rate), scale=scale, tolerance=1e-2)
@@ -417,6 +473,10 @@ class ReservoirTransport(ReactionTransport):
         imports[self.exchanged] = exchanged.reshape(count, -1).sum(axis=1)
         if substratum is not None:  # bound less detached, as in the engine
             imports += substratum.reshape(y.shape[0], -1).sum(axis=1) / self.spacing[-1]
+        if self.air is not None:  # the box's own exchange with the air, and the pool's
+            aired = self.air.exchanged(extents[self._air_rows])
+            imports += aired
+            self._airing = aired + pool_air
         return new, imports, estimate, rounds, n1 + n2
 
     def integrate(  # type: ignore[override]
