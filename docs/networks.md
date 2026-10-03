@@ -108,6 +108,8 @@ key is an error, not a silently ignored typo.
 | `formula` | text | yes | The chemical formula of one unit of the component, such as `C6H12O6` or `CH1.8O0.5N0.2`. |
 | `charge` | number | no, default `0` | The charge of one formula unit, in elementary charges: `1` for ammonium, `-1` for lactate. |
 | `acid_base` | object | no | Makes the component an acid–base total, such as lactic acid and lactate together; see [Acids, bases and pH](#acids-bases-and-ph). |
+| `oxygen_role` | `obligate_aerobe`, `microaerophile`, `facultative`, `aerotolerant` or `obligate_anaerobe` | for a species | How a species lives with oxygen, checked against its processes; see [Oxygen roles](#oxygen-roles). A species is a particulate component that some growth process forms. |
+| `density_mol_per_m3` | number | for a species, when the domain spreads | Its packing density: its concentration when it alone fills a voxel, in mol per m³. Particulate components only. One without a density takes no room and does not move; see [Biomass that spreads](#biomass-that-spreads). |
 
 A component is counted in mol of its formula unit. Biomass written per carbon
 atom, as `CH1.8O0.5N0.2`, is therefore counted in C-mol. The formula rules:
@@ -270,6 +272,43 @@ Two rules are checked when the file is read:
   ammonium, for example. The assumption is then recorded, and a run in which
   it fails stops with an error rather than continuing on a false premise.
 
+## Oxygen roles
+
+Every species states how it lives with oxygen, as its `oxygen_role`. A species
+is a particulate component that some growth process forms. The role is a rule
+that the species' processes must obey, checked when the file is read:
+
+- **Its growth processes** are the processes that form it.
+- **Its processes** are those, and the reactions whose rate is
+  `proportional_to` it, such as its endogenous respiration.
+- **Oxygen** is the dissolved component whose formula is `O2`. No field names
+  it.
+
+| Role | Its processes |
+|---|---|
+| `obligate_aerobe` | Every growth process consumes oxygen. |
+| `microaerophile` | Every growth process consumes oxygen, and every one with a rate has a `haldane` factor on it, so that too much oxygen slows it. |
+| `facultative` | At least one growth process consumes oxygen, and at least one does not. |
+| `aerotolerant` | No process consumes oxygen, and none has a `monod` or `haldane` factor on it. |
+| `obligate_anaerobe` | As `aerotolerant`. In a network with oxygen, every growth process with a rate also has an `inhibition` factor on oxygen, because oxygen stops it growing. |
+
+A network that breaks a rule is refused, with a message naming the species,
+the process and the factor. An anaerobe with a Monod term on oxygen cannot be
+loaded. That was the version 1 engine's
+[known defect 3](validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified),
+in which the periodontal anaerobes needed oxygen to grow.
+
+**A role describes the model, not only the organism.** *S. oralis* is usually
+described as a facultative anaerobe, but a scene that models only its
+fermentation declares it `aerotolerant`, because no process of it uses oxygen
+there. The dental scene
+does so. `facultative` asks for both ways of growing, so that a species
+declared to switch can switch.
+
+`marse check` prints each species' role. Variants, when they arrive, will
+inherit the role of their species
+([Stage 2d plan](stage-2d-plan.md#variants-and-lineages)).
+
 ## Running a network
 
 `marse run` integrates the network in a closed, well-mixed box, from
@@ -324,8 +363,9 @@ biofilm:
 
 Dissolved components diffuse between voxels at the stated diffusivities. Every
 process runs in every voxel at once, at the rates described in [Rates](#rates). Biomass
-grows where it is. Colonies spreading, and sharing space as they do, come in the
-next stage.
+grows where it is, unless the domain spreads it: then the species share each
+voxel's room, and biomass that outgrows its voxel pushes the excess on
+([Biomass that spreads](#biomass-that-spreads)).
 
 ```bash
 marse check examples/networks/surface_biofilm_3d.json   # the space, and what an explicit step would cost
@@ -404,8 +444,8 @@ chemistry in a single column in three seconds.
 | `film` | object | no | The top voxels are a salivary film, renewed from the mouth; its surface is closed unless `air` opens it to gases. [A salivary film and the mouth](#a-salivary-film-and-the-mouth): these two fields go together, and replace `bulk_mol_per_m3`. |
 | `mouth` | object | with `film` | The mouth's saliva: what is secreted, how much the mouth holds, and when it swallows. |
 | `diet` | list of intakes | no, with `mouth` | What is eaten and drunk: rinses, drinks and foods, each from a start for a duration. [The diet](#the-diet). |
-| `plaque` | object | no, in a column | Biomass that spreads as it grows, packing the column from the substratum up, wearing at its surface and detached above a maximum height. [Plaque that spreads](#plaque-that-spreads). |
-| `hygiene` | list of cleanings | no, with `plaque` and `mouth` | Brushings and flossings, each taking a share of the plaque off at its time. |
+| `spreading` | object | no, in a column | Biomass that outgrows its room moves on, packed from the substratum up as plaque is, or pushed by its pressure. [Biomass that spreads](#biomass-that-spreads). |
+| `hygiene` | list of cleanings | no, with packed `spreading` and `mouth` | Brushings and flossings, each taking a share of the plaque off at its time. [Plaque that spreads](#plaque-that-spreads). |
 | `air` | object | no | The top face is at the air, which holds the gases it lists at their saturation there: the film's surface, or, without a film, the top of the box in place of a bulk liquid. [Oxygen and the air](#oxygen-and-the-air). |
 
 `initial_mol_per_m3` fills every voxel. Each colony then sets its component to
@@ -519,6 +559,72 @@ material, species by species, and the area each material has covered.
 | `detachment_per_h` | number | yes | How fast reversibly bound cells detach, per hour. |
 | `locking_per_h` | number | yes | How fast they lock into the biomass, per hour. |
 
+### Biomass that spreads
+
+With `spreading`, the species in a column share its room, and biomass that
+outgrows it moves on ([theory.md §6.1 and §9.10](theory.md#61-biomass-balance)).
+
+- **Room.** Each component that takes up room declares a packing density,
+  `density_mol_per_m3`: its concentration when it alone fills a voxel. A
+  voxel's biomass fills the fraction φ = Σ c<sub>j</sub>/ρ<sub>j</sub>, every
+  species counted together, and no voxel may hold more than all of it, φ ≤ 1.
+  Every species needs a density.
+- **What moves.** Components with a density, and the particulate components
+  listed in `carried`, which move with them without taking room, such as the
+  fixed buffer of cell walls and its counter-ions. Other particulate
+  components, such as food left on the teeth, stay where they are, and
+  dissolved components only diffuse.
+- **Two mechanisms.** How biomass spreads changes conclusions about
+  competition ([modeling-landscape.md §2](modeling-landscape.md#2-the-biomass-spreading-decision)),
+  so `mechanism` states it, and the manifest records it:
+  - **`packed`** (`displacement_1d_v1`): after every step of the integration
+    the column is packed from the substratum up. Where it shrinks, it settles,
+    so the front stays sharp: full voxels, then at most one partly filled. It
+    wears at its surface and is detached above a maximum height, and it can lie
+    under a salivary film; [Plaque that spreads](#plaque-that-spreads) gives
+    the rest.
+  - **`continuum`** (`continuum_pressure_v1`): growth runs in place for an
+    interval, and then the biomass that no longer fits is pushed on, from high
+    pressure to low, until every voxel fits again. What leaves a voxel through
+    a face is the material nearest that face, so a layer of cells stays a
+    layer. A voxel that empties stays empty. This is the mechanism that
+    extends to two and three dimensions ([the Stage 2d plan](stage-2d-plan.md)).
+- **The top of the box.** Under `continuum`, the top layer borders the bulk
+  liquid and must stay clear: a film that would reach it stops the run with an
+  error naming the time, and a start with biomass there, or that overfills a
+  voxel, is refused. Under `packed`, the plaque is packed as the run starts, and
+  what passes its maximum height is detached.
+
+Both mechanisms spread a column for now. Boxes in two and three dimensions
+arrive with Stage 2d, increment 2d.3, and `continuum` under a salivary film
+when the oral scenes need it.
+
+```bash
+marse check examples/networks/spreading_column.json   # the packing, and growth per interval
+marse run examples/networks/spreading_column.json -o runs/column
+```
+
+The example spreads 40 µm of heterotroph and fermenter, each packed at
+1000 C-mol per m³, under the liquid of `surface_biofilm_1d.json`, by the
+continuum mechanism. In four hours the film grows to 92 µm, with the
+heterotroph respiring at its top and the fermenter below. `marse run` then
+also writes `structure.csv`, with the biovolume per µm² of substratum (for a
+film without gaps, its thickness), its maximum thickness and its fullest voxel
+at every recorded time. Every run checks, after every spread, that nothing
+went negative, each component's total is unchanged, nothing else moved and
+every voxel fits. The oral scenes `oxygen_profile.json` and `plaque_day.json`
+spread their plaque by the packed mechanism.
+
+### Spreading fields
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `mechanism` | `packed` or `continuum` | yes | How biomass that outgrows its room moves on. A cellular automaton is to follow. |
+| `interval_h` | number | no, default `0.25`; `continuum` only | How long growth runs in place between spreads, in hours: at most `timestep_h`, which is cut into equal spans no longer than it. The error is first order in it, and smaller intervals mix layers more ([validation.md](validation.md#spreading-in-a-column)). |
+| `carried` | list of component names | no | Particulate components that move with the biofilm without taking room. |
+| `maximum_um` | number | no, default up to the film, or the top of the box; `packed` only | How high the plaque can be. Biomass pushed above it is detached. Under a film, no higher than the film's underside. |
+| `wear_um_per_h` | number | no, default `0`; `packed` only | How fast the surface wears away. |
+
 ### A salivary film and the mouth
 
 Plaque in the mouth lies under a film of saliva about 0.1 mm thick, which
@@ -625,47 +731,25 @@ counts food placed in the film as entering the box.
 
 ### Plaque that spreads
 
-Biomass does not diffuse: as cells divide in a crowded biofilm, they push
-their neighbours away from the substratum. With `plaque`, a column's biomass
-spreads that way ([theory.md §6.1](theory.md#61-biomass-balance)):
+Plaque spreads by the `packed` mechanism
+([Biomass that spreads](#biomass-that-spreads),
+[theory.md §6.1 and §6.3](theory.md#61-biomass-balance)). Beyond packing the
+column from the substratum up, it is cleared:
 
-- **What fills it.** Each component in `packing_mol_per_m3` takes space: at
-  that concentration it alone fills a voxel. A voxel's solid fraction is the
-  sum of each such component over its packing concentration.
-- **Packing.** After every step of the integration, the solid is packed from
-  the substratum up: a voxel holds at most its own volume of solid, and what
-  grows beyond that moves into the voxels above, in the proportions of the
-  voxel it came from. Where it shrinks, the column settles. The front stays
-  sharp: full voxels, then at most one partly filled.
-- **What it carries.** Components in `carried` move with the solid without
-  taking space, such as the fixed buffer of cell walls and its counter-ions.
-  In a voxel with no solid, nothing carries them, and they stay. Dissolved
-  components, and particulate ones neither filling nor carried,
-  such as food left on the teeth, stay where they are.
-- **What takes it off.** Solid pushed above `maximum_um` is detached: under a
-  film, into the mouth, which swallows it; otherwise into the bulk liquid.
+- **What takes it off.** Biomass pushed above `maximum_um` is detached: under
+  a film, into the mouth, which swallows it; otherwise into the bulk liquid.
   The surface wears at `wear_um_per_h`, for the friction of the tongue and
-  cheeks. A brushing or a flossing in `hygiene` takes a share of the plaque
-  off from its surface down, and the same share of any food left on the
-  teeth, and the mouth expels it.
+  cheeks.
+- **Brushing and flossing.** A cleaning in `hygiene` takes a share of the
+  plaque off from its surface down, and the same share of any food left on
+  the teeth, and the mouth expels it.
+- **The film rides on it.** Under a film, the film is renewed from the
+  plaque's surface up, wherever that is after growth or a brushing.
 
-Plaque spreads in a column only. How biomass spreads in two and three
-dimensions changes conclusions about competition and cooperation, so that
-choice belongs to Stage 2d, which compares mechanisms
-([modeling-landscape.md §2](modeling-landscape.md#2-the-biomass-spreading-decision)).
-`marse run` writes `plaque.csv`: the thickness, and for each filling
-component the amount in the plaque, detached and taken off, at every
-recorded time. The manifest names the spreading mechanism,
-`displacement_1d_v1`, and adds what left the plaque; both balances count it.
-
-### Plaque fields
-
-| Field | Type | Required | Meaning |
-|---|---|---|---|
-| `packing_mol_per_m3` | object of numbers | yes | Each particulate component that takes space, and the concentration at which it alone fills a voxel. |
-| `carried` | list of component names | no | Particulate components that move with the plaque without taking space. |
-| `maximum_um` | number | no, default up to the film, or the top of the box | How high the plaque can be. Solid pushed above it is detached. Under a film, no higher than the film's underside. |
-| `wear_um_per_h` | number | no, default `0` | How fast the surface wears away. |
+`marse run` writes `plaque.csv`: the thickness, and for each component that
+takes room, the amount in the plaque, detached and taken off, at every
+recorded time. The manifest names the mechanism, `displacement_1d_v1`, and
+adds what left the plaque; both balances count it.
 
 ### Hygiene fields
 
@@ -808,8 +892,8 @@ schema will carry these grades itself once the examples are rebuilt on it.
 The next increments, in the order of
 [the roadmap](roadmap.md#order-of-work-correctness-first):
 
-- biomass that spreads as it grows and shares space between species, with
-  oxygen roles for species and heritable lineages;
+- biomass that spreads in two and three dimensions, and heritable lineages
+  ([the plan](stage-2d-plan.md));
 - the examples and the periodontal study rebuilt on version 2, after which
   version 1 is removed;
 - dead biomass, the extracellular matrix, and a diffusivity that depends on

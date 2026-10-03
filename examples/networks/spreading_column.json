@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "description": "The chemistry of surface_biofilm_3d.json in a single column through a flat biofilm: 40 um of heterotroph and fermenter together on the surface, under 40 um of liquid whose bulk holds a quarter of air-saturated oxygen. It runs in seconds and shows the same stratification in one dimension: oxygen consumed near the top of the biofilm, fermentation below. Parameters as in the 3-D example (confidence C).",
+  "description": "The chemistry of surface_biofilm_1d.json, in a biofilm that spreads as it grows. 40 um of heterotroph and fermenter together, packed full, lie on the surface under a column of liquid whose bulk holds a quarter of air-saturated oxygen. Each species packs at 1000 C-mol per m3 (about 25 kg of dry mass per m3), so the two together fill every voxel they start in. As they grow, the excess is pushed up into the liquid and the film thickens: the heterotroph respires near the top, the fermenter ferments below. Densities, like every other parameter here, are illustrative (confidence C).",
   "components": [
     {
       "name": "glucose",
@@ -33,13 +33,15 @@
       "name": "heterotroph",
       "phase": "particulate",
       "formula": "CH1.8O0.5N0.2",
-      "oxygen_role": "obligate_aerobe"
+      "oxygen_role": "obligate_aerobe",
+      "density_mol_per_m3": 1000
     },
     {
       "name": "fermenter",
       "phase": "particulate",
       "formula": "CH1.8O0.5N0.2",
-      "oxygen_role": "aerotolerant"
+      "oxygen_role": "aerotolerant",
+      "density_mol_per_m3": 1000
     }
   ],
   "processes": [
@@ -158,22 +160,22 @@
       }
     }
   ],
-  "experiment_id": "surface-biofilm-1d",
+  "experiment_id": "spreading-column",
   "initial_mol_per_m3": {
     "glucose": 5.0,
     "oxygen": 0.05,
     "ammonium": 5.0,
     "carbon_dioxide": 1.0
   },
-  "duration_h": 2.0,
+  "duration_h": 4.0,
   "timestep_h": 0.25,
-  "record_interval_h": 0.25,
+  "record_interval_h": 0.5,
   "seed": 0,
   "domain": {
     "voxels": [
-      16
+      64
     ],
-    "voxel_um": 5.0,
+    "voxel_um": 2.5,
     "bulk_mol_per_m3": {
       "glucose": 5.0,
       "oxygen": 0.05,
@@ -192,14 +194,17 @@
         "component": "heterotroph",
         "center_um": [],
         "radius_um": 40.0,
-        "concentration_mol_per_m3": 2000.0
+        "concentration_mol_per_m3": 500.0
       },
       {
         "component": "fermenter",
         "center_um": [],
         "radius_um": 40.0,
-        "concentration_mol_per_m3": 2000.0
+        "concentration_mol_per_m3": 500.0
       }
-    ]
+    ],
+    "spreading": {
+      "mechanism": "continuum"
+    }
   }
 }

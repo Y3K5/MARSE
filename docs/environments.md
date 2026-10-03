@@ -179,7 +179,9 @@ What the run shows, and what it does not:
   cells already bound, is not modelled either.
 - **Glucose** is a steady daytime average. Meals, and the pH they bring, come
   with the saliva-and-diet stage.
-- **Colonies grow in place.** Biomass does not spread until Stage 2d.
+- **Colonies grow in place.** A column can spread its biomass
+  ([networks.md](networks.md#biomass-that-spreads)), but this scene is a 3-D
+  box, which spreads with Stage 2d, increment 2d.3.
 
 ## Assumptions of E1
 

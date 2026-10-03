@@ -42,7 +42,9 @@ def test_each_scene_breathes_spreads_and_starts_neutral(name, capsys):
     saliva = np.array([domain.mouth.saliva_mol_per_m3.get(n, 0.0) for n in names])
     assert float(balance.ph(saliva)) == pytest.approx(6.8, abs=1e-3)  # Bardow et al. 2000
     assert domain.air.saturation_mol_per_m3 == {"oxygen": 0.21}
-    assert domain.plaque.packing_mol_per_m3 == {"bacteria": 800.0}
+    assert config.network.component("bacteria").density_mol_per_m3 == 800
+    assert domain.plaque is domain.spreading
+    assert domain.spreading.mechanism == "packed"
     assert main(["check", str(SCENES / name)]) == 0
     assert "the film rides on its surface" in capsys.readouterr().out
 
@@ -52,7 +54,10 @@ def test_the_scenes_share_one_network_built_on_the_stephan_curves():
     assert profile["components"] == day["components"]
     assert profile["processes"] == day["processes"]
     rinse = load("stephan_rinse.json")
-    assert all(c in day["components"] for c in rinse["components"])
+    # The day's bacteria grow and pack, so they also state an oxygen role and a density.
+    added = {"oxygen_role", "density_mol_per_m3"}
+    components = [{k: v for k, v in c.items() if k not in added} for c in day["components"]]
+    assert all(c in components for c in rinse["components"])
     assert all(p in day["processes"] for p in rinse["processes"])
 
 

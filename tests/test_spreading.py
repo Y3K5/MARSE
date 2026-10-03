@@ -1,461 +1,595 @@
-"""Plaque that spreads in a column, wears at its surface, and is brushed off.
+"""Spreading: biomass that outgrows its voxel pushes the excess on, in a column.
 
-The criteria set before Stage S2 was built, checked here (docs/validation.md,
-"Plaque that spreads"):
+Stage 2d, increment 2d.2 (docs/stage-2d-plan.md). The criteria D4 to D13 were
+set before it was built; docs/validation.md ("Spreading in a column") records
+what was measured. The scenes:
 
-- P2: the solid never overfills a voxel, and its front is sharp: full voxels,
-  then at most one partly filled;
-- P3: a film that grows at a constant specific rate mu and wears at u follows
-  dL/dt = mu L - u (Wanner and Gujer 1986);
-- P4: a brushing removes exactly its share, from the surface down.
-
-And conservation: what detaches, wears away or is brushed off is booked, so
-both ledgers close to rounding. Under the mouth, the film rides on the
-plaque's surface, wherever it is, and food left on the teeth lands in it.
+- **a labelled film**: one species in two neutral labels, a below b, growing
+  without limit at a known rate. Every material point moves from z to
+  z e^(mu t), so the labels' boundary has a closed form;
+- **a fed film**: one species on glucose that diffuses in from the bulk
+  liquid. Once the film is deeper than the glucose reaches, it thickens at
+  Y J / rho, set by the flux J that the validated steady solver (case V3)
+  gives for the same column.
 """
 
-import copy
 import json
 import math
+from contextlib import contextmanager
+from itertools import pairwise
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import pytest
 
-import marse.core.reactive_transport as reactive_transport
-from marse.biofilm.spreading import SPREADING_VERSION, Spreading, remap
 from marse.cli import main
 from marse.core.config import ConfigError
-from marse.oral import film_share, liquid_share, renewal_over, renewal_per_h
+from marse.core.provenance import Manifest
+from marse.core.reactive_transport import run
+from marse.core.simulation import ConservationError
 from marse.schemas import experiment_from_dict
-from marse.schemas.domain import Film
-from marse.spatial.grid import Grid
+from marse.schemas.domain import DEFAULT_SPREADING_INTERVAL_H, Domain
+from marse.spatial.diffusion import solve_steady_state
+from marse.spatial.domain import Grid1D
+from marse.spatial.spreading import (
+    ContinuumSpreading,
+    SpreadingError,
+    _column_pressure,
+    volume_fraction,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
-RINSE = ROOT / "examples" / "environments" / "oral" / "stephan_rinse.json"
-POCKET = ROOT / "examples" / "environments" / "oral" / "pocket.json"
-PACKING = 800.0  # mol/m3
+EXAMPLE = ROOT / "examples" / "networks" / "spreading_column.json"
+LN2 = math.log(2.0)
+RHO = 1000.0  # packing density of every species here, C-mol per m3
 
 
-def _reference(column, occupying, packing, moving, keep):
-    """The remap done slowly, voxel by voxel: what each old voxel's solid becomes."""
-    phi = (column[occupying] / packing[:, None]).sum(axis=0)
-    top = np.cumsum(phi)
-    bottom = top - phi
-    cut = min(keep, top[-1], column.shape[1])
-    new = column.copy()
-    new[moving] = 0.0
-    detached = np.zeros(column.shape[0])
-    for k in range(column.shape[1]):
-        if phi[k] == 0:
-            new[moving, k] += column[moving, k]
-            continue
-        for j in range(column.shape[1]):
-            low, high = max(bottom[k], j), min(top[k], j + 1, cut)
-            if high > low:
-                new[moving, j] += column[moving, k] * (high - low) / phi[k]
-        above = max(0.0, top[k] - max(bottom[k], cut))
-        detached[moving] += column[moving, k] * above / phi[k]
-    return new, detached
-
-
-def test_the_remap_packs_the_solid_conserves_it_and_cuts_it_exactly():
-    rng = np.random.default_rng(2)
-    occupying, packing = np.array([0, 1]), np.array([800.0, 400.0])
-    moving = np.array([0, 1, 2])  # two that fill space, one carried
-    for _ in range(500):
-        voxels = int(rng.integers(3, 40))
-        column = np.zeros((4, voxels))
-        filled = int(rng.integers(1, voxels))
-        column[0, :filled] = rng.uniform(0, 900, filled) * (rng.random(filled) < 0.9)
-        column[1, :filled] = rng.uniform(0, 300, filled) * (rng.random(filled) < 0.9)
-        column[2, :filled] = rng.uniform(0, 160, filled)  # left where no solid carries it
-        column[3] = rng.uniform(0, 5, voxels)  # dissolved: never moves
-        height = float((column[occupying] / packing[:, None]).sum())
-        keep = float(rng.choice([voxels, height * rng.uniform(0, 1.2), rng.uniform(0, voxels)]))
-        new, detached = remap(column, occupying, packing, moving, keep)
-        expected, gone = _reference(column, occupying, packing, moving, keep)
-        scale = column[:3].sum()
-        np.testing.assert_allclose(new, expected, rtol=0, atol=1e-12 * scale)
-        np.testing.assert_allclose(detached, gone, rtol=0, atol=1e-12 * scale)
-        assert np.all(new >= 0)
-        assert np.all(detached >= 0)
-        assert np.array_equal(new[3], column[3])
-        residual = new[:3].sum(axis=1) + detached[:3] - column[:3].sum(axis=1)
-        assert np.all(np.abs(residual) <= 1e-15 * scale)
-        phi = (new[occupying] / packing[:, None]).sum(axis=0)
-        assert np.all(phi <= 1 + 1e-12)  # P2
-        partial = np.flatnonzero((phi > 1e-12) & (phi < 1 - 1e-12))
-        assert partial.size <= 1
-        assert float(phi.sum()) == pytest.approx(min(keep, height, voxels), abs=1e-9)
-
-
-# --- a film in the laboratory: growth, wear and the maximum height ---------------------
-
-
-def _film(L0_um, *, mu=0.1, wear=4.0, maximum=200.0, hours=5.0, records_h=0.5, voxel=2.5, box=None):
-    voxels = round((box or maximum) / voxel)
-    return {
-        "schema_version": 2,
-        "experiment_id": "spreading-film",
-        "components": [
-            {"name": "nutrient", "phase": "dissolved", "formula": "CH1.8O0.5N0.2"},
-            {"name": "biomass", "phase": "particulate", "formula": "CH1.8O0.5N0.2"},
-            {"name": "walls", "phase": "particulate", "formula": "CH2O2"},
-        ],
-        "processes": [
-            {
-                "name": "growth",
-                "kind": "reaction",
-                "stoichiometry_mol_per_mol": {"nutrient": -1, "biomass": 1},
-                "rate": {
-                    "maximum_per_h": mu,
-                    "proportional_to": "biomass",
-                    "assumed_in_excess": ["nutrient"],
-                },
-            }
-        ],
-        "initial_mol_per_m3": {"nutrient": 1e6},
-        "duration_h": hours,
-        "timestep_h": records_h,
-        "relative_tolerance": 1e-6,
-        "absolute_tolerance_mol_per_m3": 1e-12,
-        "domain": {
-            "voxels": [voxels],
-            "voxel_um": voxel,
-            "bulk_mol_per_m3": {"nutrient": 1e6},
-            "diffusivity_m2_per_s": {"nutrient": 1e-9},
-            "colonies": [
-                {
-                    "component": "biomass",
-                    "center_um": [],
-                    "radius_um": L0_um,
-                    "concentration_mol_per_m3": PACKING,
-                },
-                {
-                    "component": "walls",
-                    "center_um": [],
-                    "radius_um": L0_um,
-                    "concentration_mol_per_m3": 160.0,
-                },
-            ],
-            "plaque": {
-                "packing_mol_per_m3": {"biomass": PACKING},
-                "carried": ["walls"],
-                "maximum_um": maximum,
-                "wear_um_per_h": wear,
-            },
-        },
+def species(name: str, density: float | None = RHO) -> dict:
+    raw = {
+        "name": name,
+        "phase": "particulate",
+        "formula": "CH1.8O0.5",
+        "oxygen_role": "aerotolerant",
     }
-
-
-@pytest.mark.parametrize(("L0", "hours"), [(20.0, 5.0), (60.0, 10.0)])
-def test_p3_a_film_growing_against_wear_follows_wanner_and_gujer(L0, hours):
-    mu, wear = 0.1, 4.0
-    result = reactive_transport.run(experiment_from_dict(_film(L0, mu=mu, wear=wear, hours=hours)))
-    L_star = wear / mu  # unstable: below it the film wears away, above it the film grows
-    exact = L_star + (L0 - L_star) * np.exp(mu * result.times_h)
-    np.testing.assert_allclose(result.plaque["thickness_um"], exact, rtol=2e-6)
-    outputs = result.manifest.outputs
-    assert result.manifest.models["spreading"] == SPREADING_VERSION
-    assert outputs["plaque"]["spreading"] == SPREADING_VERSION
-    for quantity, entry in outputs["balance"].items():
-        assert entry["largest_relative_residual"] < 1e-13, quantity
-
-
-def test_wear_alone_takes_the_surface_off_at_its_velocity():
-    raw = _film(30.0, mu=0.0, wear=5.0, hours=8.0, records_h=1.0)
-    result = reactive_transport.run(experiment_from_dict(raw))
-    expected = np.maximum(30.0 - 5.0 * result.times_h, 0.0)
-    np.testing.assert_allclose(result.plaque["thickness_um"], expected, atol=1e-9)
-    worn = result.manifest.outputs["plaque"]["detached_mol_per_m2"]
-    assert worn["biomass"] == pytest.approx(PACKING * 30e-6, rel=1e-12)  # all of it, in mol/m2
-    assert worn["walls"] == pytest.approx(160.0 * 30e-6, rel=1e-12)  # carried away with it
-
-
-def test_growth_past_the_maximum_height_is_detached_and_booked():
-    raw = _film(40.0, mu=0.2, wear=0.0, maximum=60.0, hours=6.0, records_h=1.0)
-    result = reactive_transport.run(experiment_from_dict(raw))
-    thickness = result.plaque["thickness_um"]
-    assert thickness.max() == pytest.approx(60.0, abs=1e-9)
-    assert thickness[-1] == pytest.approx(60.0, abs=1e-9)
-    # The column reaches 60 um at t = ln(1.5) / mu; from then on, what the full 60 um grows
-    # is detached. Cut after every step, the excess grows a little first: first order.
-    reached = math.log(60.0 / 40.0) / 0.2
-    detached = result.manifest.outputs["plaque"]["detached_mol_per_m2"]["biomass"]
-    continuous = 0.2 * PACKING * 60e-6 * (6.0 - reached)
-    assert detached > continuous
-    assert detached == pytest.approx(continuous, rel=2e-3)
-    for quantity, entry in result.manifest.outputs["balance"].items():
-        assert entry["largest_relative_residual"] < 1e-13, quantity
-
-
-def test_carried_components_move_with_the_solid():
-    raw = _film(40.0, mu=0.2, wear=0.0, maximum=200.0, hours=2.0, records_h=1.0)
-    result = reactive_transport.run(experiment_from_dict(raw))
-    names = result.component_names
-    biomass, walls = (result.final_state[names.index(n)] for n in ("biomass", "walls"))
-    held = biomass > 0
-    # Growth makes biomass but no walls, so every voxel thins its walls by the same factor:
-    # the share it holds depends only on the solid's age where it sits, never on a jump.
-    assert np.all(walls[~held] == 0)
-    assert walls.sum() == pytest.approx(160.0 * 40 / 2.5, rel=1e-12)  # all still there
-
-
-# --- brushing under the mouth --------------------------------------------------------------
-
-
-def _brushed(fraction=None, kind="brushing", at_h=0.25):
-    raw = json.loads(RINSE.read_text("utf-8"))
-    raw["duration_h"] = 0.5
-    raw["timestep_h"] = 0.05
-    raw["domain"]["diet"] = []
-    raw["domain"]["plaque"] = {
-        "packing_mol_per_m3": {"bacteria": 800.0},
-        "carried": ["carboxyl_groups", "bound_potassium"],
-    }
-    event = {"kind": kind, "start_h": at_h}
-    if fraction is not None:
-        event["removes_fraction"] = fraction
-    raw["domain"]["hygiene"] = [event]
+    if density is not None:
+        raw["density_mol_per_m3"] = density
     return raw
 
 
-def test_p4_a_brushing_takes_its_share_off_from_the_surface_and_the_mouth_expels_it():
-    result = reactive_transport.run(experiment_from_dict(_brushed()))
-    thickness = result.plaque["thickness_um"]
-    times = result.times_h
-    assert thickness[times < 0.25 - 1e-9] == pytest.approx(150.0, abs=1e-9)
-    assert thickness[times > 0.25 + 1e-9] == pytest.approx(150.0 * (1 - 0.42), abs=1e-9)
-    outputs = result.manifest.outputs
-    removed = outputs["plaque"]["removed_mol_per_m2"]
-    assert removed["bacteria"] == pytest.approx(0.42 * 800.0 * 150e-6, rel=1e-12)
-    assert removed["carboxyl_groups"] == pytest.approx(0.42 * 160.0 * 150e-6, rel=1e-12)
-    mouth = outputs["mouth"]
-    assert mouth["cleanings"] == 1
-    assert mouth["expelled_mol_per_m2"]["bacteria"] == removed["bacteria"]
-    for balance in (outputs["balance"], mouth["balance"]):
-        for quantity, entry in balance.items():
-            assert entry["largest_relative_residual"] < 1e-13, quantity
+SOLUTES = [
+    {"name": "glucose", "phase": "dissolved", "formula": "C6H12O6"},
+    {"name": "ethanol", "phase": "dissolved", "formula": "C2H6O"},
+    {"name": "carbon_dioxide", "phase": "dissolved", "formula": "CO2"},
+]
+DIFFUSIVITY = {"glucose": 6.7e-10, "ethanol": 1.2e-9, "carbon_dioxide": 1.9e-9}
 
 
-def test_a_brushing_takes_the_same_share_of_food_left_on_the_teeth():
-    raw = json.loads(POCKET.read_text("utf-8"))
-    raw["duration_h"] = 0.2
-    raw["domain"]["plaque"] = {
-        "packing_mol_per_m3": {"bacteria": 800.0},
-        "carried": ["carboxyl_groups", "bound_potassium"],
+def fermentation(name: str, rate: dict) -> dict:
+    return {
+        "name": f"{name}_growth",
+        "kind": "growth",
+        "biomass": name,
+        "substrate": "glucose",
+        "yield_mol_per_mol": 1.5,
+        "balanced_by": ["ethanol", "carbon_dioxide"],
+        "rate": rate,
     }
-    raw["domain"]["hygiene"] = [{"kind": "brushing", "start_h": 0.1}]
-    result = reactive_transport.run(experiment_from_dict(raw))
-    food = result.component_names.index("food_sugar")
-    at = int(np.flatnonzero(np.isclose(result.times_h, 0.1))[0])  # recorded before the brush
-    before = result.totals_mol_per_m2[at][food]
-    assert before > 0.01  # most of the 0.02 mol/m2 is still on the teeth at 6 minutes
-    outputs = result.manifest.outputs
-    assert outputs["mouth"]["removed_mol_per_m2"]["food_sugar"] == pytest.approx(
-        0.42 * before, rel=1e-12
+
+
+def labelled_film(
+    voxel_um: float = 2.0,
+    *,
+    mu: float = LN2,
+    duration_h: float = 3.0,
+    interval_h: float | None = 0.05,
+    height_um: float = 200.0,
+    film_um: float = 20.0,
+    timestep_h: float = 0.25,
+) -> dict:
+    """Labels a and b of one species, a film of film_um, growing without limit at mu.
+
+    Glucose is held so high that it never limits, which the processes state as
+    an assumption, so every voxel of biomass grows at exactly mu. The film starts
+    as b; :func:`lower_layer` relabels its lower part a.
+    """
+    unlimited = {"maximum_per_h": mu, "assumed_in_excess": ["glucose"]}
+    raw = {
+        "schema_version": 2,
+        "experiment_id": "labelled-film",
+        "components": [*map(dict, SOLUTES), species("a"), species("b")],
+        "processes": [fermentation("a", unlimited), fermentation("b", unlimited)],
+        "initial_mol_per_m3": {"glucose": 1000.0},
+        "duration_h": duration_h,
+        "timestep_h": timestep_h,
+        "domain": {
+            "voxels": [round(height_um / voxel_um)],
+            "voxel_um": voxel_um,
+            "bulk_mol_per_m3": {"glucose": 1000.0},
+            "diffusivity_m2_per_s": dict(DIFFUSIVITY),
+            "colonies": [
+                {
+                    "component": "b",
+                    "center_um": [],
+                    "radius_um": film_um,
+                    "concentration_mol_per_m3": RHO,
+                }
+            ],
+            "spreading": {"mechanism": "continuum"},
+        },
+    }
+    if interval_h is not None:
+        raw["domain"]["spreading"]["interval_h"] = interval_h
+    return raw
+
+
+@contextmanager
+def lower_layer(name: str, below_um: float, other: str):
+    """Start with component ``name`` in place of ``other`` below ``below_um``.
+
+    Colonies are hemispheres from the substratum, so two of them cannot make a
+    layer of b on a layer of a; the test sets the starting state directly.
+    """
+    original = Domain.initial_state
+
+    def initial_state(self, names, uniform, seed):
+        state = original(self, names, uniform, seed)
+        below = (np.arange(state.shape[-1]) + 0.5) * self.voxel_um < below_um
+        state[names.index(name)][below] = state[names.index(other)][below]
+        state[names.index(other)][below] = 0.0
+        return state
+
+    with mock.patch.object(Domain, "initial_state", initial_state):
+        yield
+
+
+def labels(result) -> tuple[np.ndarray, np.ndarray, float]:
+    names = result.component_names
+    a, b = result.final_state[names.index("a")], result.final_state[names.index("b")]
+    return a, b, result.config.domain.voxel_um
+
+
+MU, K, Y, SB = 1.0, 0.05, 1.5, 0.02
+"""The fed film: glucose at 20 uM above, consumed with K = 50 uM, mu 1/h, yield 1.5."""
+
+
+def fed_film(
+    film_um: float,
+    *,
+    voxel_um: float = 1.0,
+    liquid_um: float = 50.0,
+    duration_h: float = 1.0,
+    interval_h: float = 0.05,
+    timestep_h: float = 0.1,
+    relative_tolerance: float | None = None,
+) -> dict:
+    monod = {"component": "glucose", "form": "monod", "half_saturation_mol_per_m3": K}
+    raw = {
+        "schema_version": 2,
+        "experiment_id": "fed-film",
+        "components": [*map(dict, SOLUTES), species("bug")],
+        "processes": [fermentation("bug", {"maximum_per_h": MU, "factors": [monod]})],
+        "initial_mol_per_m3": {"glucose": SB},
+        "duration_h": duration_h,
+        "timestep_h": timestep_h,
+        "domain": {
+            "voxels": [round((film_um + liquid_um) / voxel_um)],
+            "voxel_um": voxel_um,
+            "bulk_mol_per_m3": {"glucose": SB},
+            "diffusivity_m2_per_s": dict(DIFFUSIVITY),
+            "colonies": [
+                {
+                    "component": "bug",
+                    "center_um": [],
+                    "radius_um": film_um,
+                    "concentration_mol_per_m3": RHO,
+                }
+            ],
+            "spreading": {"mechanism": "continuum", "interval_h": interval_h},
+        },
+    }
+    if relative_tolerance is not None:
+        raw["relative_tolerance"] = relative_tolerance
+    return raw
+
+
+def thickening_by_v3(phi: np.ndarray, voxel_um: float, refine: int = 4) -> float:
+    """Y J / rho in um per hour, J from the validated steady solver (case V3).
+
+    V3 solves the same column, from the bulk held at its top face down to the
+    substratum, with each voxel's biomass as uptake capacity, on nodes four
+    times finer than the voxels.
+    """
+    height = phi.size * voxel_um
+    grid = Grid1D(height, phi.size * refine)
+    voxel = np.clip(((height - grid.depths) // voxel_um).astype(int), 0, phi.size - 1)
+    capacity = MU * RHO * phi[voxel] / Y / 3600.0  # glucose, mol per m3 per s
+    profile = solve_steady_state(
+        grid,
+        diffusivity=DIFFUSIVITY["glucose"] * 1e12,
+        surface=SB,
+        max_uptake=capacity,
+        half_saturation=K,
     )
-    for balance in (outputs["balance"], outputs["mouth"]["balance"]):
-        for quantity, entry in balance.items():
-            assert entry["largest_relative_residual"] < 1e-13, quantity
+    return Y * profile.total_uptake(capacity, K) * 3600.0 / RHO
 
 
-def test_a_flossing_removes_the_share_it_states():
-    result = reactive_transport.run(experiment_from_dict(_brushed(0.25, kind="flossing")))
-    assert result.plaque["thickness_um"][-1] == pytest.approx(150.0 * 0.75, abs=1e-9)
+# --- the schema: densities, the spreading block and what it refuses (D12) -------------
 
 
-# --- the film rides on the plaque -----------------------------------------------------------
+def test_a_density_on_a_dissolved_component_is_refused():
+    raw = labelled_film()
+    raw["components"][0]["density_mol_per_m3"] = 100
+    with pytest.raises(ConfigError, match="'glucose' is dissolved; only a particulate"):
+        experiment_from_dict(raw)
 
 
-def test_the_film_rides_on_the_plaque_wherever_its_surface_is():
-    grid, film = Grid((100,), 2.5), Film(100.0, 6.0, 6.0)
-    # On a plaque as high as the film's underside, the film is S1's, bit for bit.
-    np.testing.assert_array_equal(renewal_over(grid, film, 150.0), renewal_per_h(grid, film))
-    # Brushed down to 87 um, the liquid above it is renewed from there up...
-    rate = renewal_over(grid, film, 87.0)
-    assert np.all(rate[:34] == 0.0)  # below 85 um, all plaque
-    assert rate[34] > 0.0  # 85 to 87.5 um: a fifth of it liquid
-    assert np.all(np.diff(rate[34:]) >= 0.0)
-    np.testing.assert_allclose(liquid_share(grid, 87.0)[33:36], [0.0, 0.2, 1.0], rtol=1e-12)
-    # ...and liquid more than a film's thickness above it moves with the film's surface.
-    surface = 1.5 * 6.0 * 60_000.0 / 6_000.0  # 1.5 u_bar / l, per hour
-    np.testing.assert_allclose(rate[grid.heights_um() > 187.0], surface, rtol=1e-15)
-    # Food left on the teeth fills the film's thickness above the surface: 100 um of it.
-    assert film_share(grid, film, 87.0).sum() * 2.5 == pytest.approx(100.0, rel=1e-12)
+def test_a_density_must_be_positive():
+    raw = labelled_film()
+    raw["components"][3]["density_mol_per_m3"] = 0
+    with pytest.raises(ConfigError, match="density_mol_per_m3: must be positive"):
+        experiment_from_dict(raw)
 
 
-def test_food_left_on_the_teeth_lands_in_the_film_on_a_brushed_plaque():
-    raw = json.loads(POCKET.read_text("utf-8"))
-    raw["duration_h"] = 0.05
-    raw["domain"]["plaque"] = {
-        "packing_mol_per_m3": {"bacteria": 800.0},
-        "carried": ["carboxyl_groups", "bound_potassium"],
-    }
-    raw["domain"]["hygiene"] = [{"kind": "brushing", "start_h": 0.0}]  # 150 um down to 87
-    result = reactive_transport.run(experiment_from_dict(raw))
-    food = result.final_state[result.component_names.index("food_sugar")]
-    heights = result.config.domain.grid.heights_um()
-    assert np.all(food[heights < 85.0] == 0.0)
-    assert np.all(food[heights > 190.0] == 0.0)
-    assert food[(heights > 90.0) & (heights < 185.0)].min() > 0.0
-    outputs = result.manifest.outputs
-    for balance in (outputs["balance"], outputs["mouth"]["balance"]):
-        for quantity, entry in balance.items():
-            assert entry["largest_relative_residual"] < 1e-13, quantity
-
-
-def test_a_plaque_that_does_not_spread_runs_as_before():
-    raw = json.loads(RINSE.read_text("utf-8"))
-    raw["duration_h"] = 0.05
-    plain = reactive_transport.run(experiment_from_dict(raw))
-    raw["domain"]["plaque"] = {
-        "packing_mol_per_m3": {"bacteria": 800.0},
-        "carried": ["carboxyl_groups", "bound_potassium"],
-    }
-    packed = reactive_transport.run(experiment_from_dict(raw))
-    # S1's rinse grows nothing, so its plaque stays packed where it was: the same run.
-    np.testing.assert_allclose(packed.final_state, plain.final_state, rtol=1e-12, atol=1e-15)
-    assert plain.plaque is None
-    assert "plaque" not in plain.manifest.outputs
-    assert "spreading" not in plain.manifest.models
-
-
-# --- the schema ------------------------------------------------------------------------
-
-
-def _two_dimensional(raw):
-    raw["domain"]["voxels"] = [4, 80]
-    for colony in raw["domain"]["colonies"]:
-        colony["center_um"] = [5.0]
-
-
-def _refused(change, match):
-    raw = _film(30.0)
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda r: r["components"].__setitem__(3, species("a", None)), "give it a density"),
+        (lambda r: r["domain"]["spreading"].update(interval_h=0), "interval_h: must be positive"),
+        (lambda r: r["domain"]["spreading"].update(mechanism="shoving"), "expected one of"),
+        (lambda r: r["domain"].update(voxels=[4, 100]), "arrives with Stage 2d, increment 2d.3"),
+        (lambda r: r["domain"].update(voxels=[1]), "at least two voxels"),
+    ],
+)
+def test_a_domain_that_cannot_spread_is_refused_with_the_reason(change, message):
+    raw = labelled_film()
     change(raw)
-    with pytest.raises(ConfigError, match=match):
+    if raw["domain"]["voxels"] == [4, 100]:
+        raw["domain"]["colonies"][0]["center_um"] = [4.0]
+    with pytest.raises(ConfigError, match=message):
         experiment_from_dict(raw)
 
 
-@pytest.mark.parametrize(
-    ("change", "match"),
-    [
-        (lambda r: _two_dimensional(r), "in a column only"),
-        (lambda r: r["domain"]["plaque"].update(packing_mol_per_m3={"nutrient": 1.0}), "dissolved"),
-        (lambda r: r["domain"]["plaque"].update(packing_mol_per_m3={}), "at least one"),
-        (lambda r: r["domain"]["plaque"].update(packing_mol_per_m3={"biomass": 0}), "positive"),
-        (lambda r: r["domain"]["plaque"].update(carried=["biomass"]), "already fills"),
-        (lambda r: r["domain"]["plaque"].update(carried=["walls", "walls"]), "more than once"),
-        (lambda r: r["domain"]["plaque"].update(carried=["sugar"]), "sugar"),
-        (lambda r: r["domain"]["plaque"].update(maximum_um=500), "fit below the top of the box"),
-        (lambda r: r["domain"]["plaque"].update(wear_um_per_h=-1), "must not be negative"),
-        (lambda r: r["domain"]["plaque"].update(wear_um_per_s=1), "wear_um_per_h"),
-        (lambda r: r["domain"].update(hygiene=[{"kind": "brushing", "start_h": 1}]), "a mouth"),
-    ],
-)
-def test_impossible_plaques_are_refused(change, match):
-    _refused(change, match)
-
-
-@pytest.mark.parametrize(
-    ("event", "match"),
-    [
-        ({"kind": "flossing", "start_h": 0.1}, "only brushing has a measured default"),
-        ({"kind": "brushing", "start_h": 0.1, "removes_fraction": 0}, "more than 0"),
-        ({"kind": "brushing", "start_h": 0.1, "removes_fraction": 1.5}, "at most 1"),
-        ({"kind": "brushing", "start_h": -1}, "must not be negative"),
-        ({"kind": "scraping", "start_h": 0.1}, "scraping"),
-    ],
-)
-def test_impossible_cleanings_are_refused(event, match):
-    raw = _brushed()
-    raw["domain"]["hygiene"] = [event]
-    with pytest.raises(ConfigError, match=match):
+def test_spreading_under_a_salivary_film_is_refused_until_it_is_supported():
+    raw = json.loads((ROOT / "examples/environments/oral/stephan_rinse.json").read_text("utf-8"))
+    bacteria = next(c for c in raw["components"] if c["name"] == "bacteria")
+    bacteria["density_mol_per_m3"] = 800.0
+    raw["domain"]["spreading"] = {"mechanism": "continuum"}
+    with pytest.raises(
+        ConfigError, match="continuum spreading under a salivary film is not supported"
+    ):
         experiment_from_dict(raw)
 
 
-def test_cleanings_come_in_time_order_and_need_a_plaque():
-    raw = _brushed()
-    raw["domain"]["hygiene"] = [
-        {"kind": "brushing", "start_h": 0.3},
-        {"kind": "brushing", "start_h": 0.1},
-    ]
-    with pytest.raises(ConfigError, match="time order"):
-        experiment_from_dict(raw)
-    raw = _brushed()
-    raw["domain"].pop("plaque")
-    with pytest.raises(ConfigError, match="give the domain a plaque"):
-        experiment_from_dict(raw)
-    raw = _brushed()
-    raw["domain"]["plaque"]["maximum_um"] = 200  # into the film
-    with pytest.raises(ConfigError, match="fit below the film, 150 um up"):
-        experiment_from_dict(raw)
-
-
-def test_food_left_on_the_teeth_is_not_part_of_the_plaque():
-    raw = json.loads(POCKET.read_text("utf-8"))
-    raw["domain"]["plaque"] = {"packing_mol_per_m3": {"bacteria": 800.0}, "carried": ["food_sugar"]}
-    with pytest.raises(ConfigError, match="'food_sugar' is food left on the teeth"):
-        experiment_from_dict(raw)
-
-
-def test_an_initial_plaque_taller_than_its_maximum_is_refused():
-    raw = _film(30.0, maximum=20.0, box=100.0)
-    with pytest.raises(ConfigError, match="30 um of solid, more than the plaque's maximum of 20"):
-        reactive_transport.run(experiment_from_dict(raw))
-
-
-def test_a_plaque_and_its_cleanings_read_back_as_written():
-    raw = _brushed()
-    config = experiment_from_dict(raw)
-    written = config.domain.to_dict()
-    assert written["plaque"]["maximum_um"] == pytest.approx(150.0)
-    assert written["hygiene"] == [{"kind": "brushing", "start_h": 0.25, "removes_fraction": 0.42}]
-    again = copy.deepcopy(raw)
-    again["domain"] = written
-    assert experiment_from_dict(again).domain == config.domain
-    plain = json.loads(RINSE.read_text("utf-8"))
-    assert "plaque" not in experiment_from_dict(plain).domain.to_dict()
-
-
-def test_a_run_whose_plaque_spreads_replays_bit_for_bit(tmp_path, capsys):
-    path = tmp_path / "film.json"
-    path.write_text(json.dumps(_film(20.0, hours=1.0)), "utf-8")
-    out = tmp_path / "run"
-    assert main(["run", str(path), "-o", str(out)]) == 0
-    assert (out / "plaque.csv").read_text("utf-8").startswith("time_h,thickness_um,")
-    assert main(["replay", str(out / "manifest.json")]) == 0
-    assert "reproduced the recorded results exactly" in capsys.readouterr().out
-
-
-def test_check_and_run_describe_the_plaque_and_its_cleanings(tmp_path, capsys):
-    raw = _brushed()
-    raw["domain"]["plaque"]["wear_um_per_h"] = 2.0
-    path = tmp_path / "brushed.json"
-    path.write_text(json.dumps(raw), "utf-8")
-    assert main(["check", str(path)]) == 0
-    out = capsys.readouterr().out
-    assert "plaque      spreads up the column (displacement_1d_v1): filled by bacteria" in out
-    assert "at most 150 um high, detached above; wears 2 um per hour at its surface" in out
-    assert "brushing    at 15 min: takes 42% of the plaque off from its surface down" in out
-    assert main(["run", str(path), "-o", str(tmp_path / "run")]) == 0
-    out = capsys.readouterr().out
-    assert "plaque      86.21 um at the end" in out  # (150 - 0.5) x 0.58 - 0.5
-    assert "taken off by 1 cleaning(s), mol per m2: bacteria 0.05023" in out
-
-
-def test_spreading_needs_a_column():
-    spreading = Spreading(
-        occupying=np.array([0]),
-        packing_mol_per_m3=np.array([PACKING]),
-        moving=np.array([0]),
-        maximum_voxels=10.0,
-        voxel_um=2.5,
+def test_a_start_that_overfills_a_voxel_is_refused_naming_where():
+    raw = labelled_film()
+    raw["domain"]["colonies"].append(
+        {"component": "a", "center_um": [], "radius_um": 10.0, "concentration_mol_per_m3": 1.0}
     )
-    box = np.zeros((1, 10))
-    box[0, :4] = PACKING
-    assert spreading.height_um(box) == pytest.approx(10.0)
-    removed, taken = spreading.remove(box, 0.5)
-    assert spreading.height_um(removed) == pytest.approx(5.0)
-    assert taken[0] == pytest.approx(2 * PACKING)
+    with pytest.raises(ConfigError, match=r"fills 1\.001 of the voxel at 1 um"):
+        experiment_from_dict(raw)
+
+
+def test_two_species_share_the_room_at_the_start():
+    raw = labelled_film()
+    raw["domain"]["colonies"][0]["concentration_mol_per_m3"] = RHO / 2
+    raw["domain"]["colonies"].append(
+        {"component": "a", "center_um": [], "radius_um": 20.0, "concentration_mol_per_m3": RHO / 2}
+    )
+    experiment_from_dict(raw)  # half and half: exactly full
+    raw["domain"]["colonies"][1]["concentration_mol_per_m3"] = RHO / 2 * 1.01
+    with pytest.raises(ConfigError, match="more than it can hold"):
+        experiment_from_dict(raw)
+
+
+def test_biomass_that_starts_in_the_top_layer_is_refused():
+    raw = labelled_film(height_um=20.0)
+    with pytest.raises(ConfigError, match="biomass starts in the top layer"):
+        experiment_from_dict(raw)
+
+
+def test_the_default_interval_is_the_measured_one():
+    config = experiment_from_dict(labelled_film(interval_h=None))
+    assert config.domain.spreading.interval_h == DEFAULT_SPREADING_INTERVAL_H == 0.25
+
+
+def test_a_domain_that_spreads_survives_the_trip_through_json():
+    config = experiment_from_dict(labelled_film())
+    written = json.loads(json.dumps(config.to_dict()))
+    assert written["domain"]["spreading"] == {
+        "mechanism": "continuum",
+        "interval_h": 0.05,
+        "carried": [],
+    }
+    assert written["components"][3]["density_mol_per_m3"] == RHO
+    assert experiment_from_dict(written) == config
+
+
+def test_a_domain_that_does_not_spread_writes_nothing_new():
+    raw = labelled_film()
+    del raw["domain"]["spreading"]
+    written = experiment_from_dict(raw).to_dict()
+    assert "spreading" not in written["domain"]
+
+
+# --- the column's pressure and sweep, alone ---------------------------------------------
+
+
+def column(*layers: tuple[float, float], voxels: int = 12) -> tuple[np.ndarray, np.ndarray]:
+    """A state of two moving components and one that takes no room, from the bottom up."""
+    state = np.zeros((3, voxels))
+    for v, (a, b) in enumerate(layers):
+        state[0, v], state[1, v] = a * RHO, b * RHO
+    state[2] = np.linspace(1.0, 2.0, voxels)  # a solute, which spreading must not touch
+    return state, np.array([RHO, RHO, 0.0])
+
+
+@pytest.mark.numerical
+@pytest.mark.parametrize("seed", range(20))
+def test_the_column_pressure_drives_the_wanner_gujer_displacement(seed):
+    # D6: in a film full from the substratum, the flux through each face is the
+    # excess summed below it, the discrete u(z) = integral of the growth.
+    rng = np.random.default_rng(seed)
+    filled = int(rng.integers(3, 40))
+    full = np.zeros(filled + 10, dtype=bool)
+    full[:filled] = True
+    excess = np.zeros(full.size)
+    excess[:filled] = rng.uniform(0.0, 0.3, filled)
+    pressure = _column_pressure(full, excess)
+    flux = pressure[:-1] - pressure[1:]
+    np.testing.assert_allclose(flux[:filled], np.cumsum(excess[:filled]), rtol=1e-12, atol=0)
+    assert np.all(flux[filled:] == 0)
+
+
+def test_a_floating_full_region_spreads_both_ways_and_conserves():
+    state, densities = column((0.5, 0), (0, 0), (1.2, 0), (1.0, 0), (0.9, 0))
+    spread, stats = ContinuumSpreading((12,), densities).spread(state)
+    phi = volume_fraction(spread, densities)
+    assert phi.max() <= 1.0 + 1e-12
+    assert phi[1] > 0  # some went down into the gap
+    np.testing.assert_allclose(spread[:2].sum(axis=1), state[:2].sum(axis=1), rtol=1e-15)
+    assert stats.rounds >= 1
+
+
+@pytest.mark.invariance
+@pytest.mark.parametrize("seed", range(30))
+def test_spreading_conserves_stays_positive_and_fills_no_voxel_beyond_its_room(seed):
+    # D4, D5 and D10 for the mechanism alone: random overfilled columns, mixed
+    # species, gaps, growth up to fourfold in a step.
+    rng = np.random.default_rng(seed)
+    voxels = 40
+    layers = []
+    for _ in range(int(rng.integers(1, 20))):
+        total = rng.uniform(0.0, 4.0) if rng.random() < 0.8 else 0.0
+        share = rng.random()
+        layers.append((total * share, total * (1 - share)))
+    state, densities = column(*layers, voxels=voxels)
+    spread, _ = ContinuumSpreading((voxels,), densities).spread(state)
+    assert np.all(spread >= 0)
+    assert volume_fraction(spread, densities).max() <= 1.0 + 1e-12
+    np.testing.assert_allclose(spread[:2].sum(axis=1), state[:2].sum(axis=1), rtol=1e-14)
+    assert np.array_equal(spread[2], state[2])  # what takes no room stays where it was
+
+
+def test_a_layer_stays_a_layer_as_it_is_pushed():
+    # Ordered transport: a below b, and the bottom voxel triples. The material
+    # that leaves a voxel through a face is the material nearest that face, so
+    # a stays below b, mixed only in the one voxel that straddles them.
+    state, densities = column((3.0, 0), (1.0, 0), (0, 1.0), (0, 1.0), (0, 0.5))
+    spread, _ = ContinuumSpreading((12,), densities).spread(state)
+    a, b = spread[0] / RHO, spread[1] / RHO
+    np.testing.assert_allclose(a[:4], [1, 1, 1, 1], rtol=1e-14)
+    np.testing.assert_allclose(b[4:6], [1, 1], rtol=1e-14)
+    assert a[4:].max() == 0
+    assert b[:4].max() == 0
+
+
+def test_a_full_box_cannot_spread():
+    state, densities = column(*[(1.0, 0)] * 11 + [(1.1, 0)], voxels=12)
+    with pytest.raises(SpreadingError, match="the box is full"):
+        ContinuumSpreading((12,), densities).spread(state)
+
+
+# --- the engine: conservation, capacity and positivity (D4, D5, D10) ---------------------
+
+
+def test_a_run_that_spreads_records_its_structure_and_balance():
+    with lower_layer("a", 10.0, "b"):
+        result = run(experiment_from_dict(labelled_film(duration_h=1.0)))
+    outputs = result.manifest.outputs
+    assert result.manifest.models["spreading"] == "continuum_pressure_v1"
+    assert outputs["spreading"]["spreads"] == 20
+    assert np.all(result.structure["largest_volume_fraction"] <= 1.0 + 1e-12)
+    # Unlimited growth for an hour doubles the film, to the integrator's tolerance.
+    assert result.structure["biovolume_um3_per_um2"][-1] == pytest.approx(40.0, rel=1e-4)
+    worst = max(q["largest_relative_residual"] for q in outputs["balance"].values())
+    assert worst <= 1e-12
+
+
+@pytest.mark.parametrize("interval_h", [0.01, 1.0, 10.0])
+def test_any_interval_conserves_and_stays_positive(interval_h):
+    # D10: a thousand spreads, ten, or one after ten hours of growth in place.
+    with lower_layer("a", 10.0, "b"):
+        config = experiment_from_dict(
+            labelled_film(
+                mu=0.05,
+                duration_h=10.0,
+                timestep_h=10.0 if interval_h == 10.0 else 1.0,
+                interval_h=interval_h,
+                height_um=60.0,
+            )
+        )
+        result = run(config)
+    outputs = result.manifest.outputs
+    assert outputs["spreading"]["spreads"] == round(10.0 / interval_h)
+    assert result.final_state.min() >= 0
+    assert max(q["largest_relative_residual"] for q in outputs["balance"].values()) <= 1e-12
+    assert result.structure["biovolume_um3_per_um2"][-1] == pytest.approx(
+        20.0 * math.exp(0.5), rel=1e-4
+    )
+
+
+@pytest.mark.slow
+def test_ten_thousand_spreads_conserve_to_the_ledger_tolerance():
+    # D4, as set: 10^4 spreading steps, every one checked against the ledger.
+    with lower_layer("a", 10.0, "b"):
+        config = experiment_from_dict(
+            labelled_film(
+                mu=0.05, duration_h=10.0, timestep_h=1.0, interval_h=0.001, height_um=60.0
+            )
+        )
+        result = run(config)
+    outputs = result.manifest.outputs
+    assert outputs["spreading"]["spreads"] == 10_000
+    assert max(q["largest_relative_residual"] for q in outputs["balance"].values()) <= 1e-12
+    assert result.final_state.min() >= 0
+
+
+def test_a_leak_in_spreading_is_caught_at_the_first_spread(monkeypatch):
+    honest = ContinuumSpreading.spread
+
+    def leaky(self, state):
+        spread, stats = honest(self, state)
+        spread[self.moving] *= 1.0 - 1e-6
+        return spread, stats
+
+    monkeypatch.setattr(ContinuumSpreading, "spread", leaky)
+    with pytest.raises(ConservationError, match=r"changed the total of a component .* t = 0\.05 h"):
+        run(experiment_from_dict(labelled_film(duration_h=1.0)))
+
+
+def test_a_mechanism_that_overfills_a_voxel_is_caught(monkeypatch):
+    def piling(self, state):
+        piled = np.array(state)
+        piled[self.moving, 1] += piled[self.moving, 2]
+        piled[self.moving, 2] = 0.0
+        return piled, None
+
+    monkeypatch.setattr(ContinuumSpreading, "spread", piling)
+    with pytest.raises(ConservationError, match="no voxel may hold more than all of it"):
+        run(experiment_from_dict(labelled_film(duration_h=1.0)))
+
+
+def test_a_mechanism_that_moves_a_solute_is_caught(monkeypatch):
+    honest = ContinuumSpreading.spread
+
+    def stirring(self, state):
+        spread, stats = honest(self, state)
+        spread[~self.moving] = spread[~self.moving][..., ::-1]
+        return spread, stats
+
+    monkeypatch.setattr(ContinuumSpreading, "spread", stirring)
+    with pytest.raises(
+        ConservationError, match="changed a component that neither takes room nor is carried"
+    ):
+        run(experiment_from_dict(labelled_film(duration_h=1.0)))
+
+
+def test_a_film_that_reaches_the_top_layer_stops_the_run_naming_the_time():
+    # D12: 20 um doubling every hour in a 60 um box reaches the top layer
+    # between 1 and 2 hours.
+    with pytest.raises(SpreadingError, match=r"at t = 1\.\d+ h the biofilm reached the top layer"):
+        run(experiment_from_dict(labelled_film(height_um=60.0, duration_h=3.0)))
+
+
+# --- against closed forms and the validated solver (D6 to D9) --------------------------
+
+
+@pytest.mark.numerical
+def test_a_labelled_band_moves_as_the_film_stretches():
+    # D8: a fills 0 to 10 um and b 10 to 20 um; three doublings move the
+    # boundary to 80 um. Its volume is exact, so the band must sit where a's
+    # volume per area ends, within a voxel.
+    with lower_layer("a", 10.0, "b"):
+        result = run(experiment_from_dict(labelled_film(1.25)))
+    a, b, voxel = labels(result)
+    share = np.divide(a, a + b, out=np.zeros_like(a), where=(a + b) > 0)
+    k = int(np.flatnonzero(share < 0.5)[0])
+    centre = (k - 0.5) * voxel  # the centre of voxel k - 1
+    band = centre + (share[k - 1] - 0.5) / (share[k - 1] - share[k]) * voxel
+    exact = a.sum() * voxel / RHO
+    assert exact == pytest.approx(80.0, rel=1e-4)
+    assert abs(band - exact) < voxel
+
+
+@pytest.mark.slow
+@pytest.mark.numerical
+def test_the_labelled_band_converges_as_the_voxels_shrink():
+    # D8: the centroid of a, whose exact value is half its height, converges
+    # at better than first order.
+    errors = []
+    for voxel in (2.5, 1.25, 0.625):
+        with lower_layer("a", 10.0, "b"):
+            result = run(experiment_from_dict(labelled_film(voxel)))
+        a, _, _ = labels(result)
+        heights = (np.arange(a.size) + 0.5) * voxel
+        centroid = float((a * heights).sum() / a.sum())
+        errors.append(abs(centroid - a.sum() * voxel / RHO / 2))
+    orders = [math.log2(e0 / e1) for e0, e1 in pairwise(errors)]
+    assert errors[-1] < 0.625
+    assert min(orders) >= 0.9, (errors, orders)
+
+
+@pytest.mark.numerical
+def test_a_deep_film_thickens_at_the_rate_its_flux_sets_whatever_its_depth():
+    # D9: films of 100 and 200 um, under the same 50 um of liquid, are both far
+    # deeper than glucose reaches (about 25 um). Only their top layers grow, so
+    # they thicken at the same rate, Y J / rho, with J the flux V3 gives.
+    rates = []
+    for film in (100.0, 200.0):
+        config = experiment_from_dict(fed_film(film))
+        result = run(config)
+        biovolume = result.structure["biovolume_um3_per_um2"]
+        rate = (biovolume[-1] - biovolume[-2]) / (result.times_h[-1] - result.times_h[-2])
+        phi = volume_fraction(result.final_state, config.network.densities())
+        reference = thickening_by_v3(phi, 1.0)
+        assert rate == pytest.approx(reference, rel=0.01)
+        rates.append(rate)
+    assert rates[1] == pytest.approx(rates[0], rel=0.02)
+
+
+@pytest.mark.slow
+@pytest.mark.numerical
+def test_the_splitting_converges_at_first_order_in_the_interval():
+    # D7: the biovolume after an hour, against a run spread every 0.003125 h.
+    def biovolume(interval_h: float) -> float:
+        config = experiment_from_dict(
+            fed_film(100.0, interval_h=interval_h, relative_tolerance=1e-7)
+        )
+        return float(run(config).structure["biovolume_um3_per_um2"][-1])
+
+    reference = biovolume(0.003125)
+    errors = [abs(biovolume(dt) - reference) for dt in (0.1, 0.05, 0.025)]
+    orders = [math.log2(e0 / e1) for e0, e1 in pairwise(errors)]
+    assert min(orders) >= 0.9, (errors, orders)
+
+
+# --- reproducibility and the command line (D11, D13) -------------------------------------
+
+
+def test_marse_check_reports_the_packing_and_the_spreading(capsys):
+    assert main(["check", str(EXAMPLE)]) == 0
+    out = capsys.readouterr().out
+    assert (
+        "spreading: continuum, every 0.25 h; packing densities, mol per m3: heterotroph 1000" in out
+    )
+    assert "the fullest voxel starts 1 full" in out
+
+
+def test_marse_run_writes_the_structure_and_replays_exactly(tmp_path, capsys):
+    raw = json.loads(EXAMPLE.read_text("utf-8"))
+    raw["duration_h"] = 1.0
+    path = tmp_path / "column.json"
+    path.write_text(json.dumps(raw), "utf-8")
+    assert main(["run", str(path), "-o", str(tmp_path / "out")]) == 0
+    out = capsys.readouterr().out
+    assert "spreading   continuum, every 0.25 h: 4 spreads" in out
+    structure = (tmp_path / "out" / "structure.csv").read_text("utf-8").splitlines()
+    assert structure[0] == (
+        "time_h,biovolume_um3_per_um2,maximum_thickness_um,largest_volume_fraction"
+    )
+    assert structure[1].startswith("0.000000,40,40,1")
+    manifest = tmp_path / "out" / "manifest.json"
+    assert Manifest.read(manifest).models["spreading"] == "continuum_pressure_v1"
+    assert main(["replay", str(manifest)]) == 0
+    assert "replay reproduced the recorded results exactly" in capsys.readouterr().out

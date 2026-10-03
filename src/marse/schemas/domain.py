@@ -8,8 +8,8 @@ substratum, height its last axis, with the bulk liquid held above it
 - ``voxels`` and ``voxel_um``: the grid, in one, two or three dimensions;
 - ``bulk_mol_per_m3``: what the liquid above holds, dissolved components only;
 - ``diffusivity_m2_per_s``: one value for every dissolved component;
-  particulate components (biomass) do not diffuse, and grow in place until
-  Stage 2d adds spreading;
+  particulate components (biomass) do not diffuse. They grow in place, unless
+  the domain spreads them;
 - ``colonies``: hemispheres of a particulate component on the substratum, each
   placed at stated coordinates;
 - ``random_colonies``: a number of such hemispheres placed at random, from the
@@ -23,11 +23,16 @@ substratum, height its last axis, with the bulk liquid held above it
   swallowed as the run goes (docs/environments.md, :mod:`marse.oral`);
 - ``diet``, with the mouth: rinses held, drinks sipped and foods that dissolve,
   each for a stated time, and food some of them leave on the teeth;
-- ``plaque``, in a column: biomass that spreads as it grows, packing the column
-  from the substratum up, wears at its surface and is detached above a
-  maximum height (:mod:`marse.biofilm.spreading`);
-- ``hygiene``, with a plaque and a mouth: brushing and flossing, each taking a
-  share of the plaque off from its surface down at a stated time;
+- ``spreading``: biomass that outgrows its room moves on (docs/networks.md,
+  "Biomass that spreads"). Each component that takes up room has a packing
+  density, every species sharing a voxel's room. ``packed`` packs a column from
+  the substratum up after every step, as plaque does, wears its surface and
+  detaches what passes a maximum height (:mod:`marse.biofilm.spreading`).
+  ``continuum`` pushes the excess on by the pressure it makes, after each
+  interval (:mod:`marse.spatial.spreading`). Both run in a column for now;
+  boxes in two and three dimensions arrive with Stage 2d, increment 2d.3;
+- ``hygiene``, with packed spreading and a mouth: brushing and flossing, each
+  taking a share of the plaque off from its surface down at a stated time;
 - ``air``: the top face is open to the air, which holds the gases it lists at
   their saturation there. Under a film, the film's surface is at the air and
   the air holds the mouth's saliva at saturation too; without one, the box
@@ -62,9 +67,9 @@ from marse.schemas.network import (
     LIQUID_FIELDS,
     MOUTH_FIELDS,
     PATCH_FIELDS,
-    PLAQUE_FIELDS,
     RANDOM_COLONY_FIELDS,
     RETAINED_FIELDS,
+    SPREADING_FIELDS,
     SUBSTRATUM_FIELDS,
     SUSPENSION_FIELDS,
     Network,
@@ -86,9 +91,9 @@ __all__ = [
     "Intake",
     "Liquid",
     "Mouth",
-    "Plaque",
     "RandomColonies",
     "Retained",
+    "Spreading",
     "Surface",
     "Suspension",
     "read_domain",
@@ -369,29 +374,41 @@ class Intake:
         return written
 
 
-@dataclass(frozen=True, slots=True)
-class Plaque:
-    """Plaque that spreads in a column, from the substratum up (docs/theory.md, section 6.1).
+DEFAULT_SPREADING_INTERVAL_H = 0.25
+"""The default spreading interval, from the measurement of criterion D7 (docs/validation.md)."""
 
-    ``packing_mol_per_m3`` gives each component that fills space the
-    concentration at which it alone would fill a voxel. ``carried`` lists the
-    particulate components that move with it without taking space, such as
-    the buffer of cell walls. Solid pushed above ``maximum_um`` is detached,
-    and the surface wears at ``wear_um_per_h``.
+
+@dataclass(frozen=True, slots=True)
+class Spreading:
+    """How biomass that outgrows its room moves on (docs/theory.md, sections 6.1 and 9.10).
+
+    Every component with a ``density_mol_per_m3`` takes up room, and
+    ``carried`` lists the particulate components that move with it without
+    taking any, such as the buffer of cell walls.
+
+    - ``packed``: after every step the column is packed from the substratum up
+      (:mod:`marse.biofilm.spreading`). What passes ``maximum_um`` is
+      detached, and the surface wears at ``wear_um_per_h``.
+    - ``continuum``: growth runs in place for spans of at most ``interval_h``,
+      after each of which the excess is pushed on by the pressure it makes
+      (:mod:`marse.spatial.spreading`).
     """
 
-    packing_mol_per_m3: dict[str, float]
-    carried: tuple[str, ...]
-    maximum_um: float
-    wear_um_per_h: float
+    mechanism: str
+    interval_h: float | None = None
+    carried: tuple[str, ...] = ()
+    maximum_um: float | None = None
+    wear_um_per_h: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "packing_mol_per_m3": dict(self.packing_mol_per_m3),
-            "carried": list(self.carried),
-            "maximum_um": self.maximum_um,
-            "wear_um_per_h": self.wear_um_per_h,
-        }
+        written: dict[str, Any] = {"mechanism": self.mechanism}
+        if self.mechanism == "continuum":
+            written["interval_h"] = self.interval_h
+        written["carried"] = list(self.carried)
+        if self.mechanism == "packed":
+            written["maximum_um"] = self.maximum_um
+            written["wear_um_per_h"] = self.wear_um_per_h
+        return written
 
 
 @dataclass(frozen=True, slots=True)
@@ -442,13 +459,20 @@ class Domain:
     film: Film | None = None
     mouth: Mouth | None = None
     diet: tuple[Intake, ...] = ()
-    plaque: Plaque | None = None
+    spreading: Spreading | None = None
     hygiene: tuple[Hygiene, ...] = ()
     air: Air | None = None
 
     @property
     def grid(self) -> Grid:
         return Grid(self.voxels, self.voxel_um)
+
+    @property
+    def plaque(self) -> Spreading | None:
+        """The spreading, when it packs the column from the substratum up, as plaque does."""
+        if self.spreading is not None and self.spreading.mechanism == "packed":
+            return self.spreading
+        return None
 
     @property
     def substratum(self) -> Substratum | None:
@@ -528,9 +552,9 @@ class Domain:
             written["mouth"] = self.mouth.to_dict()
             if self.diet:
                 written["diet"] = [intake.to_dict() for intake in self.diet]
-        # And only a plaque that spreads writes these.
-        if self.plaque is not None:
-            written["plaque"] = self.plaque.to_dict()
+        # And only a domain that spreads writes this.
+        if self.spreading is not None:
+            written["spreading"] = self.spreading.to_dict()
             if self.hygiene:
                 written["hygiene"] = [event.to_dict() for event in self.hygiene]
         if self.air is not None:
@@ -612,7 +636,7 @@ def read_domain(raw: Any, network: Network, where: str = "experiment.domain") ->
         if components[name].phase != "dissolved":
             raise ConfigError(
                 f"{where}.diffusivity_m2_per_s: '{name}' is particulate and does not diffuse; "
-                "biomass grows in place until colonies can spread (Stage 2d)"
+                "biomass grows in place, or moves when the domain spreads it"
             )
         if value < 0:
             raise ConfigError(f"{where}.diffusivity_m2_per_s: '{name}' must not be negative")
@@ -690,21 +714,25 @@ def read_domain(raw: Any, network: Network, where: str = "experiment.domain") ->
             "composition as mouth.saliva_mol_per_m3 and leave the bulk out"
         )
     film = oral.get("film")
-    plaque = None
-    if "plaque" in values:
-        plaque = _read_plaque(values["plaque"], grid, network, scene, film, f"{where}.plaque")
+    spreading = (
+        _read_spreading(values["spreading"], grid, network, scene, film, f"{where}.spreading")
+        if "spreading" in values
+        else None
+    )
+    if spreading is not None and spreading.mechanism == "packed":
         lodged = {i.retained.component for i in oral.get("diet", ()) if i.retained is not None}
-        for name in sorted(lodged & {*plaque.packing_mol_per_m3, *plaque.carried}):
+        moved = {c.name for c in network.components if c.density_mol_per_m3 is not None}
+        for name in sorted(lodged & (moved | set(spreading.carried))):
             raise ConfigError(
-                f"{where}.plaque: '{name}' is food left on the teeth, which lies on the plaque, in "
-                "the film; leave it out of the plaque"
+                f"{where}.spreading: '{name}' is food left on the teeth, which lies on the plaque, "
+                "in the film; give it no density and leave it out of carried"
             )
     hygiene: tuple[Hygiene, ...] = ()
     if "hygiene" in values:
-        if plaque is None or "mouth" not in values:
+        if spreading is None or spreading.mechanism != "packed" or "mouth" not in values:
             raise ConfigError(
                 f"{where}.hygiene: brushing and flossing take plaque off the teeth; give the "
-                "domain a plaque and a mouth"
+                "domain a mouth, and spreading with the packed mechanism"
             )
         hygiene = _read_hygiene(values["hygiene"], f"{where}.hygiene")
     air = None
@@ -733,7 +761,7 @@ def read_domain(raw: Any, network: Network, where: str = "experiment.domain") ->
         random_colonies=tuple(random_colonies),
         **scene,
         **oral,
-        plaque=plaque,
+        spreading=spreading,
         hygiene=hygiene,
         air=air,
     )
@@ -953,51 +981,87 @@ def _read_retained(raw: Any, grid: Grid, network: Network, where: str) -> Retain
     return Retained(name, amount, region)
 
 
-def _read_plaque(
+def _read_spreading(
     raw: Any,
     grid: Grid,
     network: Network,
     scene: dict[str, Any],
     film: Film | None,
     where: str,
-) -> Plaque:
-    """The components that fill the plaque, those it carries, its maximum height and its wear."""
-    v = read_object(raw, where, PLAQUE_FIELDS)
+) -> Spreading:
+    """The spreading block, and what a network must state to spread."""
+    v = read_object(raw, where, SPREADING_FIELDS)
+    mechanism = v["mechanism"]
     if grid.dimensions != 1:
         raise ConfigError(
-            f"{where}: plaque spreads in a column only; how biomass spreads in two and three "
-            "dimensions changes conclusions, so that waits for Stage 2d, which compares "
-            "mechanisms (docs/modeling-landscape.md, section 2)"
+            f"{where}: a column spreads; spreading in two and three dimensions arrives with "
+            "Stage 2d, increment 2d.3 (docs/stage-2d-plan.md)"
+        )
+    if grid.shape[-1] < 2:
+        raise ConfigError(
+            f"{where}: a column that spreads needs at least two voxels, since biomass must stay "
+            "out of the top one"
         )
     components = {c.name: c for c in network.components}
     reversible = {s.reversible for s in scene.get("suspension", ())}
-
-    def solid(name: str, here: str) -> None:
-        if components[name].phase != "particulate":
-            raise ConfigError(
-                f"{here}: '{name}' is dissolved; only particulate components move with the plaque"
-            )
+    occupying = [c.name for c in network.components if c.density_mol_per_m3 is not None]
+    if not occupying:
+        raise ConfigError(
+            f"{where}: give at least one particulate component a density_mol_per_m3, its "
+            "concentration when it alone fills a voxel"
+        )
+    for name in occupying:
         if name in reversible:
             raise ConfigError(
-                f"{here}: '{name}' is reversibly bound to the substratum, not part of the plaque"
+                f"{where}: '{name}' is reversibly bound to the substratum, not part of the "
+                "biofilm; give it no density"
             )
-
-    packing = v["packing_mol_per_m3"]
-    if not packing:
-        raise ConfigError(
-            f"{where}.packing_mol_per_m3: name at least one component that fills the plaque"
-        )
-    _known(list(packing), components, f"{where}.packing_mol_per_m3")
-    for name, value in packing.items():
-        solid(name, f"{where}.packing_mol_per_m3")
-        if not value > 0:
-            raise ConfigError(f"{where}.packing_mol_per_m3: '{name}' must be positive")
+    species = {p.growth.biomass: p.name for p in network.processes if p.growth is not None}
+    for name, process in species.items():
+        if name not in reversible and components[name].density_mol_per_m3 is None:
+            raise ConfigError(
+                f"{where}: '{name}' grows in process '{process}', so it takes up room as it "
+                "spreads; give it a density_mol_per_m3, its concentration when it alone fills "
+                "a voxel"
+            )
     carried = tuple(v.get("carried", []))
     _known(list(carried), components, f"{where}.carried")
     for name in carried:
-        solid(name, f"{where}.carried")
-        if name in packing:
-            raise ConfigError(f"{where}.carried: '{name}' already fills the plaque; list it once")
+        if components[name].phase != "particulate":
+            raise ConfigError(
+                f"{where}.carried: '{name}' is dissolved; only particulate components move "
+                "with the biofilm"
+            )
+        if name in reversible:
+            raise ConfigError(
+                f"{where}.carried: '{name}' is reversibly bound to the substratum, not part of "
+                "the biofilm"
+            )
+        if name in occupying:
+            raise ConfigError(f"{where}.carried: '{name}' already takes up room; list it once")
+    if mechanism == "continuum":
+        if film is not None:
+            raise ConfigError(
+                f"{where}: continuum spreading under a salivary film is not supported yet; use "
+                "the packed mechanism, which plaque under a film spreads by"
+            )
+        for key in ("maximum_um", "wear_um_per_h"):
+            if key in v:
+                raise ConfigError(
+                    f"{where}.{key}: applies to the packed mechanism; continuum spreading "
+                    "detaches nothing until Stage 3"
+                )
+        interval = (
+            float(plain(v["interval_h"])) if "interval_h" in v else DEFAULT_SPREADING_INTERVAL_H
+        )
+        if not interval > 0:
+            raise ConfigError(f"{where}.interval_h: must be positive")
+        return Spreading(mechanism, interval, carried)
+    if "interval_h" in v:
+        raise ConfigError(
+            f"{where}.interval_h: applies to the continuum mechanism; packed spreading packs "
+            "the column after every step"
+        )
     height = grid.size_um[-1] - (film.thickness_um if film is not None else 0.0)
     below = "the film" if film is not None else "the top of the box"
     maximum = float(plain(v["maximum_um"])) if "maximum_um" in v else height
@@ -1008,12 +1072,7 @@ def _read_plaque(
     wear = float(plain(v["wear_um_per_h"])) if "wear_um_per_h" in v else 0.0
     if wear < 0:
         raise ConfigError(f"{where}.wear_um_per_h: must not be negative")
-    return Plaque(
-        {name: float(plain(value)) for name, value in packing.items()},
-        carried,
-        min(maximum, height),
-        wear,
-    )
+    return Spreading(mechanism, None, carried, min(maximum, height), wear)
 
 
 def _read_hygiene(items: list[Any], where: str) -> tuple[Hygiene, ...]:

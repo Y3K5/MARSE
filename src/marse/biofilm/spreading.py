@@ -2,8 +2,10 @@
 
 Biomass does not diffuse; it is displaced (docs/theory.md, section 6.1). In a
 column of voxels over the substratum, the components that occupy space each
-have a packing concentration P, the concentration at which they alone would
-fill a voxel, and a voxel's solid fraction is
+have a packing concentration P, their ``density_mol_per_m3``: the
+concentration at which they alone would fill a voxel. A domain spreads this
+way when its ``spreading`` names the ``packed`` mechanism. A voxel's solid
+fraction is
 
     phi = sum over the occupying components of X / P.
 

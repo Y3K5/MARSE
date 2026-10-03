@@ -204,6 +204,7 @@ $\mathrm{pH}_{\min}$.
 | O₂ penetration depth | tens of µm | dense colony biofilm | Walters et al. (2003) | **B** |
 | Zone of active protein synthesis | ≈ 30–60 µm from the oxic surface | colony and flow-cell biofilms | Werner et al. (2004) | **B** |
 | Total biofilm thickness | often several × the penetrated depth | — | as above | **B** |
+| Packing density of biomass, ρ | 1000 C-mol m⁻³ for CH₁.₈O₀.₅N₀.₂ (24.6 kg dry mass m⁻³) | the spreading example and tests | Illustrative. It matches the 25 g L⁻¹ the check below derives. IWA benchmark BM1 uses 10 kg COD m⁻³, which at 33.6 g COD per C-mol is about 300 C-mol m⁻³ (Wanner et al. 2006; not yet checked against the report) | **C** |
 
 The relationship between these three rows *is* the stratification result of
 theory.md §5.1: an active surface layer of tens of micrometres over a much
@@ -481,3 +482,4 @@ in this file only:
 - Sjollema, J., Busscher, H.J. & Weerkamp, A.H. (1988) Deposition of oral streptococci and polystyrene latices onto glass in a parallel plate flow cell. *Biofouling* **1**:101–112. [doi:10.1080/08927018809378100](https://doi.org/10.1080/08927018809378100)
 - Soupene, E., van Heeswijk, W.C., Plumbridge, J. *et al.* (2003) Physiological studies of *Escherichia coli* strain MG1655: growth defects and apparent cross-regulation of gene expression. *Journal of Bacteriology* **185**:5611–5626. [doi:10.1128/JB.185.18.5611-5626.2003](https://doi.org/10.1128/JB.185.18.5611-5626.2003)
 - Van Derlinden, E., Bernaerts, K. & Van Impe, J.F. (2008) Accurate estimation of cardinal growth temperatures of *Escherichia coli* from optimal dynamic experiments. *International Journal of Food Microbiology* **128**:89–100. [doi:10.1016/j.ijfoodmicro.2008.07.014](https://doi.org/10.1016/j.ijfoodmicro.2008.07.014)
+- Wanner, O., Eberl, H., Morgenroth, E. *et al.* (2006) *Mathematical Modeling of Biofilms*. IWA Scientific and Technical Report No. 18. IWA Publishing, London.

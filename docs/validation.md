@@ -91,12 +91,12 @@ flips its test, which must then become an ordinary regression test.
 |---|---|---|---|
 | 1 | The examples give oxygen a diffusivity of 10 µm²/h. The physical value in a biofilm is about 4×10⁶ µm²/h (`oxygen_diffusivity_um2_per_h` at 37 °C × 0.43). At 10 µm cells the explicit scheme could only run that value with 22 ms steps. | Oxygen spreads about 30 µm in 24 h instead of about 20 mm | Every oxygen gradient in the examples is set by the numerics, not the physics. The version 2 spatial engine runs oxygen at its physical diffusivity: transport is implicit, so no step limit applies ([theory.md §9.8](theory.md#98-implicit-reactiontransport-integration)) |
 | 2 | Uptake follows *potential* growth, not actual growth. Production adds material that no consumed substrate pays for. | With growth held at zero, 22% of the carbon is consumed in an hour. With a yield of 1, 1.3–1.6 units are consumed per unit of biomass formed. | Yield and mass balance are both broken. Configuration schema version 2 refuses such a process when it loads ([networks.md](networks.md)), and the version 2 network engine meets the requirement: consumption is growth divided by yield, exactly, and nothing is consumed without growth |
-| 3 | The periodontal species need oxygen to grow (a Monod term), although all three are anaerobes ([Holt and Ebersole 2005](https://pubmed.ncbi.nlm.nih.gov/15853938/)) | With no oxygen, growth is exactly zero | The study's oxygen-limited control points the wrong way |
+| 3 | The periodontal species need oxygen to grow (a Monod term), although all three are anaerobes ([Holt and Ebersole 2005](https://pubmed.ncbi.nlm.nih.gov/15853938/)) | With no oxygen, growth is exactly zero | The study's oxygen-limited control points the wrong way. Version 2 refuses an anaerobe whose growth needs oxygen ([oxygen roles](#oxygen-roles)) |
 | 4 | A species capability applies the substrate Monod term a second time | 50% of the intended rate at C = K, 13% at C = K/7 | Growth at low substrate is strongly understated. Version 2 refuses a second factor for one component, and a Monod factor gives exactly half the rate at C = K |
-| 5 | Negative values are clipped instead of refused, and chemotaxis has no stability limit | One unstable chemotaxis step doubles total biomass | Mass is created silently. For reactions, the version 2 engine is positive without clipping at any step size; chemotaxis waits for the spatial engine |
+| 5 | Negative values are clipped instead of refused, and chemotaxis has no stability limit | One unstable chemotaxis step doubles total biomass | Mass is created silently. For reactions, the version 2 engine is positive without clipping at any step size, and so is the way it spreads biomass, at any interval ([spreading](#spreading-in-a-column)); chemotaxis is still to come |
 | 6 | Mutation marks grid cells, including empty ones, not lineages, and every species draws from one shared random stream | At probability 1, every empty cell becomes "mutant" | Resistance does not move with the cells that carry it |
 | 7 | Species are updated one after another within a step | Swapping two competitors in the file changes their final biomass by 0.9% | Results depend on how the file is written. In the version 2 engine every process acts on the same state: reordering changes fixed-step results only at rounding level |
-| 8 | Each species has its own carrying capacity | Two species fill a cell to twice its capacity | Space is not shared. Shared space needs the spatial engine; a closed well-mixed box has none |
+| 8 | Each species has its own carrying capacity | Two species fill a cell to twice its capacity | Space is not shared. In version 2, species that spread share each voxel's room, all of them together ([spreading](#spreading-in-a-column)); a closed well-mixed box has no room to share |
 | 9 | ~~Ecosystem runs write no manifest and cannot be replayed~~ **Fixed:** they write a manifest (kind `ecosystem`) and replay exactly | — | The reproducibility claim now covers this engine; its manifests name the engine `ecosystem_v1_unverified` |
 
 Until these are fixed, results from `marse ecosystem`, including the
@@ -210,7 +210,8 @@ checks, in `tests/test_well_mixed.py` and `tests/test_integrators.py`:
 - **Selectivity.** A process that consumes nothing scarce runs at exactly the
   rate it would have alone.
 - **The requirements behind known defects 2, 4, 5 and 7** hold on this engine,
-  as the defect table above notes. The version 1 expected-failure tests stay
+  as the defect table above notes, and the requirement behind defect 3 holds
+  in its schema ([oxygen roles](#oxygen-roles)). The version 1 expected-failure tests stay
   until version 1 is removed.
 - **Replay.** Runs replay bit for bit from their manifests. An edited manifest
   is refused.
@@ -599,6 +600,87 @@ Dawes and Dibdin (1986) found an optimum thickness at which plaque reaches
 its lowest pH, so a thicker plaque need not fall further; the test asks only
 that it stays acid longer. `python examples/stephan_curve.py` runs the first
 three and checks G5 and the first two directions (44 s).
+
+## Oxygen roles
+
+Every species declares how it lives with oxygen, and its processes must obey
+the role ([theory.md §3.9](theory.md#39-oxygen-roles)). These criteria were set
+in the [Stage 2d plan](stage-2d-plan.md#2d1-oxygen-roles) before increment
+2d.1 was built, and are checked in `tests/test_oxygen_roles.py`:
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| D1 | Every role refuses each of its violations, and the message names the species and the process | All 5 roles, each rule | 11 violations refused, each naming both; 9 networks that obey a role accepted, including an anaerobe in a network without oxygen |
+| D2 | An `obligate_anaerobe` grows at zero oxygen in a closed box, at the rate its other factors give | Exact, to the integrator's tolerance | Bit for bit the same trajectory as the same culture in a network without oxygen, over 12 h and a 61-fold growth |
+| D3 | The examples gain roles, and their results do not change | Every final digest unchanged | Unchanged, bit for bit, for all six: `glucose_cross_feeding`, `surface_biofilm_1d`, `surface_biofilm_3d`, `flow_chamber`, `dental_surfaces` and `stephan_rinse` |
+
+The version 1 periodontal anaerobes, whose growth had a Monod term on oxygen
+([known defect 3](#the-two-dimensional-ecosystem-engine-is-not-yet-verified)),
+are refused in version 2: `obligate_anaerobe` or `aerotolerant` with a monod
+factor on oxygen does not load. Oxygen held at an anaerobe's inhibition
+constant halves its rate, and forty times that constant leaves 1/41 of it, to
+1e-4. The expected-failure test of defect 3 runs the version 1 engine, so it
+stays until 2e removes that engine.
+
+## Spreading in a column
+
+Species share each voxel's room, and biomass that outgrows its voxel pushes
+the excess on ([theory.md §6.1 and §9.10](theory.md#910-spreading-on-voxels)).
+These criteria were set in the [Stage 2d plan](stage-2d-plan.md#2d2-shared-space-and-spreading-in-a-column)
+before increment 2d.2 was built. They are checked in `tests/test_spreading.py`
+on two scenes, both of a fermenting species packed at 1000 C-mol per m³:
+
+- **A labelled film** grows without limit at ln 2 per hour, in two neutral
+  labels: a from 0 to 10 µm, b from 10 to 20 µm. Every point of it moves from
+  z to z·e<sup>μt</sup>, so after three doublings the labels meet at 80 µm.
+- **A fed film** grows on glucose diffusing in from 50 µm of liquid above it,
+  20 µM in the bulk, K = 50 µM, μ = 1 per hour. Glucose reaches about 25 µm
+  into it.
+
+| | Criterion | Threshold | Result |
+|---|---|---|---|
+| D4 | C, N and e⁻ conserved over 10⁴ spreading steps, counting imports; a planted leak caught at the first step | 1e-12 of the totals | 1.7e-15 over 10⁴ spreads (slow test). A loss of 1e-6 in a spread is caught at the first, at 0.05 h |
+| D5 | φ ≤ 1 in every voxel after every spreading step, every species summed | 1 + 1e-12 | Largest seen 1 + 2.2e-16. A mechanism that piles one voxel's biomass on another is caught |
+| D6 | The 1-D pressure flux equals the excess summed below each face (Wanner–Gujer) | To rounding | 5.8e-14 relative, over 20 random films |
+| D7 | The splitting converges at first order in the interval | Order ≥ 0.9 | Orders 1.05, 1.10 and 1.22 as the interval halves from 0.1 h to 0.0125 h (slow test) |
+| D8 | A labelled band, starting at z₀, is found at z₀e<sup>μt</sup>; the error falls as the voxels shrink | Within one voxel at 1 µm voxels; order ≥ 0.9 | At 1.25 µm voxels the band is 0.15 µm from where the volume of a puts it. The centroid of a is 5.5, 1.8 and 0.39 µm out at 2.5, 1.25 and 0.625 µm voxels: orders 1.6 and 2.2 (slow test) |
+| D9 | A deep film thickens at Y·J/ρ, with J from the validated steady solver (V3); see the changes below | Y·J/ρ to 1%; the same rate at two depths to 2% | 0.057% from V3 for the same column. Films of 100 and 200 µm thicken at rates 5.1e-5 apart |
+| D10 | Never negative and nothing clipped, at intervals from 0.001 h to 10 h | Every value ≥ 0, ledger as in D4 | At 0.001, 0.01, 1 and 10 h: no value below zero, ledger within 1e-12, biovolume 20e<sup>0.5</sup> µm to 1e-4 |
+| D11 | A run without spreading, and all of 2c, E1 and S1, unchanged | Every final digest unchanged | Unchanged, bit for bit, for all six examples |
+| D12 | Overfilled starts refused at load; a run reaching the top layer stopped, naming the time | Tests | Both, and every other impossible domain, refused with the reason |
+| D13 | Replay bit for bit, at 1 and 4 threads | Digest equal | Equal; `marse replay` reproduces the example exactly |
+
+**What changed from the plan.**
+
+- **The sweep keeps material in order.** The plan's sweep mixed each voxel
+  before it sent (donor cell). Built that way, it failed D8. A voxel deep in a
+  film growing without limit passes on several times its own volume in each
+  interval, so it mixed the same material again and again. The film's
+  stretching then magnified what had mixed early. After three doublings, 11% of
+  the material at the top of the film came from a, which should have none
+  there, and the band sat 5 to 8 µm low at voxels from 2 to 0.5 µm, without
+  converging. In the column, what leaves a voxel through a face is now the
+  material nearest that face (theory.md §9.10).
+- **Mixing grows with the number of spreads.** Each spread cuts the voxel that
+  straddles a boundary. At 1.25 µm voxels, the band's 10–90% width after three
+  doublings is 17.5 µm with spreads every 0.25 h, 45 µm every 0.05 h and 61 µm
+  every 0.0125 h. So the interval is not made needlessly short.
+- **The default interval is 0.25 h.** By the plan's rule, the default is the
+  largest interval at which the fed film's thickening rate is within 0.5% of
+  its converged value. That rule gives 0.5 h (0.29%), for this film growing at
+  1 per hour. The default is half that (0.14%), because the error scales with
+  growth per interval: a species growing 3.5 times as fast still stays within
+  0.5%. An interval is at most the recording step, which is cut into equal
+  spans no longer than it.
+- **D9 tests the depth, not the time.** The plan asked for a rate constant to
+  2% over the last half of a run. It is not: the liquid layer above the film
+  thins as the film grows, so the glucose reaching the film rises, and the
+  rate with it, by 1.4% in an hour. The signature of a deep film is that its
+  rate does not depend on its depth, so the test compares two depths under the
+  same liquid instead.
+
+The 1-D example, `spreading_column.json`, runs four hours in 4 s: 16 spreads,
+965 implicit substeps, and carbon, nitrogen and electrons balanced to 3.4e-16.
 
 ## Plaque that spreads
 

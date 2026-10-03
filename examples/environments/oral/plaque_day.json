@@ -90,7 +90,9 @@
     {
       "name": "bacteria",
       "phase": "particulate",
-      "formula": "CH1.8O0.5N0.2"
+      "formula": "CH1.8O0.5N0.2",
+      "oxygen_role": "facultative",
+      "density_mol_per_m3": 800.0
     },
     {
       "name": "oxygen",
@@ -423,10 +425,8 @@
         "oxygen": 0.21
       }
     },
-    "plaque": {
-      "packing_mol_per_m3": {
-        "bacteria": 800.0
-      },
+    "spreading": {
+      "mechanism": "packed",
       "carried": [
         "carboxyl_groups",
         "bound_potassium"

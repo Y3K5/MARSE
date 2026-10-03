@@ -365,6 +365,7 @@ def test_the_run_replays_bit_for_bit_and_an_edit_is_refused(tmp_path):
     ("scene", "hours"),
     [
         ("networks/surface_biofilm_1d.json", "1.0"),
+        ("networks/spreading_column.json", "1.0"),  # biomass spread every quarter hour
         ("environments/oral/stephan_rinse.json", "0.05"),  # the rinse taken, held and spat out
         ("environments/oral/oxygen_profile.json", "0.05"),  # oxygen from the air
         pytest.param(  # breakfast, chewed, then a brushing

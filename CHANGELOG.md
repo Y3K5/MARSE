@@ -9,6 +9,12 @@ results for the same manifest is always called out.
 
 ### Changed
 
+- **A plan for Stage 2d** ([docs/stage-2d-plan.md](docs/stage-2d-plan.md)),
+  linked from the roadmap. It proposes spreading biomass on the voxel grid
+  first, by a continuum and a cellular automaton behind one provider
+  contract, with individual cells later. It also covers oxygen roles,
+  variants and mutation, five increments, and criteria D1 to D27, set before
+  any of it is built. No simulation result changes.
 - **Columns are solved directly.** A one-dimensional run's linear systems are
   now solved exactly, by block-tridiagonal elimination, instead of by
   multigrid. The 1-D example runs three times faster, in the same 348 steps.
@@ -108,6 +114,62 @@ results for the same manifest is always called out.
 
 ### Added
 
+- **Biomass that spreads, in a column** (Stage 2d, increment 2d.2;
+  [docs/networks.md](docs/networks.md#biomass-that-spreads), theory.md §6.1
+  and §9.10).
+  - A particulate component may declare `density_mol_per_m3`, its packing
+    density. With a domain's new `spreading` block, the species share each
+    voxel's room, φ = Σ c/ρ ≤ 1, all of them together.
+  - Growth runs in place for an interval (default 0.25 h). The excess is then
+    pushed on by the pressure it makes, the continuum of Alpkvist and Klapper
+    (2007) written on voxels, which in a column is Wanner and Gujer's
+    displacement.
+  - Material keeps its order as it moves, so a layer of cells stays a layer.
+    The well-mixed sweep the plan proposed was measured first, and it smeared
+    a labelled band over half the film.
+  - The engine checks every spread, whatever the mechanism: nothing negative,
+    each component's total unchanged, solutes untouched, every voxel within
+    its room, and the top layer clear. A film reaching the top layer stops the
+    run, naming the time. A start that overfills a voxel is refused.
+  - `marse run` writes `structure.csv`: the biovolume, the maximum thickness
+    and the fullest voxel over time. `marse check` reports the packing at the
+    start and the growth per interval. The manifest names the mechanism,
+    `continuum_pressure_v1`.
+  - New example: `examples/networks/spreading_column.json`, which runs in
+    4 s.
+  - Criteria D4 to D13, set in the plan, are met
+    ([validation.md](docs/validation.md#spreading-in-a-column)), with the
+    changes from the plan recorded there.
+  - **One spreading block for both stages.** Stage S2's plaque spreads by the
+    same block, with `mechanism: packed`. That is S2's packing from the
+    substratum up (`displacement_1d_v1`), with its maximum height, wear,
+    brushing and film. `continuum` is the pressure-driven mechanism above.
+    Both take packing densities from the components, `density_mol_per_m3`,
+    which replaces S2's `plaque.packing_mol_per_m3`. Both take `carried`,
+    which now moves with the continuum too. Every S2 result is unchanged, bit
+    for bit.
+  - Boxes in two and three dimensions, and continuum spreading under a
+    salivary film, are refused until they arrive.
+  - Runs without `spreading` are unchanged: every example's final state is
+    the same, bit for bit.
+- **Oxygen roles** (Stage 2d, increment 2d.1;
+  [docs/networks.md](docs/networks.md#oxygen-roles), theory.md §3.9).
+  - Every species, a particulate component that a growth process forms,
+    declares an `oxygen_role`: `obligate_aerobe`, `microaerophile`,
+    `facultative`, `aerotolerant` or `obligate_anaerobe`.
+  - Each role is a rule on the species' processes, checked as the network
+    loads. An anaerobe whose growth has a Monod factor on oxygen, the version
+    1 engine's known defect 3, is refused with a message naming the species
+    and the process.
+  - Oxygen is recognised by its formula, O2.
+  - `marse check` prints every species' role.
+  - Criteria D1 to D3, set in the plan, are met
+    ([validation.md](docs/validation.md#oxygen-roles)). An anaerobe without
+    oxygen grows bit for bit as it would in a network with no oxygen at all.
+  - **Breaking:** a network whose species have no role is refused. The
+    examples declare roles, and every example's final state is unchanged bit
+    for bit. Manifests written before this change name no roles, so they no
+    longer replay.
 - **Reaction networks: configuration schema version 2, part one**
   (`marse.schemas`, `marse check`, [docs/networks.md](docs/networks.md)). A
   network lists components, each with a chemical formula, and processes, each
@@ -441,8 +503,9 @@ results for the same manifest is always called out.
 - **Plaque that spreads, wears and is brushed off: Stage S, increment S2,
   part one** (`marse.biofilm.spreading`,
   [docs/networks.md](docs/networks.md#plaque-that-spreads)). A column's
-  plaque now has room to grow. A domain may give it a `plaque`:
-  - the packing concentration of each component that takes up space;
+  plaque now has room to grow. A domain's `spreading` may name the `packed`
+  mechanism. Its components that take up space each give a packing density,
+  `density_mol_per_m3`, and it may list:
   - the components carried with them;
   - a maximum height;
   - a wear velocity.
