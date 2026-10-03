@@ -4,6 +4,8 @@ Examples that quietly break are worse than no examples, so each one is run as a
 subprocess and its self-checks are asserted here.
 """
 
+import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -50,6 +52,32 @@ def test_the_plaque_day_example_passes_its_own_checks():
     out = run_example("plaque_day.py", timeout=900)
     assert out.count("pass  ") == 7
     assert "FAIL" not in out
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs Node.js")
+def test_the_numerical_reference_passes_its_own_checks():
+    """The optional Node.js reference that the context example binds by digest.
+
+    It is independent of MARSE's engine (docs/context-integrity-handoff.md); its
+    checks take about half a minute, so it runs with the slow tests.
+    """
+    node = shutil.which("node")
+    assert node is not None
+    result = subprocess.run(
+        [node, str(EXAMPLES / "numerical_reference" / "check.cjs")],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=300,
+    )
+    assert result.stderr == ""
+    report = json.loads(result.stdout)
+    assert report["statuses"]["gate"] == "passed"
+    example = json.loads((EXAMPLES / "context_exchange" / "synthetic.json").read_text("utf-8"))
+    engine = example["contexts"][0]["engine"]
+    assert report["sourceHash"] == engine["source_digest"]["value"]
+    assert report["protocolHash"] == engine["config_digest"]["value"]
 
 
 def test_stratified_growth_shows_the_active_zone_saturating():

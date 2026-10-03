@@ -166,7 +166,8 @@ src/marse/         the Python package
   adaptation/      state transitions and decision policies
   interventions/   perturbations
   analysis/        calibration, uncertainty and sensitivity, ensembles
-  evidence/        culture conditions and measurements, with their sources
+  evidence/        culture conditions and measurements, with their sources, and the
+                   context exchange that checks evidence metadata before it joins a run
   experimental/    outside the v1.0 claims (host/: host-pressure primitives)
   validation/      analytical references, benchmark and regression cases
 examples/          runnable reference calculations
@@ -214,6 +215,12 @@ Before your first commit, complete the one-time setup in
   the cells that bind to them, and the programme that extends them to natural
   waters, rocks and soils.
 - [docs/validation.md](docs/validation.md): benchmark definitions.
+- [docs/context-exchange.md](docs/context-exchange.md): the evidence context
+  exchange, a standalone check of metadata before it is joined to a run, with
+  a synthetic example.
+- [docs/context-integrity-handoff.md](docs/context-integrity-handoff.md): what
+  the context exchange and its numerical reference cover, how to verify them,
+  and what is left to integrate.
 - [docs/modeling-landscape.md](docs/modeling-landscape.md): how the field
   models microbial growth, how natural conditions differ from laboratory ones,
   and what both imply for MARSE's design.

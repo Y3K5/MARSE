@@ -540,6 +540,23 @@ results for the same manifest is always called out.
   it from 150 to 33 µm in a day. The scenes feed it on saliva instead. See
   docs/validation.md, "A day of plaque", and docs/parameters.md §8.3.
 
+- **An evidence context exchange, checked before it is joined to a run**
+  (`marse.evidence.context`,
+  [docs/context-exchange.md](docs/context-exchange.md)).
+  `validate_context_exchange` checks a metadata document of evidence,
+  contexts, organisms, parameters and relationships: stable IDs, five
+  independent statuses, host, site and compartment scope, units, typed SHA-256
+  digests, and unknown values kept null. It runs no model, and no simulation
+  result changes. An entirely synthetic example and 40 rejection tests come
+  with it.
+  - An optional numerical reference in Node.js, `examples/numerical_reference`,
+    independent of MARSE's engine, checks growth supported by resources,
+    positivity, conservation, reproducibility, permutation invariance and
+    refinement on anonymous synthetic fields. The example binds the digests
+    of its files.
+  - [docs/context-integrity-handoff.md](docs/context-integrity-handoff.md)
+    sets out its scope, how to verify it, and what is left to integrate.
+
 - **Ecosystem runs are reproducible.** `marse ecosystem` writes a
   `manifest.json` beside its frames and viewer, and `marse replay` reproduces
   the run exactly, as it already did for batch and biofilm runs. The manifest

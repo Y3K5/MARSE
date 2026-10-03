@@ -58,7 +58,8 @@ src/marse/
   adaptation/      transitions.py, policies.py
   interventions/   perturbations.py
   analysis/        calibration.py, uncertainty.py, ensemble.py
-  evidence/        science.py (culture evidence and the evidence-to-experiment compiler)
+  evidence/        science.py (culture evidence and the evidence-to-experiment compiler),
+                   context.py (checks evidence metadata before it joins a run)
   experimental/    host/: immune.py, actions.py, outside the v1.0 claims
   validation/      analytical/, regression/, literature_cases/
 ```
@@ -76,7 +77,7 @@ Implemented so far (the rest of the layout above is planned):
 | `biofilm/` | `biomass`, `spreading` |
 | `ecosystem/` | `model`, `providers`, `framestore`, `viewer` (not yet verified: see validation.md) |
 | `analysis/` | `calibration`, `uncertainty`, `ensemble` |
-| `evidence/` | `science` |
+| `evidence/` | `science`, `context` |
 | `experimental/host/` | `immune`, `actions` |
 | `validation/` | `analytical`, `benchmarks` |
 
