@@ -142,11 +142,14 @@ def _summarise_in_space(result: ReactiveTransportResult) -> None:
         f"{substeps['accepted']} implicit substeps, {substeps['rejected']} retried, "
         f"{substeps['limited']} limited to keep concentrations positive"
     )
-    boundary = "the top and the substratum" if "surface" in outputs else "the top"
-    if "mouth" in outputs:
-        boundary = "the film and the substratum" if "surface" in outputs else "the film"
-        if any(intake.retained for intake in result.config.domain.diet):
-            boundary += " (food left on the teeth included)"
+    faces = ["the film" if "mouth" in outputs else "the air" if "air" in outputs else "the top"]
+    if "mouth" in outputs and "air" in outputs:
+        faces.append("the air")
+    if "surface" in outputs:
+        faces.append("the substratum")
+    boundary = _listed(faces)
+    if "mouth" in outputs and any(intake.retained for intake in result.config.domain.diet):
+        boundary += " (food left on the teeth included)"
     print(f"{'final':<24}   mol per m2 of surface   entered through {boundary}")
     for name, value in outputs["totals_mol_per_m2"].items():
         entered = outputs["imported_mol_per_m2"][name]
@@ -155,6 +158,10 @@ def _summarise_in_space(result: ReactiveTransportResult) -> None:
         _summarise_surface(result)
     if "mouth" in outputs:
         _summarise_mouth(result)
+    if "plaque" in outputs:
+        _summarise_plaque(result)
+    if "air" in outputs:
+        _summarise_air(result)
     if "ph" in outputs:
         ph = outputs["ph"]
         final = ph["final"]
@@ -182,14 +189,44 @@ def _summarise_mouth(result: ReactiveTransportResult) -> None:
         print(f"  {name:<24} {value:>12.6g}")
     if result.mouth is not None and "ph" in result.mouth:
         print(f"  {'pH':<24} {result.mouth['ph'][-1]:>12.3f}")
-    counted = "secreted and swallowed"
+    counted = ["secreted", "swallowed"]
     if "intakes" in mouth:
-        counted = "secreted, eaten, swallowed and expelled"
+        counted = ["secreted", "eaten", "swallowed"]
         print(f"  {'taken in':<24} mol per m2 of plaque, from {mouth['intakes']} intake(s)")
         for name, value in mouth["eaten_mol_per_m2"].items():
             if value:
                 print(f"  {name:<24} {value:>12.6g}")
-    print(f"  box and mouth together, counting what was {counted}, conserved to {worst:.1e}")
+    if "expelled_mol_per_m2" in mouth:
+        counted.append("expelled")
+    if "air" in result.manifest.outputs:
+        counted.append("exchanged with the air")
+    print(
+        f"  box and mouth together, counting what was {_listed(counted)}, conserved to {worst:.1e}"
+    )
+
+
+def _summarise_plaque(result: ReactiveTransportResult) -> None:
+    plaque = result.manifest.outputs["plaque"]
+    assert result.plaque is not None
+    thickness = result.plaque["thickness_um"]
+    print(
+        f"plaque      {plaque['final_thickness_um']:.4g} um at the end, "
+        f"{thickness.min():.4g} to {thickness.max():.4g} um over the run "
+        f"(spreading {plaque['spreading']})"
+    )
+    detached = ", ".join(f"{n} {v:.4g}" for n, v in plaque["detached_mol_per_m2"].items() if v)
+    print(f"  detached, worn and over the top, mol per m2: {detached or 'nothing'}")
+    if "removed_mol_per_m2" in plaque:
+        cleanings = result.manifest.outputs["mouth"].get("cleanings", 0)
+        removed = ", ".join(f"{n} {v:.4g}" for n, v in plaque["removed_mol_per_m2"].items() if v)
+        print(f"  taken off by {cleanings} cleaning(s), mol per m2: {removed or 'nothing'}")
+
+
+def _summarise_air(result: ReactiveTransportResult) -> None:
+    air = result.manifest.outputs["air"]
+    gave = ", ".join(f"{n} {v:.4g}" for n, v in air["exchanged_mol_per_m2"].items())
+    into = "the box and the mouth" if "mouth" in result.manifest.outputs else "the box"
+    print(f"air         gave {gave} mol per m2 to {into}, less what it took back")
 
 
 def _summarise_surface(result: ReactiveTransportResult) -> None:
@@ -306,6 +343,8 @@ def _run_in_space(
         written.append(result.write_ph(output_dir / "ph.csv"))
     if result.mouth is not None:
         written.append(result.write_mouth(output_dir / "mouth.csv"))
+    if result.plaque is not None:
+        written.append(result.write_plaque(output_dir / "plaque.csv"))
     return result, (*written, index, pvd, manifest)
 
 
@@ -594,9 +633,11 @@ def _report_domain(config: ReactiveTransportConfig) -> None:
     )
     if domain.film is not None and domain.mouth is not None:
         _report_mouth(config)
-    else:
+    elif domain.air is None:
         bulk = ", ".join(f"{n} {v:g}" for n, v in domain.bulk_mol_per_m3.items() if v)
         print(f"  bulk liquid above, mol per m3: {bulk or 'nothing'}")
+    if domain.air is not None:
+        _report_air(config)
     moving = ", ".join(f"{n} {v * 1e12:g}" for n, v in domain.diffusivity_m2_per_s.items())
     print(f"  diffusivities, um2 per s: {moving or 'nothing diffuses'}")
     placed = len(domain.colonies) + sum(g.count for g in domain.random_colonies)
@@ -605,6 +646,8 @@ def _report_domain(config: ReactiveTransportConfig) -> None:
     )
     if placed:
         print(f"  colonies: {placed} ({', '.join(kinds)})")
+    if domain.plaque is not None:
+        _report_plaque(config)
     if domain.surface is not None:
         _report_surface(config)
     limit = build_model(config).diffusion.explicit_step_limit_h()
@@ -656,6 +699,8 @@ def _report_mouth(config: ReactiveTransportConfig) -> None:
         if (mouth.stimulus)
         else ""
     )
+    if mouth.chewing_flow_ml_per_min:
+        stimulus += f"; {mouth.chewing_flow_ml_per_min:g} more while chewing"
     print(
         f"  mouth       {mouth.resting_volume_ml:g} to {mouth.swallow_volume_ml:g} mL at "
         f"{mouth.unstimulated_flow_ml_per_min:g} mL per minute{stimulus}; at rest a swallow "
@@ -671,7 +716,9 @@ def _report_mouth(config: ReactiveTransportConfig) -> None:
         if intake.kind == "food":
             released = intake.released_mmol or {}
             what = ", ".join(f"{n} {v:g}" for n, v in released.items() if v)
-            brings = f"releases {what or 'nothing'} mmol"
+            brings = f"releases {what} mmol" if what else "releases nothing"
+            if intake.chewing:
+                brings += ", chewed"
         else:
             held = intake.composition_mol_per_m3 or {}
             what = ", ".join(f"{n} {v:g}" for n, v in held.items() if v)
@@ -685,6 +732,48 @@ def _report_mouth(config: ReactiveTransportConfig) -> None:
                 f"              leaves {intake.retained.amount_mol_per_m2:g} mol per m2 of "
                 f"{intake.retained.component} on the teeth"
             )
+
+
+def _report_air(config: ReactiveTransportConfig) -> None:
+    from marse.core.reactive_transport import air_of
+
+    air = air_of(config)
+    assert air is not None
+    names = config.network.component_names
+    held = ", ".join(
+        f"{names[j]} held at {s:g} mol per m3"
+        for j, s in zip(air.gases, air.saturation_mol_per_m3, strict=True)
+    )
+    print(f"  air         the top face is at the air: {held}")
+    seconds = ", ".join(
+        f"{names[j]} {3600.0 / k:.3g} s" for j, k in zip(air.gases, air.rate_per_h, strict=True)
+    )
+    print(f"              the top voxel follows it within: {seconds}")
+    if config.domain.mouth is not None:
+        print("              it holds the mouth's saliva at saturation too")
+
+
+def _report_plaque(config: ReactiveTransportConfig) -> None:
+    from marse.biofilm.spreading import SPREADING_VERSION
+
+    plaque = config.domain.plaque
+    assert plaque is not None
+    fills = ", ".join(f"{n} at {v:g} mol per m3" for n, v in plaque.packing_mol_per_m3.items())
+    carried = f"; carries {', '.join(plaque.carried)}" if plaque.carried else ""
+    print(f"  plaque      spreads up the column ({SPREADING_VERSION}): filled by {fills}{carried}")
+    wear = (
+        f"wears {plaque.wear_um_per_h:g} um per hour at its surface"
+        if plaque.wear_um_per_h
+        else "does not wear"
+    )
+    print(f"              at most {plaque.maximum_um:g} um high, detached above; {wear}")
+    if config.domain.film is not None:
+        print("              the film rides on its surface, renewed from there up")
+    for cleaning in config.domain.hygiene:
+        print(
+            f"  {cleaning.kind:<11} at {_clock(cleaning.start_h)}: takes "
+            f"{cleaning.removes_fraction:.0%} of the plaque off from its surface down"
+        )
 
 
 def _clock(hours: float) -> str:

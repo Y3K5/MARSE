@@ -44,14 +44,16 @@ src/marse/
   spatial/         grid.py (voxels in 1, 2 or 3 dimensions over a surface), transport.py
                    (finite-volume diffusion), multigrid.py (the implicit solver), colloids.py
                    (how cells in the liquid reach a surface), surface.py (the materials of the
-                   substratum), column.py (the direct solve of a column), vtk.py (ParaView
-                   output); domain.py and diffusion.py (the 1-D steady solver)
+                   substratum), column.py (the direct solve of a column), air.py (gases
+                   across a top face at the air), vtk.py (ParaView output); domain.py and
+                   diffusion.py (the 1-D steady solver)
   oral/            mouth.py (saliva secreted and swallowed), film.py (the salivary film's
                    renewal), diet.py (rinses, drinks and foods, and food left on the teeth),
                    stephan.py (the measures of a Stephan curve)
   chemistry/       acid_base.py (pH from electroneutrality over acid-base totals and ions)
   microbes/        growth.py, resource_use.py, adhesion.py, phenotype.py, interactions.py
-  biofilm/         biomass.py, matrix.py, maturation.py
+  biofilm/         biomass.py, spreading.py (plaque packed up a column, detached above its
+                   maximum height, worn and brushed off), matrix.py, maturation.py
   ecosystem/       the 2-D multispecies engine (model.py, providers.py, framestore.py, viewer.py)
   adaptation/      transitions.py, policies.py
   interventions/   perturbations.py
@@ -67,12 +69,12 @@ Implemented so far (the rest of the layout above is planned):
 | Package | Modules |
 |---|---|
 | `core/` | `config`, `state`, `seeds`, `provenance`, `simulation`, `integrators`, `ledger`, `well_mixed`, `framestore`, `implicit`, `reactive_transport`, `reservoir` |
-| `spatial/` | `grid`, `transport`, `multigrid`, `column`, `colloids`, `surface`, `vtk`, `domain`, `diffusion`, `solutes` |
+| `spatial/` | `grid`, `transport`, `multigrid`, `column`, `colloids`, `surface`, `air`, `vtk`, `domain`, `diffusion`, `solutes` |
 | `oral/` | `mouth`, `film`, `diet`, `stephan` |
 | `chemistry/` | `acid_base` |
 | `microbes/` | `growth`, `cardinal`, `kinetics`, `adhesion`, `niche`, `genotype`, `additives` |
 | `schemas/` | `formula`, `network`, `experiment`, `domain`: configuration schema v2 (reaction networks checked for continuity, with rates, run settings and space) |
-| `biofilm/` | `biomass` |
+| `biofilm/` | `biomass`, `spreading` |
 | `ecosystem/` | `model`, `providers`, `framestore`, `viewer` (not yet verified: see validation.md) |
 | `analysis/` | `calibration`, `uncertainty`, `ensemble` |
 | `evidence/` | `science`, `context` |

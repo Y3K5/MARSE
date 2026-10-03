@@ -333,10 +333,12 @@ least certain of all.
 
 The oral scenes of [`docs/environments.md`](environments.md#the-oral-scenes) run
 a column of plaque under a salivary film, renewed from a mouth that secretes,
-swallows and takes a diet (theory.md §3.8, §4.8 and §4.9). Saliva's buffers and
-the mouth's volumes are measured values; what the plaque does with sugar is
-calibrated, all of it **C**, to the criteria for a Stephan curve set before
-Stage S1 was built (docs/validation.md, "The Stephan curve").
+swallows and takes a diet (theory.md §3.8, §4.8 and §4.9). The film's surface
+may be at the air (theory.md §4.10), which holds oxygen at its solubility in
+§1 above. Saliva's buffers and the mouth's volumes are measured values; what
+the plaque does with sugar is calibrated, all of it **C**, to the criteria for
+a Stephan curve set before Stage S1 was built (docs/validation.md, "The
+Stephan curve").
 
 ### 8.1 Measured values
 
@@ -350,6 +352,8 @@ Stage S1 was built (docs/validation.md, "The Stephan curve").
 | Thickness of the salivary film; its velocity by site | 70–100; 0.8–7.6 | µm; mm min⁻¹ | Collins & Dawes (1987); Dawes et al. (1989) | **B** |
 | Plaque's buffering | strong at pH 4–5.5, weak near neutrality; about 90% from cell walls and matrix | — | Shellis & Dibdin (1988) | **B** (qualitative) |
 | Food retained on the teeth | starchy particles for up to 20 min, accumulating sugars and acids | — | Kashket, Zhang & Van Houte (1996) | **B** (qualitative) |
+| Plaque removed by one brushing with a manual toothbrush: overall; by plaque index | 42; 30 to 53 | % | Slot et al. (2012), 59 papers and 212 brushing exercises. MARSE's default for a brushing (theory.md §6.3). | **B** |
+| Salivary flow while chewing gum | 10 to 12 times the unstimulated 0.47 in the first minute with flavoured gum; within about 10 min, the flow with gum base alone; still above the unstimulated flow after 2 h | mL min⁻¹ | Dawes & Macpherson (1992); Dawes & Kubieniec (2004). A mouth's `chewing_flow_ml_per_min` is the lasting part (theory.md §4.9). | **B** |
 
 ### 8.2 Values in the oral scenes
 
@@ -373,6 +377,28 @@ on each; the others are orders of magnitude.
 | Ammonium in saliva | 2 | mM | An order of magnitude. |
 | Mixing of the film during an intake | 1 | s⁻¹ | Fast mixing while sugar is in the mouth, as Dibdin (1990) assumed. |
 | The sipped drink; the pocket | 100 mL of 10% sucrose over 20 min; 0.02 mol m⁻² of sugar in food particles, dissolving at 3 h⁻¹ | — | Illustrative habits of a high-sugar eater. |
+
+### 8.3 Values in the scenes of Stage S2
+
+The oxygen profile and the day of plaque add these to the values of §8.2.
+Every value in this table is **C**. The three calibrated ones were chosen so
+that oxygen reaches as deep into 400 µm of plaque as von Ohle et al. (2010)
+measured: about 220 µm under saliva and 150 µm after sucrose
+(docs/validation.md, "A day of plaque").
+
+| Quantity | Value | Unit | Basis |
+|---|---|---|---|
+| Oxygen at the film's surface, and in the mouth's saliva | 0.21 | mM | Air at 37 °C and one atmosphere, over pure water (§1, Benson & Krause 1984), rounded. Saliva's salts and exhaled air would lower it a little. |
+| Oxygen's diffusivity | 1.13 × 10⁻⁹ | m² s⁻¹ | Water's at 37 °C times 0.43, the mean for small solutes in biofilms (§1 and §2). |
+| Hexose in saliva's glycoproteins, as available to plaque | 1 | mM | The mucins MG1 and MG2 come to 0.37 g L⁻¹ in stimulated whole saliva (Payment et al. 2000), 78% and 68% carbohydrate (Levine et al. 1987): about 1.5 mM as hexose. |
+| Growth on saliva's glycans: rate at most; yield | 0.06; 3 | h⁻¹; C-mol per mol of hexose | Calibrated. Aerobic, where oxygen reaches; half its rate at 0.5 mM of glycan and at 0.005 mM of oxygen. |
+| Maintenance on saliva's glycans; respiration of sugar | 0.0015; 0.0035 | h⁻¹ per C-mol of plaque | Calibrated. |
+| Growth on sugar: rate at most; yield | 0.3; 0.8 | h⁻¹; C-mol per mol of hexose | Fermentative, making lactic acid, and slowing to nothing at pH 5. |
+| Buffer made with new biomass | 0.2 | mol of carboxyl groups per C-mol | Keeps the plaque's 160 mM of groups per 800 C-mM of cells as it grows. |
+| Packing of the plaque; its maximum height | 800; 150 | C-mM; µm | The concentration of the scenes' plaque, taken as packed; the S1 scenes' thickness. |
+| Wear by the tongue and cheeks | 0.5 | µm h⁻¹ | Chosen so that the day returns the plaque within 5% of where it started. |
+| Flow while chewing | 1 | mL min⁻¹ | The lasting part of the flow with gum (§8.1). |
+| The day's habits | three meals of 15 mmol of sugar, chewed; two sweets of 10 mmol, sucked; gum for 20 min; brushing at 07:45 and 22:00 | — | Illustrative. |
 
 ---
 

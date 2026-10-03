@@ -22,7 +22,16 @@ substratum, height its last axis, with the bulk liquid held above it
   closed to the air and renewed from the mouth's saliva, which is secreted and
   swallowed as the run goes (docs/environments.md, :mod:`marse.oral`);
 - ``diet``, with the mouth: rinses held, drinks sipped and foods that dissolve,
-  each for a stated time, and food some of them leave on the teeth.
+  each for a stated time, and food some of them leave on the teeth;
+- ``plaque``, in a column: biomass that spreads as it grows, packing the column
+  from the substratum up, wears at its surface and is detached above a
+  maximum height (:mod:`marse.biofilm.spreading`);
+- ``hygiene``, with a plaque and a mouth: brushing and flossing, each taking a
+  share of the plaque off from its surface down at a stated time;
+- ``air``: the top face is open to the air, which holds the gases it lists at
+  their saturation there. Under a film, the film's surface is at the air and
+  the air holds the mouth's saliva at saturation too; without one, the box
+  borders the air instead of a bulk liquid, as a colony biofilm does.
 
 The run fields' ``initial_mol_per_m3`` fill every voxel, and the colonies then
 set their component inside their hemispheres. A colony that covers no voxel
@@ -43,14 +52,17 @@ from marse.core.seeds import SeedRegistry
 from marse.schemas._reading import plain, read_object
 from marse.schemas.network import (
     ADHESION_FIELDS,
+    AIR_FIELDS,
     COLONY_FIELDS,
     DOMAIN_FIELDS,
     FILM_FIELDS,
     FLOW_FIELDS,
+    HYGIENE_FIELDS,
     INTAKE_FIELDS,
     LIQUID_FIELDS,
     MOUTH_FIELDS,
     PATCH_FIELDS,
+    PLAQUE_FIELDS,
     RANDOM_COLONY_FIELDS,
     RETAINED_FIELDS,
     SUBSTRATUM_FIELDS,
@@ -65,13 +77,16 @@ __all__ = [
     "DEFAULT_MIXING_PER_S",
     "M2_PER_S_TO_UM2_PER_H",
     "Adhesion",
+    "Air",
     "Colony",
     "Domain",
     "Film",
     "Flow",
+    "Hygiene",
     "Intake",
     "Liquid",
     "Mouth",
+    "Plaque",
     "RandomColonies",
     "Retained",
     "Surface",
@@ -84,6 +99,8 @@ MAX_VOXELS = 2**24
 COLONY_STREAM = "colonies"
 DEFAULT_MIXING_PER_S = 1.0
 """How fast an intake mixes the film with the mouth's liquid, per second, unless it says."""
+BRUSHING_REMOVES = 0.42
+"""The share of plaque one brushing removes, unless it says: 42% on average (Slot et al. 2012)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,7 +260,8 @@ class Mouth:
     from ``saliva_mol_per_m3`` towards ``stimulated_saliva_mol_per_m3`` as the
     flow rises. ``plaque_area_cm2`` is the plaque the box stands for, which
     exchanges with the mouth through its film. Every composition names every
-    dissolved component.
+    dissolved component. Chewing adds ``chewing_flow_ml_per_min`` to the flow
+    while it lasts.
     """
 
     saliva_mol_per_m3: dict[str, float]
@@ -256,6 +274,7 @@ class Mouth:
     stimulus_half_mol_per_m3: float | None
     plaque_area_cm2: float
     initial_mol_per_m3: dict[str, float]
+    chewing_flow_ml_per_min: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         written: dict[str, Any] = {"saliva_mol_per_m3": dict(self.saliva_mol_per_m3)}
@@ -272,6 +291,8 @@ class Mouth:
             written["stimulus_half_mol_per_m3"] = self.stimulus_half_mol_per_m3
         written["plaque_area_cm2"] = self.plaque_area_cm2
         written["initial_mol_per_m3"] = dict(self.initial_mol_per_m3)
+        if self.chewing_flow_ml_per_min:
+            written["chewing_flow_ml_per_min"] = self.chewing_flow_ml_per_min
         return written
 
 
@@ -309,7 +330,9 @@ class Intake:
       duration, as a sweet sucked slowly does, and adds no liquid.
 
     While it lasts, the film mixes with the mouth's liquid at ``mixing_per_s``
-    in each of its voxels. ``retained`` is food it leaves on the teeth.
+    in each of its voxels. ``retained`` is food it leaves on the teeth. A food
+    that is ``chewing`` adds the mouth's chewing flow while it lasts, as gum
+    and a meal do.
     """
 
     kind: str
@@ -320,6 +343,7 @@ class Intake:
     released_mmol: dict[str, float] | None = None
     mixing_per_s: float = DEFAULT_MIXING_PER_S
     retained: Retained | None = None
+    chewing: bool = False
 
     @property
     def end_h(self) -> float:
@@ -338,9 +362,66 @@ class Intake:
         if self.released_mmol is not None:
             written["released_mmol"] = dict(self.released_mmol)
         written["mixing_per_s"] = self.mixing_per_s
+        if self.chewing:
+            written["chewing"] = True
         if self.retained is not None:
             written["retained"] = self.retained.to_dict()
         return written
+
+
+@dataclass(frozen=True, slots=True)
+class Plaque:
+    """Plaque that spreads in a column, from the substratum up (docs/theory.md, section 6.1).
+
+    ``packing_mol_per_m3`` gives each component that fills space the
+    concentration at which it alone would fill a voxel. ``carried`` lists the
+    particulate components that move with it without taking space, such as
+    the buffer of cell walls. Solid pushed above ``maximum_um`` is detached,
+    and the surface wears at ``wear_um_per_h``.
+    """
+
+    packing_mol_per_m3: dict[str, float]
+    carried: tuple[str, ...]
+    maximum_um: float
+    wear_um_per_h: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "packing_mol_per_m3": dict(self.packing_mol_per_m3),
+            "carried": list(self.carried),
+            "maximum_um": self.maximum_um,
+            "wear_um_per_h": self.wear_um_per_h,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class Hygiene:
+    """A brushing or a flossing at ``start_h``, taking ``removes_fraction`` of the plaque off."""
+
+    kind: str
+    start_h: float
+    removes_fraction: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "start_h": self.start_h,
+            "removes_fraction": self.removes_fraction,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class Air:
+    """The air above the box's top face, holding each gas it lists at its saturation there.
+
+    ``saturation_mol_per_m3`` is each gas's concentration in water in
+    equilibrium with the air (docs/theory.md, sections 4.4 and 4.10).
+    """
+
+    saturation_mol_per_m3: dict[str, float]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"saturation_mol_per_m3": dict(self.saturation_mol_per_m3)}
 
 
 @dataclass(frozen=True, slots=True)
@@ -361,6 +442,9 @@ class Domain:
     film: Film | None = None
     mouth: Mouth | None = None
     diet: tuple[Intake, ...] = ()
+    plaque: Plaque | None = None
+    hygiene: tuple[Hygiene, ...] = ()
+    air: Air | None = None
 
     @property
     def grid(self) -> Grid:
@@ -444,6 +528,13 @@ class Domain:
             written["mouth"] = self.mouth.to_dict()
             if self.diet:
                 written["diet"] = [intake.to_dict() for intake in self.diet]
+        # And only a plaque that spreads writes these.
+        if self.plaque is not None:
+            written["plaque"] = self.plaque.to_dict()
+            if self.hygiene:
+                written["hygiene"] = [event.to_dict() for event in self.hygiene]
+        if self.air is not None:
+            written["air"] = self.air.to_dict()
         return written
 
 
@@ -598,6 +689,32 @@ def read_domain(raw: Any, network: Network, where: str = "experiment.domain") ->
             f"{where}.bulk_mol_per_m3: under a film, the liquid comes from the mouth; give its "
             "composition as mouth.saliva_mol_per_m3 and leave the bulk out"
         )
+    film = oral.get("film")
+    plaque = None
+    if "plaque" in values:
+        plaque = _read_plaque(values["plaque"], grid, network, scene, film, f"{where}.plaque")
+        lodged = {i.retained.component for i in oral.get("diet", ()) if i.retained is not None}
+        for name in sorted(lodged & {*plaque.packing_mol_per_m3, *plaque.carried}):
+            raise ConfigError(
+                f"{where}.plaque: '{name}' is food left on the teeth, which lies on the plaque, in "
+                "the film; leave it out of the plaque"
+            )
+    hygiene: tuple[Hygiene, ...] = ()
+    if "hygiene" in values:
+        if plaque is None or "mouth" not in values:
+            raise ConfigError(
+                f"{where}.hygiene: brushing and flossing take plaque off the teeth; give the "
+                "domain a plaque and a mouth"
+            )
+        hygiene = _read_hygiene(values["hygiene"], f"{where}.hygiene")
+    air = None
+    if "air" in values:
+        air = _read_air(values["air"], network, oral.get("mouth"), f"{where}.air")
+        if not oral and any(amount for amount in bulk.values()):
+            raise ConfigError(
+                f"{where}.bulk_mol_per_m3: at the air, the box borders no bulk liquid; leave "
+                "the bulk out"
+            )
 
     return Domain(
         voxels=tuple(values["voxels"]),
@@ -616,6 +733,9 @@ def read_domain(raw: Any, network: Network, where: str = "experiment.domain") ->
         random_colonies=tuple(random_colonies),
         **scene,
         **oral,
+        plaque=plaque,
+        hygiene=hygiene,
+        air=air,
     )
 
 
@@ -708,6 +828,9 @@ def _read_oral(values: dict[str, Any], grid: Grid, network: Network, where: str)
         half = _positive(m["stimulus_half_mol_per_m3"], f"{here}.stimulus_half_mol_per_m3")
     elif "stimulus_half_mol_per_m3" in m:
         raise ConfigError(f"{here}.stimulus_half_mol_per_m3: applies only with a stimulus")
+    chewing_flow = float(plain(m.get("chewing_flow_ml_per_min", 0)))
+    if chewing_flow < 0:
+        raise ConfigError(f"{here}.chewing_flow_ml_per_min: must not be negative")
     area = _positive(m["plaque_area_cm2"], f"{here}.plaque_area_cm2")
     film_ml = area * thickness * 1e-4  # cm2 x um, in mL
     if not film_ml < resting:
@@ -726,8 +849,15 @@ def _read_oral(values: dict[str, Any], grid: Grid, network: Network, where: str)
         stimulus_half_mol_per_m3=half,
         plaque_area_cm2=area,
         initial_mol_per_m3=initial,
+        chewing_flow_ml_per_min=chewing_flow,
     )
     diet = _read_diet(values.get("diet", []), grid, network, f"{where}.diet")
+    for i, intake in enumerate(diet):
+        if intake.chewing and not chewing_flow:
+            raise ConfigError(
+                f"{where}.diet[{i}].chewing: chewing adds the mouth's chewing flow; give the "
+                "mouth chewing_flow_ml_per_min"
+            )
     return {"film": film, "mouth": mouth, "diet": diet}
 
 
@@ -777,6 +907,11 @@ def _read_diet(items: list[Any], grid: Grid, network: Network, where: str) -> tu
             mixing = float(plain(v["mixing_per_s"]))
         if mixing < 0:
             raise ConfigError(f"{here}.mixing_per_s: must not be negative")
+        chewing = v.get("chewing", False)
+        if chewing and kind != "food":
+            raise ConfigError(
+                f"{here}.chewing: only food is chewed; a {kind} is drunk or held in the mouth"
+            )
         retained = None
         if "retained" in v:
             retained = _read_retained(v["retained"], grid, network, f"{here}.retained")
@@ -785,7 +920,9 @@ def _read_diet(items: list[Any], grid: Grid, network: Network, where: str) -> tu
                 f"{here}.start_h: starts at {start:g} h, before intake {i - 1} ends at "
                 f"{diet[-1].end_h:g} h; list the intakes in order, one at a time"
             )
-        diet.append(Intake(kind, start, duration, volume, composition, released, mixing, retained))
+        diet.append(
+            Intake(kind, start, duration, volume, composition, released, mixing, retained, chewing)
+        )
     return tuple(diet)
 
 
@@ -814,6 +951,134 @@ def _read_retained(raw: Any, grid: Grid, network: Network, where: str) -> Retain
     except ValueError as error:
         raise ConfigError(f"{where}.region_um: {error}") from None
     return Retained(name, amount, region)
+
+
+def _read_plaque(
+    raw: Any,
+    grid: Grid,
+    network: Network,
+    scene: dict[str, Any],
+    film: Film | None,
+    where: str,
+) -> Plaque:
+    """The components that fill the plaque, those it carries, its maximum height and its wear."""
+    v = read_object(raw, where, PLAQUE_FIELDS)
+    if grid.dimensions != 1:
+        raise ConfigError(
+            f"{where}: plaque spreads in a column only; how biomass spreads in two and three "
+            "dimensions changes conclusions, so that waits for Stage 2d, which compares "
+            "mechanisms (docs/modeling-landscape.md, section 2)"
+        )
+    components = {c.name: c for c in network.components}
+    reversible = {s.reversible for s in scene.get("suspension", ())}
+
+    def solid(name: str, here: str) -> None:
+        if components[name].phase != "particulate":
+            raise ConfigError(
+                f"{here}: '{name}' is dissolved; only particulate components move with the plaque"
+            )
+        if name in reversible:
+            raise ConfigError(
+                f"{here}: '{name}' is reversibly bound to the substratum, not part of the plaque"
+            )
+
+    packing = v["packing_mol_per_m3"]
+    if not packing:
+        raise ConfigError(
+            f"{where}.packing_mol_per_m3: name at least one component that fills the plaque"
+        )
+    _known(list(packing), components, f"{where}.packing_mol_per_m3")
+    for name, value in packing.items():
+        solid(name, f"{where}.packing_mol_per_m3")
+        if not value > 0:
+            raise ConfigError(f"{where}.packing_mol_per_m3: '{name}' must be positive")
+    carried = tuple(v.get("carried", []))
+    _known(list(carried), components, f"{where}.carried")
+    for name in carried:
+        solid(name, f"{where}.carried")
+        if name in packing:
+            raise ConfigError(f"{where}.carried: '{name}' already fills the plaque; list it once")
+    height = grid.size_um[-1] - (film.thickness_um if film is not None else 0.0)
+    below = "the film" if film is not None else "the top of the box"
+    maximum = float(plain(v["maximum_um"])) if "maximum_um" in v else height
+    if not 0 < maximum <= height * (1 + 1e-12):
+        raise ConfigError(
+            f"{where}.maximum_um: must be positive and fit below {below}, {height:g} um up"
+        )
+    wear = float(plain(v["wear_um_per_h"])) if "wear_um_per_h" in v else 0.0
+    if wear < 0:
+        raise ConfigError(f"{where}.wear_um_per_h: must not be negative")
+    return Plaque(
+        {name: float(plain(value)) for name, value in packing.items()},
+        carried,
+        min(maximum, height),
+        wear,
+    )
+
+
+def _read_hygiene(items: list[Any], where: str) -> tuple[Hygiene, ...]:
+    """Brushings and flossings, in time order, each with the share of plaque it removes."""
+    events: list[Hygiene] = []
+    for i, item in enumerate(items):
+        here = f"{where}[{i}]"
+        v = read_object(item, here, HYGIENE_FIELDS)
+        start = float(plain(v["start_h"]))
+        if start < 0:
+            raise ConfigError(f"{here}.start_h: must not be negative")
+        if events and start < events[-1].start_h:
+            raise ConfigError(f"{here}.start_h: list brushings and flossings in time order")
+        if "removes_fraction" in v:
+            fraction = float(plain(v["removes_fraction"]))
+        elif v["kind"] == "brushing":
+            fraction = BRUSHING_REMOVES
+        else:
+            raise ConfigError(
+                f"{here}: a flossing needs removes_fraction, the share of plaque it takes; only "
+                "brushing has a measured default"
+            )
+        if not 0 < fraction <= 1:
+            raise ConfigError(f"{here}.removes_fraction: must be more than 0 and at most 1")
+        events.append(Hygiene(v["kind"], start, fraction))
+    return tuple(events)
+
+
+def _read_air(raw: Any, network: Network, mouth: Mouth | None, where: str) -> Air:
+    """The gases the air holds at the top face, each a neutral dissolved component."""
+    v = read_object(raw, where, AIR_FIELDS)
+    here = f"{where}.saturation_mol_per_m3"
+    saturation = v["saturation_mol_per_m3"]
+    if not saturation:
+        raise ConfigError(f"{here}: name at least one gas the air holds, such as oxygen")
+    components = {c.name: c for c in network.components}
+    _known(list(saturation), components, here)
+    for name, value in saturation.items():
+        component = components[name]
+        if component.phase != "dissolved":
+            raise ConfigError(
+                f"{here}: '{name}' is particulate; only dissolved gases cross to the air"
+            )
+        if component.pka:
+            raise ConfigError(
+                f"{here}: '{name}' is an acid-base total, of which only the neutral form is a "
+                "gas; carbon dioxide stays with its total, closed to the air"
+            )
+        if component.formula.charge:
+            raise ConfigError(f"{here}: '{name}' is an ion, which does not leave the water")
+        if value < 0:
+            raise ConfigError(f"{here}: '{name}' must not be negative")
+    if mouth is not None:
+        for field, held in (
+            ("saliva_mol_per_m3", mouth.saliva_mol_per_m3),
+            ("stimulated_saliva_mol_per_m3", mouth.stimulated_saliva_mol_per_m3 or {}),
+            ("initial_mol_per_m3", mouth.initial_mol_per_m3),
+        ):
+            for name in saturation:
+                if held.get(name):
+                    raise ConfigError(
+                        f"{where}: the air holds the mouth's '{name}' at saturation; leave it "
+                        f"out of mouth.{field}"
+                    )
+    return Air({name: float(plain(value)) for name, value in saturation.items()})
 
 
 def _same_formula(a: Any, b: Any) -> bool:

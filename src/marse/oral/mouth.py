@@ -8,7 +8,8 @@ Dawes's (1983) model of how the mouth clears sugar:
 - a swallow is an incomplete syphon: it leaves RESID of the same liquid, so a
   swallow changes the volume at once but no concentration;
 - the flow is the unstimulated flow plus a part that the taste of a stimulus,
-  such as sugar, adds: Q = Q_u + Q_s c / (K + c);
+  such as sugar, adds: Q = Q_u + Q_s c / (K + c). Chewing adds a flow of its
+  own, Q_c, while it lasts (Dawes and Macpherson 1992);
 - the glands secrete resting saliva at the unstimulated flow, and saliva
   closer to stimulated saliva as the flow rises; bicarbonate, for one, rises
   steeply with flow (Bardow et al. 2000).
@@ -67,6 +68,7 @@ class OralFluid:
         self.full_m3 = mouth.swallow_volume_ml * _ML
         self.unstimulated_m3_per_s = mouth.unstimulated_flow_ml_per_min * _ML / 60.0
         self.stimulated_m3_per_s = mouth.stimulated_flow_ml_per_min * _ML / 60.0
+        self.chewing_m3_per_s = mouth.chewing_flow_ml_per_min * _ML / 60.0
         self.stimulus = None if mouth.stimulus is None else names.index(mouth.stimulus)
         self.half = mouth.stimulus_half_mol_per_m3 or 0.0
 
@@ -98,18 +100,26 @@ class OralFluid:
 
     # -- flow and secretion ---------------------------------------------------------------
 
-    def flow_m3_per_s(self, stimulus_mol_per_m3: float) -> float:
-        """The salivary flow at a concentration of the stimulus in the pool."""
+    def flow_m3_per_s(self, stimulus_mol_per_m3: float, chewing: bool = False) -> float:
+        """The salivary flow at a concentration of the stimulus in the pool, and while chewing."""
+        flow = self.unstimulated_m3_per_s
+        if chewing:
+            flow += self.chewing_m3_per_s
         if self.stimulus is None or self.stimulated_m3_per_s == 0.0:
-            return self.unstimulated_m3_per_s
+            return flow
         c = max(stimulus_mol_per_m3, 0.0)
-        return self.unstimulated_m3_per_s + self.stimulated_m3_per_s * c / (self.half + c)
+        return flow + self.stimulated_m3_per_s * c / (self.half + c)
 
     def secreted(self, flow_m3_per_s: float) -> NDArray[np.float64]:
-        """The composition of the saliva secreted at a flow: resting, towards stimulated."""
-        if self.stimulated_saliva is None or self.stimulated_m3_per_s == 0.0:
+        """The composition of the saliva secreted at a flow: resting, towards stimulated.
+
+        It reaches stimulated saliva at the most the stimulus adds to the flow,
+        or, in a mouth without one, at the chewing flow.
+        """
+        stimulated = self.stimulated_m3_per_s or self.chewing_m3_per_s
+        if self.stimulated_saliva is None or stimulated == 0.0:
             return self.saliva
-        share = (flow_m3_per_s - self.unstimulated_m3_per_s) / self.stimulated_m3_per_s
+        share = (flow_m3_per_s - self.unstimulated_m3_per_s) / stimulated
         share = min(max(share, 0.0), 1.0)
         return (1.0 - share) * self.saliva + share * self.stimulated_saliva
 
@@ -137,7 +147,7 @@ class OralFluid:
 
         def flow(t: float, volume: float) -> float:
             held = stimulus_mol + tasted * t
-            return self.flow_m3_per_s(held / (volume - self.film_m3)) + drink
+            return self.flow_m3_per_s(held / (volume - self.film_m3), inflow.chewing) + drink
 
         volume, t = self.volume_m3, 0.0
         times, volumes, flows = [0.0], [volume], [flow(t, volume)]

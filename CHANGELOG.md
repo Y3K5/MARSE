@@ -438,6 +438,108 @@ results for the same manifest is always called out.
 
     See docs/validation.md, "The Stephan curve".
 
+- **Plaque that spreads, wears and is brushed off: Stage S, increment S2,
+  part one** (`marse.biofilm.spreading`,
+  [docs/networks.md](docs/networks.md#plaque-that-spreads)). A column's
+  plaque now has room to grow. A domain may give it a `plaque`:
+  - the packing concentration of each component that takes up space;
+  - the components carried with them;
+  - a maximum height;
+  - a wear velocity.
+
+  The equations are in docs/theory.md §6.1 and §6.3.
+  - **Spreading.** After every step, the solid is packed up the column by its
+    cumulative volume (`displacement_1d_v1`; Wanner and Gujer 1986). The
+    column is left with full voxels, then at most one partly filled. Every
+    component moves in the proportions of the voxel it came from. The packing
+    conserves exactly and makes nothing negative. Spreading in two and three
+    dimensions stays with Stage 2d, because there the choice of mechanism
+    changes conclusions.
+  - **Detachment and wear.** Solid pushed past the maximum height leaves the
+    column. A stated wear velocity takes the surface off: half before each
+    step and half after, which keeps the step second order. Without a mouth,
+    what leaves goes to the bulk liquid. Under the mouth, it enters the
+    mouth's saliva and is swallowed.
+  - **Brushing and flossing.** A domain's `hygiene` lists timed cleanings.
+    Each takes a share of the plaque off from its surface down, and the same
+    share of any food left on the teeth. A brushing takes 42% unless told
+    otherwise (Slot et al. 2012). A flossing must state its share. The mouth
+    expels what a cleaning takes, and both ledgers book it.
+  - **Outputs.**
+    - `plaque.csv` records the plaque's thickness, and what each filling
+      component holds, has detached and has been brushed off.
+    - The manifest records the spreading provider and what the plaque lost.
+    - `marse check` describes the plaque and its cleanings.
+  - **Verified:**
+    - against the closed form for a film growing against wear, to 9.7e-7;
+    - against the packing done voxel by voxel, on 500 random columns;
+    - with a brushing under the mouth that leaves exactly 58% of the plaque,
+      with both ledgers closed to 1.9e-16.
+
+    A domain without a plaque runs as before. See docs/validation.md,
+    "Plaque that spreads".
+
+- **Oxygen from the air, chewing, and a film that rides on the plaque: Stage
+  S, increment S2, part two** (`marse.spatial.air`, `marse.oral`,
+  [docs/networks.md](docs/networks.md#oxygen-and-the-air)). The equations are
+  in docs/theory.md §4.8 to §4.10.
+  - **The air.** A domain's `air` opens the top face of the box to the gases
+    it lists, each held at its stated saturation there, and to nothing else.
+    Each gas crosses the half voxel below the face as two processes in the
+    top layer, so the limiter and both ledgers count it like any other
+    exchange.
+    - Under a film, the face is the film's surface, and the air holds the
+      mouth's saliva at saturation too: a film 0.1 mm deep comes to
+      equilibrium with the air within seconds.
+    - Without a film, the box borders the air instead of a bulk liquid, as a
+      colony biofilm does.
+    - Carbon dioxide stays with its carbonate total, closed, so the buffer
+      calibrated in Stage S1 is unchanged.
+  - **Chewing.** A food may be `chewing`, as gum or a meal is. While it lasts,
+    the mouth's `chewing_flow_ml_per_min` adds to the flow, and the saliva
+    secreted moves towards stimulated saliva (Dawes and Macpherson 1992).
+  - **The film rides on the plaque.** Over a plaque that spreads, the film is
+    renewed from the plaque's surface up, wherever that is after growth or a
+    brushing, and food left on the teeth lands in the film above it. On a
+    plaque as high as the film's underside, the film is S1's, bit for bit.
+  - **A flag field kind** reads true or false.
+  - **Verified:**
+    - P5: oxygen filling a slab from the air follows the series solution to
+      5.5e-5 of saturation, at second order in the voxel;
+    - P5: under zero-order uptake, it falls to 1% of saturation 135.3 µm in,
+      against 135.0;
+    - with oxygen under the mouth, both ledgers close to 9.5e-16;
+    - P7: sugar-free gum chewed from minute 2 after a sucrose rinse stops the
+      fall at pH 5.64 and brings the plaque back above 6 at 3.9 minutes,
+      against 42.9 without it.
+
+    Every example and oral scene keeps its final state, bit for bit. See
+    docs/validation.md, "Oxygen from the air" and "Chewing".
+
+- **A day of plaque: Stage S, increment S2, part three**
+  (`examples/environments/oral`, `examples/plaque_day.py`,
+  [docs/environments.md](docs/environments.md#a-day-of-plaque)). Two scenes
+  use all of Stage S2, on a network that extends the Stephan curve's. Oxygen
+  comes from the air. Saliva's glycoproteins, about 1 mM of hexose, feed the
+  plaque between meals: it grows on them where oxygen reaches, and respires
+  a little of them and of sugar.
+  - **`oxygen_profile.json`**: 400 µm of plaque under saliva, then a sucrose
+    rinse. Three respiration rates are calibrated (confidence C) so that
+    oxygen reaches as deep as von Ohle et al. (2010) measured: anoxic below
+    216 µm under saliva (about 220), and below 151 µm 9 minutes after the
+    sucrose (about 150).
+  - **`plaque_day.json`**: a day from 07:00 with three meals, chewed, two
+    sweets, sugar-free gum, brushing at 07:45 and 22:00, and wear. The plaque
+    goes from 60 µm, to 40 after the morning brushing, to 84 by 22:00, and
+    back to 63 by the next morning. Both ledgers close to 9.8e-15 over the
+    day, and the day runs in about 130 s.
+  - **`python examples/plaque_day.py`** runs both scenes and checks P6, the
+    brushings, the regrowth and the ledgers itself.
+
+  The prototype's plaque respired its own biomass between meals, which thinned
+  it from 150 to 33 µm in a day. The scenes feed it on saliva instead. See
+  docs/validation.md, "A day of plaque", and docs/parameters.md §8.3.
+
 - **An evidence context exchange, checked before it is joined to a run**
   (`marse.evidence.context`,
   [docs/context-exchange.md](docs/context-exchange.md)).
@@ -606,6 +708,18 @@ results for the same manifest is always called out.
 
 ### Fixed
 
+- **Four formulas in docs/theory.md §4.9 render again.** Their `\text`
+  macros had lost the backslash to a tab character.
+- **The mouth's books close to rounding on long runs.** Each span under the
+  mouth was integrated on the run's clock, so a step of a few seconds was the
+  difference of two times hours into the run, which loses digits in
+  proportion to the time. What the steps added and what the span booked
+  drifted apart: over six hours of meals, the box and the mouth together
+  balanced to only 4e-13 of the sugar eaten, and a day or a year would have
+  drifted further. Each span now keeps its own clock, from zero, and the
+  same six hours balance to 3e-16. **Results changed**, in their last digits:
+  the three oral scenes give the same Stephan curves to six figures, with new
+  final digests. Found while building Stage S2's day-long scenes.
 - **Runs in space now replay bit for bit on any number of threads.** They used
   to differ in their last digits between machines with different numbers of
   cores. The coarsest multigrid level was inverted by LAPACK, and OpenBLAS

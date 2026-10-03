@@ -88,11 +88,14 @@ A tooth's plaque can also stand under the mouth itself: a film of saliva that
 the mouth renews as it secretes and swallows, a pH set by the charges of every
 acid, base and ion, and a diet of rinses, drinks and foods. Three oral scenes
 give plaque the same sugar as a rinse, sipped over 20 minutes, or with food
-left on the teeth, and show which keeps it acid for longest:
+left on the teeth, and show which keeps it acid for longest. Two more give the
+plaque room to grow, a brush, chewing and oxygen from the air: one follows how
+far oxygen reaches into thick plaque, and one a day of meals and brushing:
 
 ```bash
 marse run examples/environments/oral/stephan_rinse.json -o runs/stephan   # a Stephan curve, about 10 s
 python examples/stephan_curve.py      # the three diets side by side, under a minute
+python examples/plaque_day.py         # oxygen in plaque, and a day of plaque, about 3 minutes
 ```
 
 The manifest records the configuration, its SHA-256 checksum, the random seed,
@@ -152,12 +155,13 @@ src/marse/         the Python package
   core/            run loop, state, configuration, seeds, provenance, frame store
   schemas/         configuration schema v2: formulas and balanced reaction networks
   spatial/         voxel grids in 1, 2 or 3 dimensions, diffusion, multigrid, surfaces and the
-                   delivery of cells to them, ParaView output
+                   delivery of cells to them, gases from the air, ParaView output
   oral/            the mouth: saliva secreted and swallowed, the film over the teeth, the diet,
                    and the measures of a Stephan curve
   chemistry/       acid-base equilibria: the pH that every voxel's charges set
   microbes/        growth kinetics, cardinal models, adhesion, niches, genotypes, dose responses
-  biofilm/         biomass, matrix, maturation
+  biofilm/         biomass, plaque that spreads up a column and is worn and brushed off, matrix,
+                   maturation
   ecosystem/       the 2-D multispecies engine and its viewer
   adaptation/      state transitions and decision policies
   interventions/   perturbations

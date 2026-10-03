@@ -96,6 +96,9 @@ DOMAIN_FIELDS = {
     "film": Field("object", required=False),
     "mouth": Field("object", required=False),
     "diet": Field("objects", required=False),
+    "plaque": Field("object", required=False),
+    "hygiene": Field("objects", required=False),
+    "air": Field("object", required=False),
 }
 """The box of voxels a network runs in; read by :mod:`marse.schemas.domain`."""
 
@@ -158,6 +161,7 @@ MOUTH_FIELDS = {
     "stimulus_half_mol_per_m3": Field("number", required=False),
     "plaque_area_cm2": Field("number"),
     "initial_mol_per_m3": Field("numbers", required=False),
+    "chewing_flow_ml_per_min": Field("number", required=False),
 }
 INTAKES = ("rinse", "drink", "food")
 INTAKE_FIELDS = {
@@ -168,7 +172,23 @@ INTAKE_FIELDS = {
     "composition_mol_per_m3": Field("numbers", required=False),
     "released_mmol": Field("numbers", required=False),
     "mixing_per_s": Field("number", required=False),
+    "chewing": Field("flag", required=False),
     "retained": Field("object", required=False),
+}
+PLAQUE_FIELDS = {
+    "packing_mol_per_m3": Field("numbers"),
+    "carried": Field("names", required=False),
+    "maximum_um": Field("number", required=False),
+    "wear_um_per_h": Field("number", required=False),
+}
+HYGIENES = ("brushing", "flossing")
+HYGIENE_FIELDS = {
+    "kind": Field("choice", choices=HYGIENES),
+    "start_h": Field("number"),
+    "removes_fraction": Field("number", required=False),
+}
+AIR_FIELDS = {
+    "saturation_mol_per_m3": Field("numbers"),
 }
 RETAINED_FIELDS = {
     "component": Field("name"),
@@ -247,6 +267,9 @@ SCHEMA = {
     "mouth": MOUTH_FIELDS,
     "intake": INTAKE_FIELDS,
     "retained": RETAINED_FIELDS,
+    "plaque": PLAQUE_FIELDS,
+    "hygiene": HYGIENE_FIELDS,
+    "air": AIR_FIELDS,
 }
 """Every object of the network format and its fields, as docs/networks.md lists them."""
 
