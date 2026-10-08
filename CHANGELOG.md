@@ -114,6 +114,15 @@ results for the same manifest is always called out.
 
 ### Added
 
+- Optional **Pocket Explorer** source package in `tools/pocket-explorer`:
+  generic adult human FDI 36 anatomy, capped cutaway, separate cortical/socket
+  layers, Healthy/Periodontitis presets and nine saved taxon controls.
+  Blender regenerates bulk assets locally; read-only teaching fields retain
+  their original grid and source identity. Source-linked observations remain
+  separate from assumed fields. No engine or trajectory changes. Anatomy is
+  uncalibrated, expert review is pending, and the ragged basal gingival edge
+  remains an explicitly failed visual criterion.
+
 - **Biomass that spreads, in a column** (Stage 2d, increment 2d.2;
   [docs/networks.md](docs/networks.md#biomass-that-spreads), theory.md §6.1
   and §9.10).
