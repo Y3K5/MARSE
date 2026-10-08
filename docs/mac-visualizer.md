@@ -39,3 +39,13 @@ by `marse replay`; the frames are for looking at how it got there.
 Frames no longer limit how long a run can be. The step size still does: the
 explicit transport scheme needs short steps, which is what the second stage of
 the [roadmap](roadmap.md#order-of-work-correctness-first) replaces.
+
+## Optional educational Pocket Explorer
+
+The separate [Pocket Explorer source package](../tools/pocket-explorer/README.md)
+authors one generic human FDI 36 tooth/pocket and shows qualitative evidence
+alongside preserved synthetic teaching endpoints. Its Blender/Node build is
+optional and does not add dependencies to MARSE's Python engine or change solver
+outputs. Healthy and Periodontitis are authored illustrations, not progression.
+Geometry is uncalibrated; expert review is pending and a basal gum-edge defect
+remains disclosed. Follow the package README to rebuild and view it locally.

@@ -1,0 +1,5 @@
+/node_modules
+dist/
+assets/pocket-organic/
+src/pocket-organic-input.json
+__pycache__/
