@@ -4,10 +4,11 @@ import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
 import {SSAOPass} from 'three/addons/postprocessing/SSAOPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {toCreasedNormals} from 'three/addons/utils/BufferGeometryUtils.js';
 import {environment} from './materials';
 import {pocketMaterials as materials,boneSectionTexture,connectiveSectionTexture} from './pocket-materials';
 import {quarterSection} from './pocket-section';
-import {buildPocket,buildOralContext,ANCHORS,PROFILES,type PocketId,type PocketPart} from './pocket-geometry';
+import {buildPocket,buildOralContext,buildOralSides,ANCHORS,PROFILES,type PocketId,type PocketPart} from './pocket-geometry';
 import {TAXA,SOURCES,PRESETS,observation,validateSaved,gridRGBA,type Health,type Scale,type Layer,type Basis,type SavedInput} from './pocket-science';
 import rawInput from './pocket-input.json';
 
@@ -25,8 +26,8 @@ const cache=new Map<string,PocketPart[]>(),display:T.Mesh[]=[],capMats=new Map<s
 const tissueAnchors=new Map<PocketId,T.Vector3>();
 const remembered=new Map<Scale,{position:number[];target:number[]}>();
 let measuring=false,measureStart=0,frameCount=0,renderMS:number[]=[];
-const rank:Record<PocketId,number>={bone:1,pdl:2,cementum:3,gingiva:4,connective:5,lumen:6,epithelium:7,plaque:8,enamel:9,dentin:10,pulp:11,vessels:12,nerve:13,palate:1,tongue:1};
-const names:Record<PocketId,string>={enamel:'Enamel',dentin:'Dentin',pulp:'Pulp & canals',cementum:'Cementum',pdl:'Periodontal ligament',gingiva:'Gingiva',bone:'Alveolar bone',vessels:'Vascular supply',nerve:'Neural supply',palate:'Palate',tongue:'Tongue',plaque:'Attached plaque',lumen:'Pocket fluid',epithelium:'Epithelial lining',connective:'Connective tissue'};
+const rank:Record<PocketId,number>={cheek:0,supragingival:8,bone:1,pdl:2,cementum:3,gingiva:4,connective:5,lumen:6,epithelium:7,plaque:8,enamel:9,dentin:10,pulp:11,vessels:12,nerve:13,palate:1,tongue:1};
+const names:Record<PocketId,string>={supragingival:'Supragingival plaque',cheek:'Cheek side (buccal)',enamel:'Enamel',dentin:'Dentin',pulp:'Pulp & canals',cementum:'Cementum',pdl:'Periodontal ligament',gingiva:'Gingiva',bone:'Alveolar bone',vessels:'Vascular supply',nerve:'Neural supply',palate:'Palate',tongue:'Tongue side (lingual)',plaque:'Subgingival plaque',lumen:'Pocket fluid',epithelium:'Epithelial lining',connective:'Connective tissue'};
 const descriptions:Record<PocketId,[string,string]>={
  enamel:['The mineralized outer crown; mature erupted enamel is acellular.','The crown shell and its cut edge are authored shapes, not a measured enamel-thickness map.'],
  dentin:['Mineralized tissue surrounding the pulp; odontoblast cell bodies lie on the pulp-facing boundary.','Coronal dentin and two root bodies are shown. Dentinal tubules are not resolved.'],
@@ -38,8 +39,10 @@ const descriptions:Record<PocketId,[string,string]>={
  vessels:['Blood vessels supply living pulp and periodontal tissues.','Schematic routes only; diameters, flow and oxygen delivery are not measured.'],
  nerve:['Neural routes provide context for tooth sensation.','Illustrative pathways; no neural activity is simulated.'],
  palate:['Hard/soft palate context forms the roof of the mouth.','Procedural oral-cavity context, not reconstructed tissue.'],
- tongue:['A muscular structure within the oral cavity.','Procedural surface context; papillae and muscle activity are not calculated.'],
- plaque:['Tooth-attached microbial biofilm, distinct from the surrounding fluid lumen.','The anatomical plaque ribbon identifies a compartment. Open biofilm detail for source-scoped observations across plaque, or the separate assumed model grid.'],
+ tongue:['The tongue lies on the lingual (inner) side of the lower molars; its lateral border rests near the lingual cusps.','Translucent authored context in Tooth view: the lateral tongue border beside the lingual cusps. Shape and position are illustrative; tongue movement, saliva flow and papillae are not simulated.'],
+ cheek:['For a lower first molar the outer (facial) side faces the cheek, called buccal. Lips border the front teeth, not this tooth.','Translucent authored context in Tooth view, drawn back over the mesial half: the cheek lining folds down into the buccal vestibule below the gum. Position and thickness are illustrative, with no measured registration.'],
+ supragingival:['Plaque on the crown surface above the gingival margin, bathed by saliva.','A thin authored film over the cervical crown on the cheek and tongue sides and between them. It marks a compartment only: thickness and extent are illustrative, and no species positions are assigned to it.'],
+ plaque:['Tooth-attached microbial biofilm below the gingival margin, distinct from the surrounding fluid lumen.','A thin film lines the sulcus on the cheek and tongue sides; the selected distal site keeps its own pocket ribbon. These are compartments, not species positions. Open biofilm detail for source-scoped observations across plaque thickness, or the separate assumed model grid.'],
  lumen:['The fluid space between the tooth-facing surface and the epithelial wall.','A slit-like opening and an enlarged illustrative interior. Its width is unknown; it is not filled with stretched microbial layers.'],
  epithelium:['The tooth-associated epithelial boundary; the junctional attachment is distinct from a clinical probing endpoint.','Sulcular lining and an apical attachment region are shown as a separate tissue. Boundaries are not measured histology.'],
  connective:['Vascular connective tissue beneath the epithelial boundary.','A distinct cut-face region behind the lining. No immune migration, inflammation dynamics or tissue oxygen field is computed.']
@@ -51,23 +54,28 @@ function view(reset=false){
  const stored=!reset&&remembered.get(scale);if(stored){camera.position.fromArray(stored.position);controls.target.fromArray(stored.target);}
  else if(scale==='mouth'){camera.position.set(38,34,142);controls.target.set(0,12,10);}
  else{
-  const box=new T.Box3().setFromObject(root);if(scale==='pocket')box.min.y=-10;const center=box.getCenter(new T.Vector3());
+  const box=modelBox();if(scale==='pocket')box.min.y=-10;const center=box.getCenter(new T.Vector3());
   const direction=new T.Vector3(.48,.25,1).normalize(),right=new T.Vector3().crossVectors(camera.up,direction).normalize(),up=new T.Vector3().crossVectors(direction,right).normalize();
   const tangent=Math.tan(T.MathUtils.degToRad(camera.fov/2)),fraction=stage.clientWidth<450?.43:.66;let distance=20;
   const point=new T.Vector3();
-  for(const mesh of display){const p=mesh.geometry.getAttribute('position');for(let i=0;i<p.count;i++){
+  for(const mesh of display){if(mesh.userData.context)continue;const p=mesh.geometry.getAttribute('position');for(let i=0;i<p.count;i++){
    point.fromBufferAttribute(p,i);if(scale==='pocket'&&point.y<-10)continue;point.sub(center);distance=Math.max(distance,Math.abs(point.dot(up))/(tangent*.92)+point.dot(direction),Math.abs(point.dot(right))/(tangent*camera.aspect*fraction)+point.dot(direction));
   }}
   controls.target.copy(center);camera.position.copy(center).addScaledVector(direction,distance*(scale==='tooth'?1.10:1));
  }
  controls.update();dirty=true;updateLabels();
 }
+// Translucent oral-side context never drives framing or label placement.
+function modelBox(){const box=new T.Box3();for(const mesh of display)if(!mesh.userData.context)box.expandByObject(mesh);return box;}
 function material(id:PocketId){
  if(id in mats!)return mats![id as keyof typeof mats];
- const colors={plaque:'#b2a16c',lumen:'#244d55',epithelium:'#e1a29d',connective:'#ba776f'};
- return new T.MeshPhysicalMaterial({color:colors[id as keyof typeof colors],roughness:id==='lumen'?.28:.58,clearcoat:.12,side:T.DoubleSide});
+ const colors={plaque:'#b9a46a',supragingival:'#d4c79a',lumen:'#2c5862',epithelium:'#e9a397',connective:'#dba196',cheek:'#c98a8a'};
+ if(id==='cheek')return new T.MeshPhysicalMaterial({color:colors.cheek,roughness:.5,clearcoat:.2,transparent:true,opacity:.22,depthWrite:false,side:T.DoubleSide});
+ return new T.MeshPhysicalMaterial({color:colors[id as keyof typeof colors],roughness:id==='lumen'?.3:.6,clearcoat:id==='lumen'?.3:.1,side:T.DoubleSide});
 }
 const extraMats=new Map<PocketId,T.MeshPhysicalMaterial>();
+let tongueContext:T.MeshPhysicalMaterial|undefined;
+function tongueMat(){return tongueContext??=new T.MeshPhysicalMaterial({color:'#c4777b',roughness:.45,clearcoat:.3,transparent:true,opacity:.5,depthWrite:false,side:T.DoubleSide});}
 function mat(id:PocketId){if(id in mats!)return material(id);if(!extraMats.has(id))extraMats.set(id,material(id));return extraMats.get(id)!;}
 function clear(){for(const mesh of display){root.remove(mesh);mesh.geometry.dispose();}display.length=0;}
 function anchorTarget(id:PocketId):[number,number,number]{
@@ -76,7 +84,7 @@ function anchorTarget(id:PocketId):[number,number,number]{
    anchor[1]=id==='epithelium'?PRESETS[health].attachment+.10:(PRESETS[health].margin+PRESETS[health].attachment)/2;
    const y=anchor[1],t=Math.max(0,Math.min(1,(-y-2)/11.60));
    const neck=y>=-4.4?4.65*Math.sqrt(Math.max(0,1-((y+1.2)/3.2)**2)):0;
-   const rootX=y<=-2?2+1.05*Math.sin(t*Math.PI/2)+.85*t*t+1.78*(1-t)**.64+.045:0;
+   const rootX=y<=-2?2+1.05*Math.sin(t*Math.PI/2)+.85*t*t+1.74*(1-.5*t)*(1-t**3.2)**.42+.03:0;
    anchor[0]=Math.max(neck,rootX)+.13+(id==='plaque'?.035:id==='lumen'?.24:.44);anchor[2]=0;
  }
  return anchor;
@@ -84,18 +92,21 @@ function anchorTarget(id:PocketId):[number,number,number]{
 function geometry(){
  updateFallback();if(!renderer||!mats)return;
  clear();const key=scale==='mouth'?'mouth':health;
- if(!cache.has(key))cache.set(key,scale==='mouth'?buildOralContext():buildPocket(health));
+ // Split normals at Boolean contact creases so shading does not smear across tissue edges.
+ if(!cache.has(key))cache.set(key,scale==='mouth'?buildOralContext():buildPocket(health).map(p=>{const g=toCreasedNormals(p.geometry,T.MathUtils.degToRad(48));p.geometry.dispose();return {...p,geometry:g};}));
  let open=0,loops=0,triangles=0;
- for(const part of cache.get(key)!){
+ if(scale==='tooth'&&!cache.has('sides'))cache.set('sides',buildOralSides());
+ const context=scale==='tooth'?cache.get('sides')!:[];
+ for(const part of [...cache.get(key)!,...context]){const isContext=context.includes(part);
   let g:T.BufferGeometry,cap:T.BufferGeometry|undefined;
-  if(cutaway&&scale!=='mouth'){const clipped=quarterSection(part.geometry);g=clipped.surface;cap=clipped.cap;open+=clipped.openChains;loops+=clipped.loops;}
+  if(cutaway&&scale!=='mouth'){const clipped=quarterSection(part.geometry);g=clipped.surface;cap=clipped.cap;if(!isContext){open+=clipped.openChains;loops+=clipped.loops;}}
   else g=part.geometry.clone();
   if(part.id==='enamel'){
    // Optical cervical warmth, authored art rather than a measured mineral map.
-   for(const mesh of [g,cap].filter(Boolean) as T.BufferGeometry[]){const p=mesh.getAttribute('position'),colors=[];for(let i=0;i<p.count;i++){const tint=new T.Color('#dcc294').lerp(new T.Color('#fffaf0'),T.MathUtils.clamp((p.getY(i)+.3)/6.4,0,1));colors.push(tint.r,tint.g,tint.b);}mesh.setAttribute('color',new T.Float32BufferAttribute(colors,3));}
+   for(const mesh of [g,cap].filter(Boolean) as T.BufferGeometry[]){const p=mesh.getAttribute('position'),colors=[];for(let i=0;i<p.count;i++){const tint=new T.Color('#ddd0b4').lerp(new T.Color('#f2eee6'),T.MathUtils.clamp((p.getY(i)+.3)/5.2,0,1)**.8);colors.push(tint.r,tint.g,tint.b);}mesh.setAttribute('color',new T.Float32BufferAttribute(colors,3));}
    mat('enamel').vertexColors=true;
   }
-  const mesh=new T.Mesh(g,mat(part.id));mesh.name=part.name;mesh.userData={tissue:part.id};mesh.castShadow=true;mesh.receiveShadow=true;root.add(mesh);display.push(mesh);triangles+=(g.index?.count||g.getAttribute('position').count)/3;
+  const mesh=new T.Mesh(g,isContext&&part.id==='tongue'?tongueMat():mat(part.id));mesh.name=part.name;mesh.userData={tissue:part.id,context:isContext};mesh.castShadow=!isContext;mesh.receiveShadow=true;if(isContext)mesh.renderOrder=30;root.add(mesh);display.push(mesh);triangles+=(g.index?.count||g.getAttribute('position').count)/3;
   if(cap){if(cap.getAttribute('position').count){
    const capKey=part.id==='bone'?part.name:part.id;
    if(!capMats.has(capKey)){
@@ -103,7 +114,7 @@ function geometry(){
     m.map=part.id==='bone'?(part.name.includes('Trabecular')?boneCapMap!:null):part.id==='connective'?fiberCapMap!:mat(part.id).map;
     if(['gingiva','connective'].includes(part.id))m.color.set('#ffffff');
     m.bumpMap=part.id==='bone'?m.map:null;m.bumpScale=.04;m.clearcoat=.04;m.roughness=.76;
-    if(part.id==='dentin')m.color.set('#d9b879');if(part.id==='bone')m.color.set(part.name.includes('Trabecular')?'#d6c09a':'#998566');if(part.id==='pulp')m.color.set('#a86858');m.depthWrite=true;m.envMapIntensity=.14;m.polygonOffset=true;m.polygonOffsetFactor=-rank[part.id];m.polygonOffsetUnits=-rank[part.id];m.userData.tissue=part.id;capMats.set(capKey,m);
+    if(part.id==='dentin')m.color.set('#f3e2c6');if(part.id==='bone')m.color.set(part.name.includes('Trabecular')?'#ffffff':'#d8cfbd');if(part.id==='pulp')m.color.set('#f0d4cc');if(part.id==='enamel')m.color.set('#f4eee2');m.depthWrite=true;m.envMapIntensity=.14;m.polygonOffset=true;m.polygonOffsetFactor=-rank[part.id];m.polygonOffsetUnits=-rank[part.id];m.userData.tissue=part.id;capMats.set(capKey,m);
    }
    const surface=new T.Mesh(cap,capMats.get(capKey));surface.name=part.name+' section';surface.userData={tissue:part.id};surface.renderOrder=10+rank[part.id];root.add(surface);display.push(surface);triangles+=cap.getAttribute('position').count/3;
   }else cap.dispose();}
@@ -131,7 +142,7 @@ function updateFallback(){
  get('fallback-bone').setAttribute('d',`M10.2,${v.crest} L5.05,${v.crest} Q5.6,-11 5,-14.5 L2,-16.2 L10.3,-16.2 Z`);
  get('fallback-plaque').setAttribute('d',`M4.45,${v.margin-.2} L4.55,${v.margin-.2} L4.6,${v.attachment} L4.48,${v.attachment} Z`);
 }
-const labelIds:PocketId[]=['enamel','dentin','pulp','gingiva','cementum','plaque','lumen','epithelium','pdl','bone'];
+const labelIds:PocketId[]=['enamel','dentin','pulp','gingiva','supragingival','cementum','plaque','lumen','epithelium','pdl','bone','cheek','tongue'];
 const labelElements=new Map<PocketId,HTMLButtonElement>();
 const leaders=document.createElementNS('http://www.w3.org/2000/svg','svg');leaders.setAttribute('class','leaders');leaders.setAttribute('aria-hidden','true');labels.append(leaders);
 for(const id of labelIds){const b=document.createElement('button');b.textContent=names[id];b.setAttribute('aria-label','Inspect '+names[id]);b.addEventListener('click',()=>selectTissue(id));labels.append(b);labelElements.set(id,b);}
@@ -141,7 +152,7 @@ function updateLabels(){
  connector.replaceChildren();const connected=basis==='model'&&layer==='species'&&scale!=='mouth'&&scale!=='biofilm';connector.toggleAttribute('hidden',!connected);
  if(connected){
   const p=new T.Vector3(4.55,(PRESETS[health].margin+PRESETS[health].attachment)/2,0).project(camera),r=lens.getBoundingClientRect(),s=stage.getBoundingClientRect(),x=fallback?stage.clientWidth*.64:(p.x+1)/2*stage.clientWidth,y=fallback?stage.clientHeight*.45:(-p.y+1)/2*canvas.clientHeight+62;
-  connector.setAttribute('viewBox',`0 0 ${stage.clientWidth} ${stage.clientHeight}`);const line=document.createElementNS('http://www.w3.org/2000/svg','path');line.setAttribute('d',`M${x},${y} L${r.left-s.left+9},${r.top-s.top+9}`);line.setAttribute('stroke','#a4bda8');line.setAttribute('stroke-opacity','.4');line.setAttribute('stroke-dasharray','3 5');line.setAttribute('fill','none');connector.append(line);
+  if(Number.isFinite(x)&&Number.isFinite(y)){  connector.setAttribute('viewBox',`0 0 ${stage.clientWidth} ${stage.clientHeight}`);const line=document.createElementNS('http://www.w3.org/2000/svg','path');line.setAttribute('d',`M${x},${y} L${r.left-s.left+9},${r.top-s.top+9}`);line.setAttribute('stroke','#a4bda8');line.setAttribute('stroke-opacity','.4');line.setAttribute('stroke-dasharray','3 5');line.setAttribute('fill','none');connector.append(line);}
  }
  leaders.replaceChildren();
  labels.hidden=!showLabels||scale==='biofilm';
@@ -150,17 +161,18 @@ function updateLabels(){
   return;
  }
  const h=canvas.clientHeight||stage.clientHeight;
- const bounds=new T.Box3().setFromObject(root),projected:Array<T.Vector3>=[];
+ const bounds=modelBox(),projected:Array<T.Vector3>=[];
  for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z])projected.push(new T.Vector3(x,y,z).project(camera));
- const minX=Math.min(...projected.map(p=>(p.x+1)/2*stage.clientWidth)),maxX=Math.max(...projected.map(p=>(p.x+1)/2*stage.clientWidth));
+ const xs=projected.map(p=>(p.x+1)/2*stage.clientWidth).filter(Number.isFinite),minX=xs.length?Math.min(...xs):0,maxX=xs.length?Math.max(...xs):stage.clientWidth;
  stage.dataset.modelBounds=JSON.stringify({left:minX,right:maxX});
  leaders.setAttribute('viewBox',`0 0 ${stage.clientWidth} ${stage.clientHeight}`);
  const left:Array<{b:HTMLButtonElement;x:number;y:number;ax:number;ay:number}>=[],right:Array<{b:HTMLButtonElement;x:number;y:number;ax:number;ay:number}>=[];
- for(const [id,b]of labelElements){b.hidden=!cutaway&&['dentin','pulp','cementum','plaque','lumen','epithelium','pdl'].includes(id);if(b.hidden)continue;b.textContent=({pdl:'Ligament',epithelium:'Junctional lining'} as Partial<Record<PocketId,string>>)[id]||names[id];b.dataset.selected=String(id===selected);
-  if(fallback){const positions:Record<string,[number,number]>={enamel:[23,22],pulp:[38,39],gingiva:[80,36],plaque:[61,45],epithelium:[79,55],pdl:[27,71],bone:[82,76],dentin:[20,32],cementum:[24,60],lumen:[80,47]};const fh=stage.classList.contains('with-lens')?stage.clientHeight-247:stage.clientHeight-62;b.style.left=positions[id][0]+'%';b.style.top=(positions[id][1]*fh/100+62)+'px';continue;}
+ for(const [id,b]of labelElements){b.hidden=(!cutaway&&['dentin','pulp','cementum','plaque','lumen','epithelium','pdl'].includes(id))||(['cheek','tongue'].includes(id)&&scale!=='tooth');if(b.hidden)continue;b.textContent=({pdl:'Ligament',epithelium:'Junctional lining',supragingival:'Supragingival plaque',cheek:'Cheek side · buccal',tongue:'Tongue side · lingual'} as Partial<Record<PocketId,string>>)[id]||names[id];b.dataset.selected=String(id===selected);
+  if(fallback){const positions:Record<string,[number,number]>={enamel:[23,22],pulp:[38,39],gingiva:[80,36],plaque:[61,45],epithelium:[79,55],pdl:[27,71],bone:[82,76],dentin:[20,32],cementum:[24,60],lumen:[80,47],supragingival:[33,27]};if(!positions[id]){b.hidden=true;continue;}const fh=stage.classList.contains('with-lens')?stage.clientHeight-247:stage.clientHeight-62;b.style.left=positions[id][0]+'%';b.style.top=(positions[id][1]*fh/100+62)+'px';continue;}
   const anchor=(tissueAnchors.get(id)||new T.Vector3(...anchorTarget(id))).toArray() as [number,number,number];
-  const p=new T.Vector3(...anchor).project(camera),isLeft=['enamel','dentin','pulp','gingiva','cementum'].includes(id)||(id==='bone'&&!cutaway);
+  const p=new T.Vector3(...anchor).project(camera),isLeft=['enamel','dentin','pulp','gingiva','supragingival','cementum','tongue'].includes(id)||(id==='bone'&&!cutaway);
   const ax=(p.x+1)/2*stage.clientWidth,ay=(-p.y+1)/2*h+62;
+  if(!Number.isFinite(ax)||!Number.isFinite(ay)){b.hidden=true;continue;}
   const half=b.offsetWidth/2;const item={b,ax,ay,x:T.MathUtils.clamp(isLeft?minX-half-10:maxX+half+10,half+8,stage.clientWidth-half-8),y:T.MathUtils.clamp(ay,82,h+38)};(isLeft?left:right).push(item);
  }
  for(const list of [left,right]){list.sort((a,b)=>a.y-b.y);let last=60;for(let i=0;i<list.length;i++)list[i].y=Math.min(list[i].y,h+38-(list.length-1-i)*32);for(const item of list){item.y=Math.max(item.y,last+32);last=item.y;item.b.style.left=item.x+'px';item.b.style.top=item.y+'px';
@@ -189,6 +201,7 @@ function inspectSpecies(){
 function selectTissue(id:PocketId){
  if(scale==='mouth'&&id==='plaque'){setScale('tooth');return;}
  selected=id;get<HTMLSelectElement>('tissue').value=id;showInspector();if(id==='plaque'&&layer==='species'){inspectSpecies();if(scale!=='biofilm')setScale('biofilm');}
+ else if(id==='supragingival')inspect(names[id],...descriptions[id],'This viewer assigns no species positions to supragingival plaque. The selected spatial observations concern attached subgingival biofilm in advanced periodontitis and are not transferred here.','Authored compartment · species locations unresolved','plaque');
  else inspect(names[id],...descriptions[id],SOURCES.anatomy.method+' '+SOURCES.anatomy.limit,'Authored anatomy · expert review pending','anatomy');
  highlight();updateLabels();
 }
@@ -262,7 +275,7 @@ for(const b of document.querySelectorAll<HTMLButtonElement>('[data-scale]'))b.on
 for(const b of document.querySelectorAll<HTMLButtonElement>('[data-layer]'))b.onclick=()=>{layer=b.dataset.layer as Layer;if(layer!=='species'&&scale==='biofilm')setScale('pocket');refresh();};
 for(const b of document.querySelectorAll<HTMLButtonElement>('[data-basis]'))b.onclick=()=>{basis=b.dataset.basis as Basis;refresh();};
 const select=get<HTMLSelectElement>('taxon');
-const tissueSelect=get<HTMLSelectElement>('tissue');for(const id of ['enamel','dentin','pulp','cementum','pdl','gingiva','bone','plaque','lumen','epithelium','connective','vessels','nerve'] as PocketId[]){const option=document.createElement('option');option.value=id;option.textContent=names[id];tissueSelect.append(option);}tissueSelect.value='plaque';tissueSelect.onchange=()=>selectTissue(tissueSelect.value as PocketId);
+const tissueSelect=get<HTMLSelectElement>('tissue');for(const id of ['enamel','dentin','pulp','cementum','pdl','gingiva','bone','supragingival','plaque','lumen','epithelium','connective','vessels','nerve','cheek','tongue'] as PocketId[]){const option=document.createElement('option');option.value=id;option.textContent=names[id];tissueSelect.append(option);}tissueSelect.value='plaque';tissueSelect.onchange=()=>selectTissue(tissueSelect.value as PocketId);
 for(const t of TAXA){const option=document.createElement('option');option.value=t.id;option.textContent=t.name;select.append(option);const b=document.createElement('button'),swatch=document.createElement('i');swatch.style.background=t.color;b.dataset.taxon=t.id;b.setAttribute('aria-pressed','false');b.append(swatch,document.createTextNode(t.short));b.onclick=()=>{taxon=t.id;showInspector();refresh();};get('legend').append(b);}
 select.onchange=()=>{taxon=select.value;showInspector();refresh();};
 get('detail').onclick=()=>setScale(scale==='biofilm'?'pocket':'biofilm');
@@ -272,14 +285,15 @@ get<HTMLSelectElement>('compartment').onchange=renderEnvironment;
 get('provenance').textContent='Source: '+saved.source.file+' · SHA-256 '+saved.source.sha256+'. '+saved.source.precision+' Both cases show their fixed endpoint; model time is not physical elapsed time.';
 get('render-check').onclick=()=>{if(!renderer){get('performance').textContent='2D fallback active; WebGL performance not measured.';return;}if(scale==='biofilm')setScale('pocket');measuring=true;measureStart=performance.now();frameCount=0;renderMS=[];get('performance').textContent='Measuring 60 rendered frames…';dirty=true;};
 canvas.addEventListener('keydown',e=>{if(!controls)return;if(e.key==='Home'){e.preventDefault();view(true);return;}if(!e.key.startsWith('Arrow'))return;e.preventDefault();const offset=camera.position.clone().sub(controls.target),s=new T.Spherical().setFromVector3(offset);s.theta+=e.key==='ArrowLeft'?-.10:e.key==='ArrowRight'?.10:0;s.phi=T.MathUtils.clamp(s.phi+(e.key==='ArrowUp'?-.08:e.key==='ArrowDown'?.08:0),.1,Math.PI-.1);camera.position.copy(controls.target).add(new T.Vector3().setFromSpherical(s));controls.update();dirty=true;updateLabels();});
-let down=[0,0];canvas.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];});canvas.addEventListener('pointerup',e=>{if(!renderer||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;const r=canvas.getBoundingClientRect(),pointer=new T.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),ray=new T.Raycaster();ray.setFromCamera(pointer,camera);const hit=ray.intersectObjects(display).find(h=>h.object.visible);if(hit)selectTissue(hit.object.userData.tissue);});
+let down=[0,0];canvas.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];});canvas.addEventListener('pointerup',e=>{if(!renderer||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;const r=canvas.getBoundingClientRect(),pointer=new T.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),ray=new T.Raycaster();ray.setFromCamera(pointer,camera);const hits=ray.intersectObjects(display).filter(h=>h.object.visible),hit=hits.find(h=>!h.object.userData.context)||hits[0];if(hit)selectTissue(hit.object.userData.tissue);});
 function fallbackScene(reason:string){fallback=true;stage.dataset.renderer='2d-fallback';canvas.hidden=true;get('fallback').hidden=false;status(reason+' The 2D anatomy and all evidence/model controls remain available.');updateFallback();}
 try{
  if(new URLSearchParams(location.search).get('render')==='2d')throw Error('2D fallback requested');
- renderer=new T.WebGLRenderer({canvas,antialias:true,alpha:true,powerPreference:'high-performance'});renderer.setClearColor('#0c171a',0);renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=.72;renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFShadowMap;
- mats=materials();boneCapMap=boneSectionTexture();fiberCapMap=connectiveSectionTexture();for(const m of Object.values(mats))m.envMapIntensity=.35;scene.environment=environment(renderer);
- const key=new T.DirectionalLight('#ffe7ce',2.4);key.position.set(-15,24,18);key.castShadow=true;key.shadow.mapSize.set(2048,2048);key.shadow.camera.left=-25;key.shadow.camera.right=25;key.shadow.camera.top=25;key.shadow.camera.bottom=-25;key.shadow.bias=-.0002;
- const fill=new T.DirectionalLight('#a4c8dc',.36);fill.position.set(17,4,15);const rim=new T.DirectionalLight('#ffc3a5',2.0);rim.position.set(-10,8,-17);scene.add(key,fill,rim,new T.HemisphereLight('#dce1e4','#162024',.18));
+ renderer=new T.WebGLRenderer({canvas,antialias:true,alpha:true,powerPreference:'high-performance'});renderer.setClearColor('#0c171a',0);renderer.toneMapping=T.NeutralToneMapping;renderer.toneMappingExposure=.74;renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFShadowMap;
+ mats=materials();boneCapMap=boneSectionTexture();fiberCapMap=connectiveSectionTexture();for(const m of Object.values(mats))m.envMapIntensity=.28;mats.enamel.envMapIntensity=.42;scene.environment=environment(renderer);
+ // Restrained three-point lighting: warm soft key, cool low fill, neutral rim for silhouette separation.
+ const key=new T.DirectionalLight('#ffe9d6',2.1);key.position.set(-15,24,18);key.castShadow=true;key.shadow.mapSize.set(2048,2048);key.shadow.camera.left=-25;key.shadow.camera.right=25;key.shadow.camera.top=25;key.shadow.camera.bottom=-25;key.shadow.bias=-.0002;key.shadow.normalBias=.02;key.shadow.radius=3;
+ const fill=new T.DirectionalLight('#b4cfe0',.55);fill.position.set(18,2,16);const rim=new T.DirectionalLight('#e8eef2',1.25);rim.position.set(-8,12,-18);scene.add(key,fill,rim,new T.HemisphereLight('#e4e2dc','#1a2124',.22));
  controls=new OrbitControls(camera,canvas);controls.enableDamping=false;controls.enablePan=false;controls.minDistance=20;controls.maxDistance=145;controls.addEventListener('change',()=>{dirty=true;updateLabels();});
  composer=new EffectComposer(renderer);composer.addPass(new RenderPass(scene,camera));
  ao=new SSAOPass(scene,camera,512,512,16);ao.kernelRadius=.8;ao.minDistance=.0002;ao.maxDistance=.025;composer.addPass(ao);composer.addPass(new OutputPass());

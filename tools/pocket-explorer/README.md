@@ -13,6 +13,8 @@ selections remain available in their original assumed 32 × 72 grid.
 ## Build and view
 
 Requires Node.js 22 or newer and Blender 5.2.2 LTS for the checked authoring build.
+Where the Blender application is unavailable, the matching `bpy==5.2.2` module
+(Python 3.13) runs the same script; see docs/verification.md.
 From this directory:
 
 ```sh
@@ -59,19 +61,50 @@ package's test count. Package-specific replay results are in docs/verification.m
 All 41,472 endpoint values were compared with the original arrays before
 packaging; this package locks the extracted endpoint identities independently.
 
-**Visual acceptance remains incomplete:** the basal gingival edge over the
-cortical exterior is ragged. Five selected cusps, fissures, curved taper roots,
-domed furcation and connected horns/canals are authored features. Some horns
-and canals lie outside a given slice. Pocket crops apical context intentionally;
-Tooth shows the full model. Whole-mouth context remains earlier procedural art.
-Expert anatomical review is **pending** and physical calibration is unresolved.
-Blender Boolean triangulation can vary slightly across rebuilds: this package
-does not promise byte-identical mesh exports. Saved endpoint data stays exact;
-viewer buffers are checked against each newly exported source.
+**Art pass (claude/pocket-art-pass).** The basal gingival edge is now a
+continuous rolled edge on the cortical plate. Gingiva and connective tissue are
+lofted from per-azimuth sections authored against ray-cast tooth and bone
+surfaces. Their embedded parts sit inside hard tissue, so the socket, cementum
+and pocket cuts cross steeply, and no soft-tissue voxel repair is needed. The
+crown has buccal/lingual heights of contour, occlusal convergence, triangular
+and marginal ridges, and grooves continuing onto the buccal and lingual faces.
+Roots end in blunt apices with proximal concavities. The pulp chamber is a
+rounded box with horns. A thin cortical lining (lamina dura) surrounds the
+socket. Gingival skin and connective core are separate, including a short
+epithelial attachment band. Exported triangles are checked so every edge is
+shared by exactly two faces.
 
-![Quarter cutaway](docs/images/cutaway.jpg)
+Plaque appears as authored compartments that follow the tooth surface. A thin
+supragingival film covers the cervical crown, and a subgingival film lines the
+sulcus on the cheek (buccal) and tongue (lingual) sides; the selected distal
+site keeps its pocket ribbon. These compartments assign **no species
+positions**: supragingival plaque and every Healthy location stay "Location
+unresolved", and source observations describe organisation across plaque
+thickness, not positions around the tooth. Tooth view adds translucent authored
+context: the cheek drawn back over the mesial half, showing the buccal
+vestibule, and the lateral tongue border. A lower first molar faces the cheek;
+the lips border the front teeth.
 
-![Exterior with remaining gum-edge defect](docs/images/exterior.jpg)
+**Remaining visual defects:** the soft tissue over the block's mesiodistal crest
+still reads as a rounded shelf, because the specimen block ends where
+neighbouring teeth would be. Cusp tips remain slightly sharp. Some pulp horns and
+canals lie outside a given slice. Pocket crops apical context intentionally;
+Tooth shows the full model. Cheek and tongue context is schematic, and the
+Mouth view is still earlier procedural art. In periodontitis the distal loss
+transition forms a steep angular step in the crest. Expert anatomical review is
+**pending** and physical calibration is unresolved. Blender Boolean
+triangulation can vary slightly across rebuilds, so this package does not promise
+byte-identical mesh exports. Saved endpoint data stays exact; viewer buffers are
+checked against each newly exported source.
+
+| Before (starting commit) | After |
+|---|---|
+| ![Before: quarter cutaway](docs/images/before-cutaway.jpg) | ![After: quarter cutaway](docs/images/cutaway.jpg) |
+| ![Before: exterior with ragged gum edge](docs/images/before-exterior.jpg) | ![After: exterior with rolled gum edge](docs/images/exterior.jpg) |
+
+![Healthy sulcus after the art pass](docs/images/healthy.jpg)
+
+![Tooth view with cheek and tongue context](docs/images/tooth-context.jpg)
 
 Software/topology checks establish their stated mesh/display properties only.
 This is not clinical validation, measured pocket anatomy, diagnosis, or a model

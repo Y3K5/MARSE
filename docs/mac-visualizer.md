@@ -47,5 +47,5 @@ authors one generic human FDI 36 tooth/pocket and shows qualitative evidence
 alongside preserved synthetic teaching endpoints. Its Blender/Node build is
 optional and does not add dependencies to MARSE's Python engine or change solver
 outputs. Healthy and Periodontitis are authored illustrations, not progression.
-Geometry is uncalibrated; expert review is pending and a basal gum-edge defect
-remains disclosed. Follow the package README to rebuild and view it locally.
+Geometry is uncalibrated and expert review is pending; remaining visual
+defects are listed in the package README. Follow the package README to rebuild and view it locally.

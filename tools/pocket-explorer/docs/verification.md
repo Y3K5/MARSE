@@ -3,8 +3,9 @@
 Checked on an Apple Silicon Mac with Blender 5.2.2 LTS and the pinned Node
 package dependencies. Geometry is uncalibrated and expert anatomical review
 is **pending**. This records software and display checks, not biological or
-clinical validation. Supporting-tissue visual acceptance still fails because
-of the ragged basal gingival edge.
+clinical validation. The sections below record the original package build,
+whose ragged basal gingival edge failed visual acceptance, and the later art
+pass that replaced it (last section).
 
 ## Source package rebuild
 
@@ -53,3 +54,75 @@ The current build is an educational source contribution, not a native-app
 update or a release. Rebuild requires Node dependencies and installed Blender;
 disconnected installation, direct file-URL startup and other operating systems
 remain unverified. No main-branch merge or deployment is included.
+
+## Art pass on claude/pocket-art-pass (cloud verification)
+
+Checked in a Linux cloud container, not on a Mac: 4 virtual CPUs (Intel Xeon
+at 2.30 GHz under KVM), 15 GiB memory, no GPU. Browser checks used headless
+Chromium 141 through Playwright 1.56.1, with WebGL2 provided by ANGLE on the
+SwiftShader **software** rasterizer. Node 22.22.0 and the pinned package
+dependencies. The Blender download host was blocked by the container's network
+policy, so the documented authoring script ran under the official `bpy==5.2.2`
+module (Blender 5.2.2 LTS, Python 3.13), imported before the script runs. This
+records software and display checks, not biological or clinical validation.
+Expert anatomical review is **pending**.
+
+### Geometry rebuild
+
+- The Blender script and Node build completed; all parts of both presets are
+  closed. Every **exported triangle** edge is shared by exactly two triangles.
+  The starting asset had 3–15 such defects in the ligament, trabecular bone,
+  dentin and gum, from loop triangulation of Boolean n-gons. Faces whose
+  triangulation would duplicate an edge are now fanned from a centre point.
+- Basal gingival edge regularity (lowest gingival vertex per 2° of azimuth,
+  maximum local second difference): **1.151 → 0.012** Healthy and
+  **0.804 → 0.128** Periodontitis (model units). A new test fails on the starting
+  asset and passes on this one.
+- Soft tissue is no longer voxel-remeshed, and the cortical plates are no longer
+  remeshed. Detached Boolean fragments removed from gum/connective tissue total
+  at most 1.2 × 10⁻⁵ of the tissue volume; the build records them under
+  `authoring_repairs`.
+- Bone-top authoring changed: each azimuth keeps its crest height toward the
+  tooth, and the interradicular height is −3.3 (Healthy) / −4.2 (Periodontitis).
+  The earlier single central point at −7.25 made periodontitis bone slope down
+  toward the tooth on every side. The selected-site margin, attachment and crest
+  presets are unchanged.
+
+### Package tests
+
+- Type checking passed; **23 tests passed**, none failed. That is the 20 earlier
+  tests plus three new ones: basal-edge regularity, exported-triangle closure,
+  and plaque compartments on both cheek and tongue sides with no species
+  positions.
+
+### Browser checks (generated branch bundle, local HTTP)
+
+- Console: no warnings or errors on any checked view. The starting build logged
+  168 label-leader `Infinity` errors across the same script; non-finite
+  projections are now skipped.
+- Layout at 390 × 844, 768 × 1024 and 1440 × 1000: no horizontal overflow and
+  no off-screen labels; WebGL2 active.
+- Saved fields: in Saved model mode, all nine taxa plus "All" in both cases
+  produced grid images byte-identical to the starting build (20 of 20), each
+  labelled "Assumed model coordinates". Evidence tags were identical to the
+  starting build: every Healthy taxon and S. sanguinis, V. parvula and
+  T. denticola in Periodontitis read "Location unresolved".
+- Tissue selection: all 16 selector entries and all 11 Pocket labels opened
+  the matching inspector; a canvas click selected the tissue under the pointer.
+- Camera and keyboard: arrows orbit; Pocket → Tooth → Pocket restored the
+  remembered camera exactly; Home returned exactly to the default view; Tab
+  reaches the canvas.
+- State switching: Healthy/Periodontitis, cutaway/assembled, Mouth and biofilm
+  detail all switched; both presets kept zero open quarter-section contours.
+- Reduced motion (`prefers-reduced-motion: reduce`) loaded normally with
+  `scroll-behavior: auto`; the viewer has no autonomous animation.
+- Forced 2D fallback (`?render=2d`) showed the fallback drawing, disabled Mouth,
+  and kept the species and saved-model controls working.
+- The built-in render check measured 0.7 frames/s (starting build 0.9) at about
+  545,000 triangles. That reflects CPU software rasterization only; **no GPU or
+  Mac performance was measured**.
+
+### Not repeated here
+
+Native Blender application runs, Apple Silicon/macOS behaviour, physical
+devices and real GPUs remain unverified for this pass.
