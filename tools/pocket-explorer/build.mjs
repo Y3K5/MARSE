@@ -10,10 +10,10 @@ const authored=JSON.parse(await readFile('assets/pocket-organic/anatomy.json','u
 const pool=[],lookup=new Map(),cases={};
 for(const [health,parts] of Object.entries(authored.cases))cases[health]=parts.map(p=>{
  const key=createHash('sha256').update(JSON.stringify(p)).digest('hex');if(lookup.has(key))return lookup.get(key);
- const index=pool.length;lookup.set(key,index);pool.push({id:p.id,name:p.name,positions:Buffer.from(new Float32Array(p.positions).buffer).toString('base64'),indices:Buffer.from(new Uint16Array(p.indices).buffer).toString('base64')});
- if(p.indices.some(i=>!Number.isInteger(i)||i<0||i>65535))throw Error('Mesh exceeds Uint16 budget');return index;
+ const index=pool.length;lookup.set(key,index);pool.push({id:p.id,name:p.name,positions:Buffer.from(new Float32Array(p.positions).buffer).toString('base64'),indices:Buffer.from(new Uint32Array(p.indices).buffer).toString('base64')});
+ if(p.indices.some(i=>!Number.isInteger(i)||i<0||i*3>=p.positions.length))throw Error('Mesh index outside its vertex range');return index;
 });
-await writeFile('src/pocket-organic-input.json',JSON.stringify({format:'marse.pocket-organic-packed/1',units:authored.units,calibration:null,precision:'float32 viewer vertices, Uint16 indices; little-endian',source_sha256:createHash('sha256').update(await readFile('assets/pocket-organic/anatomy.json')).digest('hex'),pool,cases})+'\n');
+await writeFile('src/pocket-organic-input.json',JSON.stringify({format:'marse.pocket-organic-packed/2',units:authored.units,calibration:null,segment:authored.authored_features.segment,precision:'float32 viewer vertices, Uint32 indices; little-endian',source_sha256:createHash('sha256').update(await readFile('assets/pocket-organic/anatomy.json')).digest('hex'),pool,cases})+'\n');
 await mkdir('dist',{recursive:true});
 await build({entryPoints:['src/core.ts'],outfile:'dist/core.mjs',bundle:true,platform:'node',format:'esm',target:'es2022',external:['three']});
 await build({entryPoints:['src/pocket.ts'],outfile:'dist/pocket-explorer.js',bundle:true,minify:true,format:'iife',target:'es2022',legalComments:'eof'});

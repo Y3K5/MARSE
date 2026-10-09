@@ -65,35 +65,44 @@ export function buildOralContext():PocketPart[]{
  }
  return parts;
 }
+// Three-tooth context segment recorded by the Blender build (FDI 35, 36, 37).
+export const SEGMENT=(()=>{const s=organic.segment;if(s.ends.length!==2||!(s.ends[0]<s.ends[1]))throw Error('Incompatible segment ends');return {...s,ends:[s.ends[0],s.ends[1]] as [number,number]};})();
+const smooth=(t:number)=>{const u=Math.min(1,Math.max(0,t));return u*u*(3-2*u);};
 // Authored oral-side context for FDI 36. A lower first molar faces the cheek
 // (buccal, +z) and the tongue (lingual, -z); lips border the front teeth.
-// Each slab follows the alveolar arch curvature; positions are illustrative.
-function sideSheet(inner:Array<[number,number]>,thickness:number,side:1|-1,bend:number,x0:number,x1:number){
+// Each sheet starts under the gum's basal edge as alveolar mucosa, folds at the
+// vestibule or floor of the mouth, and fades toward the specimen ends.
+function sideSheet(inner:Array<[number,number]>,thickness:number,side:1|-1,bend:number,x0:number,x1:number,alpha:(x:number,y:number)=>number){
  // Offset the inner profile along its normal, away from the tooth.
  const outer=inner.map(([z,y],i)=>{const a=inner[Math.max(i-1,0)],b=inner[Math.min(i+1,inner.length-1)],tz=b[0]-a[0],ty=b[1]-a[1],l=Math.hypot(tz,ty)||1;let nz=ty/l,ny=-tz/l;if(nz*side<0){nz=-nz;ny=-ny;}return [z+thickness*nz,y+thickness*ny] as [number,number];});
  const s=new T.Shape();
  s.moveTo(...inner[0]);for(const p of inner.slice(1))s.lineTo(...p);for(const p of outer.reverse())s.lineTo(...p);s.closePath();
- const g=new T.ExtrudeGeometry(s,{depth:x1-x0,steps:30,bevelEnabled:true,bevelSize:.12,bevelThickness:.25,bevelSegments:3,curveSegments:24});
- const p=g.getAttribute('position');for(let i=0;i<p.count;i++){const u=p.getX(i),v=p.getY(i),x=p.getZ(i)+x0;p.setXYZ(i,x,v,u+bend*x*x);}
- g.deleteAttribute('uv');g.computeVertexNormals();return g;
+ const g=new T.ExtrudeGeometry(s,{depth:x1-x0,steps:36,bevelEnabled:true,bevelSize:.12,bevelThickness:.25,bevelSegments:3,curveSegments:24});
+ const p=g.getAttribute('position'),colors:number[]=[];for(let i=0;i<p.count;i++){const u=p.getX(i),v=p.getY(i),x=p.getZ(i)+x0;p.setXYZ(i,x,v,u+bend*x*x);colors.push(1,1,1,alpha(x,v));}
+ g.setAttribute('color',new T.Float32BufferAttribute(colors,4));g.deleteAttribute('uv');g.computeVertexNormals();return g;
 }
 export function buildOralSides():PocketPart[]{
- const curve=(pts:Array<[number,number]>)=>new T.SplineCurve(pts.map(([z,y])=>new T.Vector2(z,y))).getPoints(40).map(v=>[v.x,v.y] as [number,number]);
- // Cheek lining folds into the buccal vestibule below the gum. Only the mesial
- // half is shown, as if drawn back, so it never hides the buccal cut face.
- const cheek=sideSheet(curve([[9.2,6.2],[9.0,1],[8.5,-5.5],[7.7,-8.9],[6.7,-10.1],[5.8,-10.6]]),.7,1,.028,-11,-.4);
+ const [x0,x1]=SEGMENT.ends,bend=.006;
+ const curve=(pts:Array<[number,number]>)=>new T.SplineCurve(pts.map(([z,y])=>new T.Vector2(z,y))).getPoints(48).map(v=>[v.x,v.y] as [number,number]);
+ const ends=(x:number,a:number,b:number)=>smooth(Math.min(x-a,b-x)/2.2);
+ // Cheek side: mucosa leaves the gum edge, folds at the buccal vestibule and
+ // rises as the cheek lining. Drawn over the mesial part so the pocket stays clear.
+ const cheekEnd=-.6;
+ const cheek=sideSheet(curve([[5.75,-7.2],[5.95,-8.9],[6.8,-10.3],[8.1,-9.7],[8.9,-6],[9.3,0],[9.5,5.2]]),.7,1,bend,x0,cheekEnd,(x,y)=>.34*ends(x,x0,cheekEnd)*(1-.55*smooth((y+1)/6)));
+ // Tongue side: floor of the mouth runs from the lingual gum edge to the tongue.
+ const floor=sideSheet(curve([[-5.75,-7.2],[-5.95,-8.9],[-6.8,-10.3],[-8.2,-9.6],[-9.3,-6.5],[-10.3,-.9]]),.7,-1,bend,x0,x1,(x)=>.40*ends(x,x0,x1));
  const tongue=new T.SphereGeometry(1,64,40);tongue.scale(12.5,3.4,4.6);
- const tp=tongue.getAttribute('position');for(let i=0;i<tp.count;i++){const x=tp.getX(i);tp.setXYZ(i,x,tp.getY(i)+2.6-.006*x*x,tp.getZ(i)-12.3+.02*x*x);}
- tongue.computeVertexNormals();
- return [{id:'cheek',name:'Buccal mucosa and vestibule (cheek side)',geometry:cheek},{id:'tongue',name:'Tongue lateral border',geometry:tongue}];
+ const tp=tongue.getAttribute('position'),tc:number[]=[];for(let i=0;i<tp.count;i++){const x=tp.getX(i)+.45;tp.setXYZ(i,x,tp.getY(i)+1.6-.006*x*x,tp.getZ(i)-12.3+.02*x*x);tc.push(1,1,1,.55*ends(x,x0,x1));}
+ tongue.setAttribute('color',new T.Float32BufferAttribute(tc,4));tongue.computeVertexNormals();
+ return [{id:'cheek',name:'Buccal mucosa, vestibule and cheek',geometry:cheek},{id:'tongue',name:'Floor of the mouth (tongue side)',geometry:floor},{id:'tongue',name:'Tongue lateral border',geometry:tongue}];
 }
 export const ANCHORS:Partial<Record<PocketId,[number,number,number]>>={supragingival:[-1.6,1.1,4.1],cheek:[-6,-2,9.4],tongue:[-6,3,-7.8],enamel:[-2.55,5.9,2.05],dentin:[-1.6,1.5,0],pulp:[.7,2.2,0],cementum:[4.25,-8.5,0],pdl:[4.7,-9,0],gingiva:[-5.12,-.25,2.7],connective:[7.5,-5,0],bone:[7.4,-8.4,0],plaque:[4.5,-3,0],lumen:[4.8,-3.5,0],epithelium:[4.9,-6.1,0]};
 
 export function buildPocket(health:Health):PocketPart[]{
- if(organic.format!=='marse.pocket-organic-packed/1'||organic.calibration!==null)throw Error('Incompatible authored geometry');
+ if(organic.format!=='marse.pocket-organic-packed/2'||organic.calibration!==null)throw Error('Incompatible authored geometry');
  return organic.cases[health].map(index=>{
   const part=organic.pool[index],decode=(s:string)=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
-  const positions=new Float32Array(decode(part.positions).buffer),indices=new Uint16Array(decode(part.indices).buffer);
+  const positions=new Float32Array(decode(part.positions).buffer),indices=new Uint32Array(decode(part.indices).buffer);
   const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(positions,3));g.setIndex(new T.BufferAttribute(indices,1));g.computeVertexNormals();
   const p=g.getAttribute('position'),uv:number[]=[];for(let i=0;i<p.count;i++)uv.push(p.getX(i)/18,p.getY(i)/26);g.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
   return {id:part.id as PocketId,name:part.name,geometry:g};
