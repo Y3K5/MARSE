@@ -1,5 +1,5 @@
 export type Health = 'healthy'|'periodontitis';
-export type Scale = 'pocket'|'tooth'|'mouth'|'biofilm';
+export type Scale = 'pocket'|'tooth'|'mouth'|'face'|'biofilm'|'crevice';
 export type Layer = 'structure'|'species'|'environment';
 export type Basis = 'evidence'|'model';
 export const SOURCES = {
