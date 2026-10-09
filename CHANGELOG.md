@@ -122,6 +122,13 @@ results for the same manifest is always called out.
   separate from assumed fields. No engine or trajectory changes. Anatomy is
   uncalibrated, expert review is pending, and the ragged basal gingival edge
   remains an explicitly failed visual criterion.
+- Pocket Explorer art pass: continuous rolled basal gingival edge, lofted
+  gingiva and connective tissue with an epithelial attachment band, refined
+  molar crown, roots and pulp chamber, socket lamina dura, and closed exported
+  triangles. Supragingival and circumferential subgingival plaque compartments
+  carry no species positions. Tooth view adds cheek and tongue context, with
+  restrained lighting and a revised tissue palette. Saved fields, evidence
+  scope, engine and trajectories are unchanged; expert review is pending.
 
 - **Biomass that spreads, in a column** (Stage 2d, increment 2d.2;
   [docs/networks.md](docs/networks.md#biomass-that-spreads), theory.md §6.1
