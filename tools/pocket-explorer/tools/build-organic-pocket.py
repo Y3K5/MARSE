@@ -260,6 +260,20 @@ MOLAR = {
     "ridges": (-4.05, 3.95),
     "fossae": ((-3.25, 0.0), (2.55, 0.05)),
     "central_span": 17.0,
+    "cusp_width": (3.0, 2.65),
+    "sampling": (144, 48, 34),
+}
+# FDI 37 is an authored four-cusp second molar, with a cruciform groove pattern.
+SECOND_MOLAR = {
+    **MOLAR,
+    "cusps": [(-2.20, 2.10, 1.24), (2.15, 2.05, 1.15), (-2.15, -2.10, 1.48), (2.05, -2.10, 1.36)],
+    "grooves": [(0.0, 1), (0.0, -1)],
+    "half": (4.85, 4.25),
+    "taper": 0.035,
+    "ridges": (-3.85, 3.85),
+    "fossae": ((-2.95, 0.0), (2.95, 0.0)),
+    "cross_groove": True,
+    "sampling": (96, 32, 24),
 }
 # Mandibular second premolar (three-cusp form): one dominant buccal cusp.
 PREMOLAR = {
@@ -272,6 +286,8 @@ PREMOLAR = {
     "ridges": (-2.75, 2.75),
     "fossae": ((-1.85, -0.15), (1.85, -0.20)),
     "central_span": 4.0,
+    "cusp_width": (2.65, 2.45),
+    "sampling": (96, 32, 24),
 }
 
 
@@ -280,7 +296,8 @@ def occlusal(x, z, grooves=1.0, spec=MOLAR):
     for cx, cz, amp in spec["cusps"]:
         dx = x - cx
         dz = z - cz
-        h += amp * math.exp(-(dx * dx / 2.45 + dz * dz / 2.15))
+        wx, wz = spec["cusp_width"]
+        h += 0.96 * amp * math.exp(-(dx * dx / wx + dz * dz / wz))
         # Triangular ridge running from each cusp tip toward the central groove.
         vx = -0.10 * cx
         vz = -cz
@@ -288,12 +305,12 @@ def occlusal(x, z, grooves=1.0, spec=MOLAR):
         u = (dx * vx + dz * vz) / length
         w = (dx * vz - dz * vx) / length
         along = smoothstep((u + 0.25) / 0.45) * math.exp(-((u / (0.75 * length)) ** 2))
-        h += 0.10 * amp * math.exp(-w * w / 0.14) * along
+        h += 0.10 * amp * math.exp(-w * w / 0.20) * along
     # Mesial and distal marginal ridges close the occlusal table.
     for mx in spec["ridges"]:
         h += 0.20 * math.exp(-(((x - mx) / 0.50) ** 2)) * math.exp(-((z / 2.6) ** 4))
     # Authored central and developmental fissures, not caries or scan data.
-    central = z + 0.12 - 0.18 * math.sin(x * 0.9)
+    central = z if spec.get("cross_groove") else z + 0.12 - 0.18 * math.sin(x * 0.9)
     h -= (
         grooves
         * 0.50
@@ -301,7 +318,7 @@ def occlusal(x, z, grooves=1.0, spec=MOLAR):
         * math.exp(-x * x / spec["central_span"])
     )
     for q, sign in spec["grooves"]:
-        line = x - q - 0.15 * z
+        line = x - q if spec.get("cross_groove") else x - q - 0.15 * z
         reach = smoothstep((sign * z + 0.1) / 0.6)
         h -= grooves * 0.30 * math.exp(-line * line / 0.042) * reach
     # Mesial and distal triangular fossae at the ends of the central groove.
@@ -341,10 +358,10 @@ def angle_gap(a, b):
 
 
 def crown_mesh(inner=False, spec=MOLAR, name=None):
-    na = 144
+    na, axial, radial = spec["sampling"]
     rows = []
-    for j in range(49):
-        t = j / 48
+    for j in range(axial + 1):
+        t = j / axial
         # Height rises quickly through the cervical and middle thirds, then eases
         # so the axial wall turns smoothly into the outer cusp slopes.
         rise = t + 0.55 * (t - t * t)
@@ -378,8 +395,8 @@ def crown_mesh(inner=False, spec=MOLAR, name=None):
             row.append((x, y, z))
         rows.append(row)
     rim = rows[-1]
-    for k in range(1, 35):
-        r = 1 - k / 35
+    for k in range(1, radial + 1):
+        r = 1 - k / (radial + 1)
         row = []
         for x, _, z in rim:
             xx = x * r
@@ -539,7 +556,7 @@ def superellipsoid(name, tid, c, r, e=0.5, rings=36, segs=72):
     return make(name, tid, pts, faces)
 
 
-def pulp_body():
+def pulp_body(spec=MOLAR, voxel=0.065):
     # Chamber follows the crown outline: wider mesiodistally, roof near the
     # cervical third, floor close to the cervical line.
     objs = [
@@ -547,7 +564,7 @@ def pulp_body():
             "Pulp chamber roof and floor", "pulp", (0.05, 0.95, -0.05), (2.45, 0.95, 1.80)
         )
     ]
-    for cx, cz, amp in CUSPS:
+    for cx, cz, amp in spec["cusps"]:
         rows = []
         for j in range(30):
             t = j / 29
@@ -578,14 +595,14 @@ def pulp_body():
                 r = 0.36 * (1 - t) ** 0.9 + 0.040
             rows.append((x, y, z, r, r * (1.18 if side > 0 else 0.86)))
         objs.append(rings_volume("Curving tapered root canal", "pulp", rows, 32))
-    return combine(objs, "Continuous pulp chamber horns and tapered canals", "pulp", 0.065)
+    return combine(objs, "Continuous pulp chamber horns and tapered canals", "pulp", voxel)
 
 
 # Three-tooth segment: FDI 35 (mesial, x < 0), the selected FDI 36 at the origin,
-# and FDI 37 (distal). Neighbours are context; 37 is the 36 model scaled to 0.94.
+# and FDI 37 (distal). Neighbours are lower-resolution authored context.
 # The browser trims every part at SEGMENT_ENDS, so cut faces show tissue layers.
 BEND = 0.006
-NEIGHBOURS = {"35": (-8.93, 1.0, PREMOLAR), "37": (9.92, 0.94, MOLAR)}
+NEIGHBOURS = {"35": (-8.93, 1.0, PREMOLAR), "37": (9.92, 0.94, SECOND_MOLAR)}
 SEGMENT_ENDS = (-9.5, 10.4)
 TEETH = [(-8.93, False), (0.0, True), (9.92, True)]
 
@@ -618,9 +635,14 @@ def crest(x, z, health):
             5.15
             * (0.5 + 0.5 * math.cos(a)) ** 4
             * smoothstep((r - 2.5) / 1.5)
-            * math.exp(-(max(0.0, r - 4.6) ** 2) / 4.84)
+            * (1.0 - smootherstep((r - 4.6) / 5.0))
         )
     return y
+
+
+def smootherstep(t):
+    u = max(0.0, min(1.0, t))
+    return u * u * u * (u * (u * 6 - 15) + 10)
 
 
 def half_width(y, inset=0.0):
@@ -637,12 +659,12 @@ def bone_section(x, health, inset=0.0):
     zl = b - half_width(-3.65, inset)
     cb = crest(x, zb, health) - 0.8 * inset
     cl = crest(x, zl, health) - 0.8 * inset
-    pts = [(z, bottom) for z in linspace(zl, zb, 10)[:-1]]
-    pts += [(b + half_width(y, inset), y) for y in linspace(bottom, cb, 30)[:-1]]
+    pts = [(z, bottom) for z in linspace(zl, zb, 8)[:-1]]
+    pts += [(b + half_width(y, inset), y) for y in linspace(bottom, cb, 20)[:-1]]
     zb_top = b + half_width(cb, inset)
     zl_top = b - half_width(cl, inset)
-    pts += [(z, crest(x, z, health) - 0.8 * inset) for z in linspace(zb_top, zl_top, 70)[:-1]]
-    pts += [(b - half_width(y, inset), y) for y in linspace(cl, bottom, 30)[:-1]]
+    pts += [(z, crest(x, z, health) - 0.8 * inset) for z in linspace(zb_top, zl_top, 48)[:-1]]
+    pts += [(b - half_width(y, inset), y) for y in linspace(cl, bottom, 20)[:-1]]
     return pts
 
 
@@ -665,7 +687,7 @@ def loft(name, tid, sections, xs):
 
 def bone_tube(health, inset=0.0):
     margin = 2.2 + (1.0 if inset else 0.0)
-    xs = linspace(SEGMENT_ENDS[0] - margin, SEGMENT_ENDS[1] + margin, 210)
+    xs = linspace(SEGMENT_ENDS[0] - margin, SEGMENT_ENDS[1] + margin, 132)
     return loft(
         "Trabecular alveolar interior" if inset else "Buccal and lingual cortical plates",
         "bone",
@@ -690,7 +712,14 @@ def neighbour_cone(x, z):
 def gum_top(x, z, health):
     # Attached gingiva over the crest, rising into the neighbours' margins; the
     # cones of two adjacent teeth meet in an interdental papilla.
-    return smax(crest(x, z, health) + COVER_TOP, neighbour_cone(x, z), 0.4)
+    top = smax(crest(x, z, health) + COVER_TOP, neighbour_cone(x, z), 0.4)
+    if health == "periodontitis":
+        # A broad rounded interdental col instead of a raised 37 papilla beside
+        # a hairline recession cleft. This is authored tissue shape, not progression.
+        w = math.exp(-(((x - 5.55) / 1.35) ** 4) - (z / 1.65) ** 4)
+        col = -0.38 + 0.20 * ((x - 5.55) / 1.35) ** 2 + 0.12 * (z / 1.65) ** 2
+        top += w * (smin(top, col, 0.28) - top)
+    return top
 
 
 def slab_section(x, health, inset=0.0):
@@ -747,7 +776,7 @@ def slab_section(x, health, inset=0.0):
         + lingual
         + roll(lingual[-1], base_l, -1)[::-1][1:]
     )
-    free = resample(free, 260)
+    free = resample(free, 190)
     if inset:
         free = offset_chain(free, -inset)
     end_l = free[-1]
@@ -758,20 +787,20 @@ def slab_section(x, health, inset=0.0):
         for z in linspace(zl_top + 0.6 + deep, zb_top - 0.6 - deep, 40)
     ]
     inner_b = [(b + half_width(y) - 0.6 - deep, y) for y in linspace(cb - 0.7 - deep, end_b[1], 12)]
-    embedded = resample(inner_l + inner_top + inner_b, 60)
+    embedded = resample(inner_l + inner_top + inner_b, 44)
     section = free + embedded[1:-1]
     return section
 
 
 def slab_volumes(health):
-    xs = linspace(SEGMENT_ENDS[0] - 1.2, SEGMENT_ENDS[1] + 1.2, 230)
+    xs = linspace(SEGMENT_ENDS[0] - 1.2, SEGMENT_ENDS[1] + 1.2, 164)
     out = []
     for inset, name, tid in [
         (0.0, "Continuous gingiva over the three-tooth segment", "gingiva"),
         (EPITHELIUM, "Subepithelial connective tissue", "connective"),
     ]:
         sections = [slab_section(x, health, inset) for x in xs]
-        for k in (0, 57, 115, 172, 229):
+        for k in (0, 41, 82, 123, 163):
             assert simple_polygon(sections[k]), ("Self-intersecting gum slab", health, xs[k], inset)
         out.append(loft(name, tid, sections, xs))
     return out
@@ -980,6 +1009,12 @@ def soft_sections(health, a, tooth):
         return None
 
     lo, hi = 0.05, 8.0
+    # A broad, smooth crater can lower the receiving cover farther than the
+    # earlier narrow notch did. Establish a real intersection before bisection;
+    # a fixed upper slope of eight is not a valid bracket at every azimuth.
+    while not meet(slope(hi)) and hi < 128:
+        hi *= 2
+    assert meet(slope(hi)), ("No gingival-cover slope bracket", health, a)
     for _ in range(14):
         mid = (lo + hi) / 2
         if meet(slope(mid)):
@@ -991,8 +1026,8 @@ def soft_sections(health, a, tooth):
     assert hit, ("Free gingival slope does not meet the cover", health, a)
     i, j, t = hit
     x = tuple(cone[i][q] + t * (cone[i + 1][q] - cone[i][q]) for q in range(2))
-    before = [p for p in cone[: i + 1] if math.dist(p, x) > 0.30]
-    after = [p for p in cover[j + 1 :] if math.dist(p, x) > 0.30]
+    before = [p for p in cone[: i + 1] if math.dist(p, x) > 0.48]
+    after = [p for p in cover[j + 1 :] if math.dist(p, x) > 0.48]
     if not after:
         after = [cover[-1]]
     fillet = bezier(before[-1], x, x, after[0], 12)
@@ -1058,9 +1093,9 @@ def soft_sections(health, a, tooth):
             14,
         )
         parts = [
-            (wall, 22),
+            (wall, 18),
             (margin_arc, 12),
-            (chain, 84),
+            (chain, 60),
             (embedded, 6),
             (floor, 10),
             (along, 14),
@@ -1079,7 +1114,7 @@ def soft_sections(health, a, tooth):
     return section(0.0), section(EPITHELIUM), sulcus
 
 
-def soft_volumes(health, tooth_objects, na=192):
+def soft_volumes(health, tooth_objects, na=144):
     tooth = surface_tree(tooth_objects)
     rings = {0: [], 1: [], 2: []}
     for i in range(na):
@@ -1204,24 +1239,25 @@ def above(obj, y):
 
 
 def support(roots, label):
+    # Context root coverings retain their boundaries with coarser envelope sampling.
     cement_outer = combine(
         [expanded(roots, 0.105, label + " cementum envelope", "cementum")],
         label + " cementum envelope",
         "cementum",
-        0.08,
+        0.115,
     )
     cement = shell_from(roots, cement_outer, label + " cementum", "cementum")
     pdl_outer = combine(
         [expanded(cement_outer, 0.33, label + " socket envelope", "pdl")],
         label + " socket envelope",
         "pdl",
-        0.10,
+        0.14,
     )
     lining = combine(
         [expanded(pdl_outer, 0.18, label + " socket lining", "bone")],
         label + " socket lining",
         "bone",
-        0.10,
+        0.14,
     )
     return cement_outer, cement, pdl_outer, lining
 
@@ -1272,10 +1308,10 @@ def premolar():
         ],
         "FDI 35 root envelope",
         "dentin",
-        0.11,
+        0.14,
     )
     trim_coronal(roots)
-    dentin = combine([inner, clone(roots, "FDI 35 dentin root")], "FDI 35 dentin", "dentin", 0.11)
+    dentin = combine([inner, clone(roots, "FDI 35 dentin root")], "FDI 35 dentin", "dentin", 0.14)
     parts = [superellipsoid("FDI 35 pulp chamber", "pulp", (0, 1.0, 0), (1.15, 1.0, 1.55), 0.6)]
     for cz, tip in ((0.95, 3.0), (-0.85, 2.3)):
         horn = [
@@ -1296,7 +1332,7 @@ def premolar():
         r = 0.42 * (1 - u) ** 0.9 + 0.04
         canal.append((0.25 * t * t, y, 0.05 * math.sin(math.pi * t), r, r * 1.35))
     parts.append(rings_volume("FDI 35 root canal", "pulp", canal, 32))
-    pulp = combine(parts, "FDI 35 pulp", "pulp", 0.065)
+    pulp = combine(parts, "FDI 35 pulp", "pulp", 0.09)
     boolean(dentin, pulp)
     cement_outer, cement, pdl_outer, lining = support(roots, "FDI 35")
     discard(roots)
@@ -1519,21 +1555,28 @@ socket_lining = combine(
     0.10,
 )
 
-# Neighbouring teeth. 37 reuses the finished 36 parts, scaled; 35 is a premolar.
+# FDI 37 gets its own four-cusp crown and pulp horns; roots are generic context.
 neighbours = {"35": premolar()}
+inner37 = crown_mesh(True, SECOND_MOLAR, "FDI 37 coronal dentin")
+enamel37 = crown_mesh(False, SECOND_MOLAR, "FDI 37 four-cusp enamel")
+solid37 = crown_mesh(False, SECOND_MOLAR, "FDI 37 crown envelope")
+boolean(enamel37, inner37)
+root37 = clone(roots, "FDI 37 root envelope")
+dentin37 = combine([inner37, clone(root37, "FDI 37 dentin roots")], "FDI 37 dentin", "dentin", 0.14)
+pulp37 = pulp_body(SECOND_MOLAR)
+boolean(dentin37, pulp37)
+cement_outer37, cement37, pdl_outer37, lining37 = support(root37, "FDI 37")
 neighbours["37"] = {
-    key: clone(obj, "FDI 37 " + key.replace("_", " "))
-    for key, obj in {
-        "enamel": outer_crown,
-        "dentin": dentin,
-        "pulp": pulp,
-        "cement": cement,
-        "cement_outer": cement_outer,
-        "pdl_outer": pdl_outer,
-        "lining": socket_lining,
-        "solid": crown_solid,
-    }.items()
+    "enamel": enamel37,
+    "dentin": dentin37,
+    "pulp": pulp37,
+    "cement": cement37,
+    "cement_outer": cement_outer37,
+    "pdl_outer": pdl_outer37,
+    "lining": lining37,
+    "solid": solid37,
 }
+discard(root37)
 for key, (tx, scale, _) in NEIGHBOURS.items():
     n = neighbours[key]
     n["sulcus"] = sulcus_cutter(n["cement_outer"], n["solid"], -1.5, "FDI " + key)
@@ -1692,6 +1735,84 @@ def safe_triangles(m, pos):
     return out
 
 
+def viewer_lod(obj):
+    """Reduce redundant final sampling; selected enamel and pocket walls stay intact.
+
+    This is display geometry only. Closed-surface and section tests still apply
+    to the exact decimated export, and the reduction is recorded for inspection.
+    """
+    tid = obj["tissueId"]
+    name = obj.get("partName", obj.name)
+    if "Neighbouring" in name:
+        ratio = 0.35
+    else:
+        ratio = {
+            "bone": 0.38,
+            "gingiva": 0.45,
+            "connective": 0.45,
+            "dentin": 0.50,
+            "pulp": 0.65,
+            "cementum": 0.40,
+            "pdl": 0.40,
+        }.get(tid, 1.0)
+    if ratio == 1.0:
+        return
+    before = len(obj.data.vertices)
+    # Boolean n-gons must use the same checked triangulation as the export.
+    # Letting Decimate choose diagonals can duplicate existing rim edges.
+    positions = [q for v in obj.data.vertices for q in v.co]
+    indices = safe_triangles(obj.data, positions)
+    mesh = bpy.data.meshes.new(obj.data.name + " display triangles")
+    mesh.from_pydata(
+        [positions[i : i + 3] for i in range(0, len(positions), 3)],
+        [],
+        [indices[i : i + 3] for i in range(0, len(indices), 3)],
+    )
+    for material in obj.data.materials:
+        mesh.materials.append(material)
+    mesh.update()
+    obj.data = mesh
+    mod = obj.modifiers.new("Pocket display sampling", "DECIMATE")
+    mod.decimate_type = "COLLAPSE"
+    mod.ratio = ratio
+    mod.use_collapse_triangulate = True
+    if tid == "gingiva":
+        # Keep the densely sampled rolled basal rim. Flat lower plates otherwise
+        # lose too many vertices in individual longitudinal bins during collapse.
+        group = obj.vertex_groups.new(name="Display reduction away from basal rim")
+        free = []
+        for vertex in mesh.vertices:
+            x, z, y = vertex.co.x, -vertex.co.y, vertex.co.z
+            protected = y < -6.95 and abs(z - bend(x)) > 4.7
+            if not protected:
+                free.append(vertex.index)
+        group.add(free, 1.0, "REPLACE")
+        mod.vertex_group = group.name
+    apply(obj, mod)
+    # Collapse can leave an isolated wire where a tiny Boolean sliver collapses.
+    # Wires have no surface area; no face or boundary is filled or deleted here.
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    wires = [edge for edge in bm.edges if not edge.link_faces]
+    assert len(wires) <= 3, ("Unexpected display wire count", obj.name, len(wires))
+    if wires:
+        bmesh.ops.delete(bm, geom=wires, context="EDGES")
+    isolated = [vertex for vertex in bm.verts if not vertex.link_edges]
+    if isolated:
+        bmesh.ops.delete(bm, geom=isolated, context="VERTS")
+    bm.to_mesh(obj.data)
+    bm.free()
+    obj["removed_display_wire_edges"] = len(wires)
+    for polygon in obj.data.polygons:
+        polygon.use_smooth = True
+    obj["retained_display_vertex_fraction"] = len(obj.data.vertices) / before
+    print("DISPLAY_LOD", obj.name, before, len(obj.data.vertices), flush=True)
+
+
+for objects in states.values():
+    for obj in objects:
+        viewer_lod(obj)
+
 export = {
     "format": "marse.pocket-organic-geometry/1",
     "authoring": "Blender " + bpy.app.version_string,
@@ -1711,6 +1832,17 @@ export = {
             "X mesial (-) to distal (+); Z buccal (+) to lingual (-); Y coronal (+) to apical (-)"
         ),
         "atlas_mesh_reuse": False,
+        "context_crowns": {
+            "FDI 35": {
+                "form": "Authored three-cusp mandibular second-premolar variant",
+                "cusps": 3,
+            },
+            "FDI 37": {"form": "Authored four-cusp second molar", "cusps": 4, "grooves": "cross"},
+        },
+        "distal_crest_samples": {
+            h: [{"x": x, "z": 0, "height": crest(x, 0, h)} for x in (4.2, 4.6, 5.0, 6.0, 8.0, 9.6)]
+            for h in ("healthy", "periodontitis")
+        },
         "pocket_landmarks": {
             "healthy": {"margin": 0.35, "attachment": -1.65},
             "periodontitis": {"margin": -0.15, "attachment": -6.20},

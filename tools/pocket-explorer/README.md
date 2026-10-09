@@ -109,17 +109,47 @@ orientation inset showing where on 36 the across-plaque view sits. Saved fields
 carry a dashed frame and a "not placed on the tooth" badge. Exported meshes use
 32-bit indices (packed format `/2`).
 
-**Remaining visual defects:** cusp tips remain slightly sharp, and neighbour
-crowns are generic. In periodontitis the receded 36 distal site forms a narrow
-cleft beside the healthier 37 papilla, and the distal loss transition is a steep
-step. Some pulp horns and canals lie outside a given slice. Pocket crops apical
-context intentionally; Tooth shows the full segment. Cheek and tongue context is
-schematic, and the Mouth view is still earlier procedural art. The larger scene
-renders slowly under software WebGL. Expert anatomical review is **pending** and
-physical calibration is unresolved. Blender Boolean triangulation can vary
-slightly across rebuilds, so this package does not promise byte-identical mesh
-exports. Saved endpoint data stays exact; viewer buffers are checked against
-each newly exported source.
+**Refinement pass (codex/pocket-refinement).** Neighbour crowns and supporting
+meshes use coarser sampling; final display reduction keeps the selected enamel
+and pocket walls intact and protects the rolled basal gum edge. FDI 37 has its
+own four-cusp crown and cross grooves; FDI 35 remains an authored three-cusp
+second-premolar variant. Cusp slopes are broader, the distal recession col is
+rounded, and the bone crater returns smoothly to the surrounding crest. Healthy
+landmarks are unchanged. The selected disease margin remains −0.15 and attachment
+−6.2; crest samples at the distal surface remain approximately −8.50 model units.
+These are authored coordinates, not millimetres or clinical measurements.
+
+The gum has a subtle artistic transition from paler, stippled attached tissue
+to smoother, redder mucosa. This is a material cue, not a measured mucogingival
+junction. Prepared meshes, cut faces and label anchors are reused when returning
+to a preset. Small stages show a few short labels, including the selected tissue;
+all 16 structures remain available in the selector. Tooth view now names the
+FDI 35–37 segment. Vessel and nerve selections have anchors on their schematic
+meshes. Expanded source hashes wrap at narrow widths.
+
+**Remaining limitations:** crowns, roots and tissue contours are still procedural
+illustrations. Recession is an authored shape; nearby papillae, gingival collars
+and section transitions can still look stylised. Some pulp horns and canals lie
+outside a slice. Layer widths remain exaggerated and uncalibrated. Cheek/tongue
+context is schematic and Mouth remains earlier procedural art. Expert anatomical
+review is **pending**. First preparation of a preset still blocks briefly (about
+3.5–5.9 seconds in the checked Mac browser); cached returns are much faster.
+Caching retains up to four prepared variants, trading memory for responsiveness;
+sustained memory and device profiling remain pending. Blender Boolean exports
+can vary slightly between rebuilds; exact saved endpoints remain unchanged.
+
+| Starting segment | Refined segment |
+|---|---|
+| ![Starting pocket](docs/images/refinement-before-pocket.jpg) | ![Refined pocket](docs/images/refinement-after-pocket.jpg) |
+| ![Starting Healthy sulcus](docs/images/refinement-before-healthy.jpg) | ![Refined Healthy sulcus](docs/images/refinement-after-healthy.jpg) |
+
+![Refined assembled Tooth view](docs/images/refinement-after-tooth.jpg)
+
+![Compact mobile labels and expanded provenance](docs/images/refinement-mobile.jpg)
+
+The forced fallback is `pocket.html?render=2d`. The optional `motion=reduce`
+query checks the same reduced-motion presentation policy without changing the
+operating system's accessibility setting. No autonomous orbiting is used.
 
 | Before (art pass) | After (segment pass) |
 |---|---|

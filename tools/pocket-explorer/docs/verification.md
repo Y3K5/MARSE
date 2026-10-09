@@ -162,3 +162,106 @@ or GPU checks were made.
 - The render check measured 0.4 frames/s at about 1.06 million triangles under
   CPU software rasterization. That is not a GPU or device measurement, but the
   scene is now roughly twice as heavy as the art pass.
+
+## Refinement pass on codex/pocket-refinement (local Mac verification)
+
+Starting commit: `154769ac8056324139e090d9aa7fbab49fb2c1a7`, the verified
+`claude/pocket-tissue-continuity` head at the start of this pass. The source
+snapshot and baseline rebuild were preserved before editing. PR #54 merged during
+this pass. Its merged main commit `53d5dbed5a4a94abeb3424514ba71fb76db51090`
+has exactly the same Git tree as the starting snapshot; the refinement is based
+on that merged commit for review. Changes are confined
+to the optional viewer and this changelog; the numerical engine, protocols and
+trajectories are unchanged. Expert anatomical review remains **pending**.
+
+### Geometry and preparation
+
+Native Blender **5.2.2 LTS**, Node **22.11.0**, pinned npm dependencies. The
+complete authoring workflow and Node build completed. All **52** exported parts
+have zero non-manifold edges, and every exported triangle edge has exactly two
+uses. Existing closure assertions are retained. Every `buildPocket()` part closes
+at both specimen ends. Packed format is `/2` with `Uint32` indices.
+
+| Preset | Starting Pocket cutaway | Refined cutaway | Refined assembled |
+|---|---:|---:|---:|
+| Healthy | 1,075,273 | 386,619 | 522,401 |
+| Periodontitis | 1,061,119 | 379,439 | 512,578 |
+
+The ≤600,000 ceiling is tested for both presets and both cutaway states.
+Whole exported source totals fell from 1,787,348 / 1,757,898 to
+580,214 / 569,308 triangles (Healthy / Periodontitis). These counts differ from
+scene counts because the viewer trims the specimen ends and adds cut faces.
+
+Sampling was reduced before final mesh collapse. Boolean faces use the checked
+export triangulation before reduction; the basal gingival rim is excluded from
+collapse. Only face-free wire remnants may be removed, with a bounded assertion
+and recorded repair metadata. The final rebuild needed no such wire cleanup.
+Selected enamel, plaque, lumen and epithelial walls retain their display sampling.
+The existing basal-edge threshold passes unchanged.
+
+Healthy crest reference samples match the frozen starting values exactly.
+Selected Periodontitis margin and attachment remain −0.15 / −6.2; distal crest
+samples at x=4.2 and 4.6 remain −8.504474 / −8.506822 model units, matching the
+starting authoring function. No millimetre calibration is inferred. FDI 37 is a
+four-cusp context variant with cross grooves; FDI 35 is a three-cusp variant.
+
+### Browser and Mac measurements
+
+Actual local Mac: **Apple M1, 8 CPU cores, 16 GiB RAM, macOS 27.0.1**. Codex
+in-app Chromium reports major version **155**, WebGL2 through
+`ANGLE Metal Renderer: Apple M1`. This is GPU-backed browser execution, unlike
+the earlier cloud software-rasterizer tests.
+
+- Single cold Periodontitis `geometry()` observations: starting **10,622.6 ms**,
+  refined **3,459.3 ms**. Healthy first preparation later measured **5,924 ms**
+  with several review tabs open. These are individual observations, not controlled
+  statistical benchmarks. First-use preparation can still block the UI briefly.
+- Returning to a prepared state measured **0.50 ms** inside `geometry()`.
+  This excludes camera framing, drawing and end-to-end interaction latency.
+- The built-in short check returned **101.5 rendered frames/s** over 60 frames
+  at **1175 × 540 CSS pixels**, pixel ratio 1; median CPU submission **2.00 ms**.
+  This measures the browser render loop, not screen presentation, GPU duration,
+  sustained performance or biological accuracy. Other hardware is untested.
+- Prepared variants and anchors are cached per preset/cutaway; a test checks
+  object reuse. A longer memory/performance study has not been performed.
+
+### Interaction, evidence and responsive checks
+
+- All **16** tissue selections opened the correct inspector. Vessel and nerve
+  labels now snap to vertices of their schematic routes. The clean final browser
+  session logged no errors or warnings during the checked interactions.
+- Keyboard arrows changed the camera. Pocket → Tooth → Pocket restored position
+  within **8.9 × 10⁻¹⁶** model units; Home reset matched exactly. Mouth, assembled
+  and cutaway, Healthy/Periodontitis, biofilm detail and return controls worked.
+- All nine taxon selections plus All in both presets produced **20/20** saved
+  grid PNG data URLs identical to the starting build (SHA-256 comparison).
+  The original 32 × 72 grid, contrast/overlap explanations, assumed coordinates
+  and unresolved-location rules remain unchanged. `pocket-input.json` SHA-256 is
+  `1c3485325a4738c1aab77bc26e5921d88a6b1d73d23783bf5f395ef8e2ceee4f`.
+- At requested viewports **390 × 844, 768 × 1024 and 1440 × 1000**: no horizontal
+  overflow and no off-stage labels, including the expanded source panel. The
+  390 px view shows three default compact labels. All tissues remain selectable.
+- Forced 2D fallback worked with Healthy and the species/evidence/saved-model
+  controls. Mouth was disabled. Reduced-motion policy was checked using
+  `?render=2d&motion=reduce`; computed scroll behaviour was `auto`. The native
+  OS reduced-motion setting was not toggled. No autonomous animation is present.
+- Runtime assets remain local and bundled, with no remote runtime requests or
+  solver calls. A disconnected dependency installation was not attempted.
+
+### Checks and release boundary
+
+`npm ci`, complete native Blender authoring, `npm run build` and
+`npm run check` completed: **29 tests passed**, type checking passed.
+Normal engine suite: **1,037 passed, 21 slow deselected, 11 existing expected
+failures**, 256.86 seconds. The slow suite was not repeated for this viewer-only
+pass; earlier slow results above belong to their stated snapshots.
+
+Pinned pre-commit checks passed, including ruff, gitleaks, repository structure,
+privacy files and noreply identity. The exact outgoing-file screen found no
+credentials, personal paths or private data; no private denylist is configured,
+so this is not a guarantee against every possible sensitive string. The local
+handoff records the screened file hashes. Rebuildable meshes, Blender/GLB files, packed buffers,
+bundles, dependencies and logs stay ignored. New browser screenshots contain no
+EXIF/XMP. No repository merge, deployment, native app rebuild or automatic push
+is included. First-use UI blocking, stylised tissue/crown contours, schematic
+oral context, unknown physical scale and pending expert review remain limitations.

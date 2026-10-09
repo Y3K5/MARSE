@@ -4,18 +4,22 @@ import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
 import {SSAOPass} from 'three/addons/postprocessing/SSAOPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-import {toCreasedNormals,mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {environment} from './materials';
 import {pocketMaterials as materials,boneSectionTexture,connectiveSectionTexture} from './pocket-materials';
-import {quarterSection,endSection,splitEnds} from './pocket-section';
-import {buildPocket,buildOralContext,buildOralSides,SEGMENT,ANCHORS,PROFILES,type PocketId,type PocketPart} from './pocket-geometry';
+import {PocketViewCache,triangleCount,type PreparedPart} from './pocket-view-cache';
+import {sceneLabelIds,visibleLabels,shortLabels,sceneCopy,additionalLabelTargets} from './pocket-layout';
+import {buildOralContext,buildOralSides,ANCHORS,PROFILES,type PocketId,type PocketPart} from './pocket-geometry';
 import {TAXA,SOURCES,PRESETS,observation,validateSaved,gridRGBA,type Health,type Scale,type Layer,type Basis,type SavedInput} from './pocket-science';
 import rawInput from './pocket-input.json';
 
 const get=<E extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as E;
 const stage=get('stage'),canvas=get<HTMLCanvasElement>('scene'),labels=get('label-layer'),lens=get('lens');
+stage.dataset.browser=navigator.userAgent;
 const saved=validateSaved(rawInput as SavedInput);
 const entryView=new URLSearchParams(location.search);
+// The query override checks this same presentation policy without changing OS settings.
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches||entryView.get('motion')==='reduce';
+document.documentElement.dataset.reducedMotion=String(reducedMotion);
 let health:Health=entryView.get('health')==='healthy'?'healthy':'periodontitis',scale:Scale='pocket',layer:Layer='species',basis:Basis='evidence',taxon='all',selected:PocketId='plaque',cutaway=entryView.get('cutaway')!=='0',showLabels=true,inspector=true;
 let renderer:T.WebGLRenderer|undefined,controls:OrbitControls|undefined,mats:ReturnType<typeof materials>|undefined,dirty=true,fallback=false;
 const scene=new T.Scene(),camera=new T.PerspectiveCamera(34,1,.1,350),root=new T.Group();scene.add(root);
@@ -77,7 +81,7 @@ function material(id:PocketId){
  if(id==='cheek')return new T.MeshPhysicalMaterial({color:colors.cheek,roughness:.55,clearcoat:.15,vertexColors:true,transparent:true,depthWrite:false,side:T.DoubleSide});
  return new T.MeshPhysicalMaterial({color:colors[id as keyof typeof colors],roughness:id==='lumen'?.3:.6,clearcoat:id==='lumen'?.3:.1,side:T.DoubleSide});
 }
-const extraMats=new Map<PocketId,T.MeshPhysicalMaterial>(),endOpen=new Map<string,number>();
+const extraMats=new Map<PocketId,T.MeshPhysicalMaterial>();
 // Per-vertex concavity of a non-indexed surface, 0 (flat or convex) to 0.32 (groove).
 function concavity(g:T.BufferGeometry){
  const p=g.getAttribute('position'),n=g.getAttribute('normal'),id=new Map<string,number>(),of:number[]=[];
@@ -92,10 +96,10 @@ function concavity(g:T.BufferGeometry){
 let tongueContext:T.MeshPhysicalMaterial|undefined;
 function tongueMat(){return tongueContext??=new T.MeshPhysicalMaterial({color:'#c4777b',roughness:.5,clearcoat:.2,vertexColors:true,transparent:true,depthWrite:false,side:T.DoubleSide});}
 function mat(id:PocketId){if(id in mats!)return material(id);if(!extraMats.has(id))extraMats.set(id,material(id));return extraMats.get(id)!;}
-function clear(){for(const mesh of display){root.remove(mesh);mesh.geometry.dispose();}display.length=0;}
+function clear(){for(const mesh of display){root.remove(mesh);if(mesh.userData.ephemeral){mesh.geometry.dispose();(mesh.material as T.Material).dispose();}}display.length=0;}
 function anchorTarget(id:PocketId):[number,number,number]{
  if(id==='bone'&&!cutaway)return [-6.4,-8.0,4.6];
- const anchor=[...ANCHORS[id]!] as [number,number,number];if(['plaque','lumen','epithelium'].includes(id)){
+ const anchor=[...(ANCHORS[id]??additionalLabelTargets[id]!)] as [number,number,number];if(['plaque','lumen','epithelium'].includes(id)){
    anchor[1]=id==='epithelium'?PRESETS[health].attachment+.10:(PRESETS[health].margin+PRESETS[health].attachment)/2;
    const y=anchor[1],t=Math.max(0,Math.min(1,(-y-2)/11.60));
    const neck=y>=-4.4?4.65*Math.sqrt(Math.max(0,1-((y+1.2)/3.2)**2)):0;
@@ -104,33 +108,43 @@ function anchorTarget(id:PocketId):[number,number,number]{
  }
  return anchor;
 }
-function geometry(){
- updateFallback();if(!renderer||!mats)return;
- clear();const key=scale==='mouth'?'mouth':health;
- // Split normals at Boolean contact creases so shading does not smear across tissue edges.
- // Split normals at Boolean contact creases so shading does not smear across tissue
- // edges, then trim the authored segment to its specimen ends.
- if(!cache.has(key)){
-  if(scale==='mouth')cache.set(key,buildOralContext());
-  else{let ends=0;cache.set(key,buildPocket(health).map(p=>{const g=toCreasedNormals(p.geometry,T.MathUtils.degToRad(48));p.geometry.dispose();const t=endSection(g,...SEGMENT.ends);g.dispose();ends+=t.openChains;return {...p,geometry:t.surface};}));endOpen.set(key,ends);}
- }
- let open=endOpen.get(key)??0,loops=0,triangles=0;
- if(scale==='tooth'&&!cache.has('sides'))cache.set('sides',buildOralSides());
- const context=scale==='tooth'?cache.get('sides')!:[];
- for(const part of [...cache.get(key)!,...context]){const isContext=context.includes(part);
-  let g:T.BufferGeometry,cap:T.BufferGeometry|undefined;
-  if(isContext||scale==='mouth')g=part.geometry.clone();
-  else if(cutaway){
-   const q=quarterSection(part.geometry),s=splitEnds(q.surface,...SEGMENT.ends);open+=q.openChains;loops+=q.loops;
-   g=s.surface;cap=mergeGeometries([q.cap,s.ends])!;for(const x of [q.surface,q.cap,s.ends])x.dispose();
-  }else{const s=splitEnds(part.geometry,...SEGMENT.ends);g=s.surface;cap=s.ends;}
+function decorate(part:PreparedPart){
+ const g=part.geometry,cap=part.cap;
   if(part.id==='enamel'){
    // Optical cervical warmth, authored art rather than a measured mineral map.
    // Fissures and fossae are darkened slightly so grooves read at a glance.
    for(const mesh of [g,cap].filter(Boolean) as T.BufferGeometry[]){const p=mesh.getAttribute('position'),cavity=mesh===g?concavity(mesh):null,colors=[];for(let i=0;i<p.count;i++){const tint=new T.Color('#ddd0b4').lerp(new T.Color('#f2eee6'),T.MathUtils.clamp((p.getY(i)+.3)/5.2,0,1)**.8);if(cavity)tint.multiplyScalar(1-cavity[i]);colors.push(tint.r,tint.g,tint.b);}mesh.setAttribute('color',new T.Float32BufferAttribute(colors,3));}
    mat('enamel').vertexColors=true;
   }
-  const mesh=new T.Mesh(g,isContext&&part.id==='tongue'?tongueMat():mat(part.id));mesh.name=part.name;mesh.userData={tissue:part.id,context:isContext};mesh.castShadow=!isContext;mesh.receiveShadow=true;if(isContext)mesh.renderOrder=30;root.add(mesh);display.push(mesh);triangles+=(g.index?.count||g.getAttribute('position').count)/3;
+ if(part.id==='gingiva'){
+  const p=g.getAttribute('position'),colors:number[]=[],attached:number[]=[];
+  for(let i=0;i<p.count;i++){
+   const y=p.getY(i),plate=Math.abs(p.getZ(i)-.006*p.getX(i)**2)>4.35;
+   const t=plate?T.MathUtils.smoothstep(y,-5.4,-4.25):1;
+   const tint=new T.Color('#e6b2ae').lerp(new T.Color('#fff1e8'),t);
+   colors.push(tint.r,tint.g,tint.b);attached.push(t);
+  }
+  g.setAttribute('color',new T.Float32BufferAttribute(colors,3));
+  g.setAttribute('attachedGingiva',new T.Float32BufferAttribute(attached,1));
+ }
+}
+const pocketCache=new PocketViewCache(decorate);
+const anchorCache=new Map<string,Map<PocketId,T.Vector3>>();
+function geometry(){
+ updateFallback();if(!renderer||!mats)return;
+ const started=performance.now();clear();let open=0,loops=0,triangles=0;
+ let parts:PreparedPart[],hit=false;
+ if(scale==='mouth'){
+  hit=cache.has('mouth');if(!hit)cache.set('mouth',buildOralContext());parts=cache.get('mouth')!;
+ }else{
+  hit=pocketCache.has(health,cutaway);const ready=pocketCache.get(health,cutaway);
+  parts=ready.parts;open=ready.openChains;loops=ready.loops;
+ }
+ if(scale==='tooth'&&!cache.has('sides'))cache.set('sides',buildOralSides());
+ const context=scale==='tooth'?cache.get('sides')!:[];
+ for(const part of [...parts,...context] as PreparedPart[]){const isContext=context.includes(part);
+  const g=part.geometry,cap=part.cap;
+  const mesh=new T.Mesh(g,isContext&&part.id==='tongue'?tongueMat():mat(part.id));mesh.name=part.name;mesh.userData={tissue:part.id,context:isContext};mesh.castShadow=!isContext;mesh.receiveShadow=true;if(isContext)mesh.renderOrder=30;root.add(mesh);display.push(mesh);triangles+=triangleCount(g);
   if(cap){if(cap.getAttribute('position').count){
    const capKey=part.id==='bone'?part.name:part.id;
    if(!capMats.has(capKey)){
@@ -142,15 +156,23 @@ function geometry(){
     if(part.id==='dentin')m.color.set('#f3e2c6');if(part.id==='bone')m.color.set(part.name.includes('Trabecular')?'#ffffff':'#d8cfbd');if(part.id==='pulp')m.color.set('#f0d4cc');if(part.id==='enamel')m.color.set('#f4eee2');m.depthWrite=true;m.envMapIntensity=.06;m.polygonOffset=true;m.polygonOffsetFactor=-rank[part.id];m.polygonOffsetUnits=-rank[part.id];m.userData.tissue=part.id;capMats.set(capKey,m);
    }
    const surface=new T.Mesh(cap,capMats.get(capKey));surface.name=part.name+' section';surface.userData={tissue:part.id};surface.renderOrder=10+rank[part.id];root.add(surface);display.push(surface);triangles+=cap.getAttribute('position').count/3;
-  }else cap.dispose();}
+  }}
  }
  if(scale==='mouth'){
-  const ring=new T.Mesh(new T.TorusGeometry(3.8,.18,12,64),new T.MeshBasicMaterial({color:'#c8dcba'}));ring.rotation.x=-Math.PI/2;ring.position.set(24.4,7,9.2);ring.userData={tissue:'plaque',focus:true};root.add(ring);display.push(ring);
+  const ring=new T.Mesh(new T.TorusGeometry(3.8,.18,12,64),new T.MeshBasicMaterial({color:'#c8dcba'}));ring.rotation.x=-Math.PI/2;ring.position.set(24.4,7,9.2);ring.userData={tissue:'plaque',focus:true,ephemeral:true};root.add(ring);display.push(ring);
  }
- tissueAnchors.clear();const anchorCosts=new Map<PocketId,number>();
- for(const mesh of display){const id=mesh.userData.tissue as PocketId;if(!ANCHORS[id])continue;const target=new T.Vector3(...anchorTarget(id)),p=mesh.geometry.getAttribute('position'),point=new T.Vector3();
+ tissueAnchors.clear();const anchorKey=scale==='mouth'?'mouth':`${health}:${cutaway}:${scale}`;
+ const knownAnchors=anchorCache.get(anchorKey);
+ if(knownAnchors){for(const [id,p]of knownAnchors)tissueAnchors.set(id,p);}
+ else {
+ const anchorCosts=new Map<PocketId,number>();
+ for(const mesh of display){const id=mesh.userData.tissue as PocketId;if(!ANCHORS[id]&&!additionalLabelTargets[id])continue;const target=new T.Vector3(...anchorTarget(id)),p=mesh.geometry.getAttribute('position'),point=new T.Vector3();
   for(let i=0;i<p.count;i++){point.fromBufferAttribute(p,i);const d=point.distanceToSquared(target);if(d<(anchorCosts.get(id)??Infinity)){anchorCosts.set(id,d);tissueAnchors.set(id,point.clone());}}
  }
+ anchorCache.set(anchorKey,new Map(tissueAnchors));
+ }
+ stage.dataset.geometryMs=(performance.now()-started).toFixed(2);
+ stage.dataset.geometryCacheHit=String(hit);stage.dataset.geometryBuilds=String(pocketCache.builds);
  stage.dataset.tissueAnchors=JSON.stringify(Object.fromEntries([...tissueAnchors].map(([id,p])=>[id,p.toArray()])));
  stage.dataset.openContours=String(open);stage.dataset.closedContours=String(loops);stage.dataset.triangles=String(Math.round(triangles));
  highlight();dirty=true;updateLabels();
@@ -168,7 +190,7 @@ function updateFallback(){
  get('fallback-bone').setAttribute('d',`M10.2,${v.crest} L5.05,${v.crest} Q5.6,-11 5,-14.5 L2,-16.2 L10.3,-16.2 Z`);
  get('fallback-plaque').setAttribute('d',`M4.45,${v.margin-.2} L4.55,${v.margin-.2} L4.6,${v.attachment} L4.48,${v.attachment} Z`);
 }
-const labelIds:PocketId[]=['enamel','dentin','pulp','gingiva','supragingival','cementum','plaque','lumen','epithelium','pdl','bone','cheek','tongue'];
+const labelIds=sceneLabelIds;
 const labelElements=new Map<PocketId,HTMLButtonElement>();
 const leaders=document.createElementNS('http://www.w3.org/2000/svg','svg');leaders.setAttribute('class','leaders');leaders.setAttribute('aria-hidden','true');labels.append(leaders);
 for(const id of labelIds){const b=document.createElement('button');b.textContent=names[id];b.setAttribute('aria-label','Inspect '+names[id]);b.addEventListener('click',()=>selectTissue(id));labels.append(b);labelElements.set(id,b);}
@@ -192,8 +214,10 @@ function updateLabels(){
  const xs=projected.map(p=>(p.x+1)/2*stage.clientWidth).filter(Number.isFinite),minX=xs.length?Math.min(...xs):0,maxX=xs.length?Math.max(...xs):stage.clientWidth;
  stage.dataset.modelBounds=JSON.stringify({left:minX,right:maxX});
  leaders.setAttribute('viewBox',`0 0 ${stage.clientWidth} ${stage.clientHeight}`);
+ const compact=stage.clientWidth<560,visible=visibleLabels(stage.clientWidth,cutaway,scale,selected);
+ stage.dataset.labelMode=compact?'compact':'full';get('labels').textContent=compact?'Labels · compact':'Labels';
  const left:Array<{b:HTMLButtonElement;x:number;y:number;ax:number;ay:number}>=[],right:Array<{b:HTMLButtonElement;x:number;y:number;ax:number;ay:number}>=[];
- for(const [id,b]of labelElements){b.hidden=(!cutaway&&['dentin','pulp','cementum','plaque','lumen','epithelium','pdl'].includes(id))||(['cheek','tongue'].includes(id)&&scale!=='tooth');if(b.hidden)continue;b.textContent=({pdl:'Ligament',lumen:'Pocket fluid · width exaggerated',epithelium:'Junctional lining',supragingival:'Supragingival plaque',cheek:'Cheek side · buccal',tongue:'Tongue side · lingual'} as Partial<Record<PocketId,string>>)[id]||names[id];b.dataset.selected=String(id===selected);
+ for(const [id,b]of labelElements){b.hidden=!visible.includes(id);if(b.hidden)continue;b.textContent=(compact?shortLabels[id]:undefined)||({pdl:'Ligament',lumen:'Pocket fluid · width exaggerated',epithelium:'Junctional lining',supragingival:'Supragingival plaque',cheek:'Cheek side · buccal',tongue:'Tongue side · lingual'} as Partial<Record<PocketId,string>>)[id]||names[id];b.dataset.selected=String(id===selected);
   if(fallback){const positions:Record<string,[number,number]>={enamel:[23,22],pulp:[38,39],gingiva:[80,36],plaque:[61,45],epithelium:[79,55],pdl:[27,71],bone:[82,76],dentin:[20,32],cementum:[24,60],lumen:[80,47],supragingival:[33,27]};if(!positions[id]){b.hidden=true;continue;}const fh=stage.classList.contains('with-lens')?stage.clientHeight-247:stage.clientHeight-62;b.style.left=positions[id][0]+'%';b.style.top=(positions[id][1]*fh/100+62)+'px';continue;}
   const anchor=(tissueAnchors.get(id)||new T.Vector3(...anchorTarget(id))).toArray() as [number,number,number];
   const p=new T.Vector3(...anchor).project(camera),isLeft=['enamel','dentin','pulp','gingiva','supragingival','cementum','tongue'].includes(id)||(id==='bone'&&!cutaway);
@@ -283,8 +307,7 @@ function refresh(){
  for(const [attr,value]of [['health',health],['scale',scale==='biofilm'?'pocket':scale],['layer',layer],['basis',basis]])for(const b of document.querySelectorAll<HTMLButtonElement>(`[data-${attr}]`))b.setAttribute('aria-pressed',String(b.dataset[attr]===value));
  get('labels').setAttribute('aria-pressed',String(showLabels));get('cutaway').setAttribute('aria-pressed',String(cutaway));get<HTMLButtonElement>('cutaway').disabled=scale==='mouth'||scale==='biofilm'||fallback;
  document.querySelector<HTMLButtonElement>('[data-scale="mouth"]')!.disabled=fallback;
- get('scene-title').textContent=scale==='mouth'?'Oral cavity · selected FDI 36':scale==='biofilm'?'Biofilm detail · '+PRESETS[health].title:PRESETS[health].title+(cutaway?' · quarter cutaway':' · assembled');
- get('scene-subtitle').textContent=scale==='mouth'?'Authored arches, palate and tongue · no measured tooth registration':'Illustrative landmarks · no physical scale';
+ const copy=sceneCopy(scale,health,cutaway);get('scene-title').textContent=copy.title;get('scene-subtitle').textContent=copy.subtitle;
  get('orientation').hidden=scale==='biofilm';get('structure-controls').hidden=layer!=='structure';get('species-controls').hidden=layer!=='species';document.querySelector<HTMLElement>('.basis-controls')!.hidden=layer!=='species';get('environment-controls').hidden=layer!=='environment';get('environment-content').hidden=layer!=='environment';
  get<HTMLSelectElement>('taxon').value=taxon;
  for(const b of get('legend').querySelectorAll<HTMLButtonElement>('button'))b.setAttribute('aria-pressed',String(b.dataset.taxon===taxon));
@@ -301,7 +324,7 @@ function setScale(next:Scale){
  if(next!=='biofilm'){geometry();view();}else if(previous==='mouth'){geometry();view();}
  refresh();resize();
 }
-function resize(){if(renderer){const h=stage.classList.contains('with-lens')?stage.clientHeight-247:stage.clientHeight-62;renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.setSize(stage.clientWidth,h,false);camera.aspect=stage.clientWidth/h;camera.updateProjectionMatrix();composer?.setPixelRatio(renderer.getPixelRatio());composer?.setSize(stage.clientWidth,h);}updateLabels();dirty=true;}
+function resize(){if(renderer){const h=stage.classList.contains('with-lens')?stage.clientHeight-247:stage.clientHeight-62;renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));stage.dataset.pixelRatio=String(renderer.getPixelRatio());renderer.setSize(stage.clientWidth,h,false);camera.aspect=stage.clientWidth/h;camera.updateProjectionMatrix();composer?.setPixelRatio(renderer.getPixelRatio());composer?.setSize(stage.clientWidth,h);}updateLabels();dirty=true;}
 for(const b of document.querySelectorAll<HTMLButtonElement>('[data-health]'))b.onclick=()=>{health=b.dataset.health as Health;geometry();refresh();};
 for(const b of document.querySelectorAll<HTMLButtonElement>('[data-scale]'))b.onclick=()=>setScale(b.dataset.scale as Scale);
 for(const b of document.querySelectorAll<HTMLButtonElement>('[data-layer]'))b.onclick=()=>{layer=b.dataset.layer as Layer;if(layer!=='species'&&scale==='biofilm')setScale('pocket');refresh();};
@@ -330,6 +353,7 @@ try{
  composer=new EffectComposer(renderer);composer.addPass(new RenderPass(scene,camera));
  ao=new SSAOPass(scene,camera,512,512,16);ao.kernelRadius=.8;ao.minDistance=.0002;ao.maxDistance=.025;composer.addPass(ao);composer.addPass(new OutputPass());
  stage.dataset.renderEffects='Contact shadows · physical materials · filmic tone mapping';
+ const gl=renderer.getContext(),gpu=gl.getExtension('WEBGL_debug_renderer_info');stage.dataset.gpuRenderer=String(gl.getParameter(gpu?gpu.UNMASKED_RENDERER_WEBGL:gl.RENDERER));
  stage.dataset.renderer='webgl2';geometry();resize();view(true);status('Local 3D scene ready · source-scoped evidence · expert anatomical review pending.');
  canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();fallbackScene('WebGL context was lost.');refresh();});
 }catch(error){fallbackScene((error as Error).message+'.');}

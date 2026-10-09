@@ -9,6 +9,16 @@ results for the same manifest is always called out.
 
 ### Changed
 
+- **Experimental Pocket Explorer refinement.** The authored FDI 35–37 segment
+  uses lighter display meshes and cached cut surfaces. Pocket cutaways now use
+  386,619 triangles (Healthy) and 379,439 (Periodontitis), with a tested 600,000
+  ceiling for both cutaway and assembled presets. Broader cusp slopes, an
+  independent four-cusp FDI 37 crown, a rounded distal recession col and smoother
+  crestal transitions improve the teaching model. Compact labels preserve access
+  to every tissue; saved microbial fields and numerical results are unchanged.
+  Anatomy remains uncalibrated, with expert review pending. Measurements and
+  screenshots are in `tools/pocket-explorer/docs/verification.md`.
+
 - **A plan for Stage 2d** ([docs/stage-2d-plan.md](docs/stage-2d-plan.md)),
   linked from the roadmap. It proposes spreading biomass on the voxel grid
   first, by a continuum and a cellular automaton behind one provider
