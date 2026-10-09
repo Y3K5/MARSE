@@ -36,3 +36,8 @@
 .stage.detail .lens svg.lens-where{display:block;float:left;width:150px;height:150px;margin:18px 22px 10px 0}
 @media(max-width:760px){.stage.detail .lens svg.lens-where{width:110px;height:110px;margin:10px 12px 6px 0}}
 .stage.detail .lens[data-basis=model]{border:1px dashed #8f8460}
+
+:root[data-reduced-motion=true] *{scroll-behavior:auto!important}
+@media(max-width:560px){.stage-caption{max-width:calc(100% - 26px)}.stage-caption strong{font-size:10px}.stage-caption p{font-size:9px}.orientation{display:none}}
+/* Provenance hashes remain readable when the optional source panel is expanded. */
+.limits{overflow-wrap:anywhere}

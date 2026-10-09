@@ -14,7 +14,7 @@ test('supporting compartments are substantial closed volumes, with two distinct 
 });
 test('every exported triangle edge is shared by exactly two triangles',()=>{
  for(const [health,parts] of Object.entries(asset.cases))for(const part of parts){
-  const uses=new Map();for(let i=0;i<part.indices.length;i+=3)for(let k=0;k<3;k++){const a=part.indices[i+k],b=part.indices[i+(k+1)%3],key=a<b?a*65536+b:b*65536+a;uses.set(key,(uses.get(key)||0)+1);}
+  const uses=new Map();for(let i=0;i<part.indices.length;i+=3)for(let k=0;k<3;k++){const a=part.indices[i+k],b=part.indices[i+(k+1)%3],key=a<b?a+':'+b:b+':'+a;uses.set(key,(uses.get(key)||0)+1);}
   assert.equal([...uses.values()].filter(c=>c!==2).length,0,health+' '+part.name);
  }
 });

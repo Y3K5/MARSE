@@ -46,13 +46,20 @@ export function pocketMaterials():Record<TissueId,T.MeshPhysicalMaterial>{
  const gum=texture('gum'),bone=texture('bone'),enamel=texture('enamel'),dentin=texture('dentin'),pulp=texture('pulp');
  // Soft tissue: moist but restrained, with a low sheen rather than a uniform gloss.
  const flesh=(map:T.Texture,color='#ffffff')=>new T.MeshPhysicalMaterial({color,map,roughness:.6,clearcoat:.12,clearcoatRoughness:.5,bumpMap:map,bumpScale:.016,sheen:.2,sheenColor:'#f0a89a',sheenRoughness:.75,side:T.DoubleSide});
+ const gingiva=flesh(gum);gingiva.vertexColors=true;
+ // Authored visual mucogingival cue. Positions and texture are not histometry.
+ gingiva.customProgramCacheKey=()=> 'marse-gingiva-art-transition-1';
+ gingiva.onBeforeCompile=shader=>{
+  shader.vertexShader=shader.vertexShader.replace('#include <common>', '#include <common>\nattribute float attachedGingiva; varying float vAttachedGingiva;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvAttachedGingiva = attachedGingiva;');
+  shader.fragmentShader=shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAttachedGingiva;').replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(0.54, 0.67, vAttachedGingiva);').replace('#include <normal_fragment_maps>', T.ShaderChunk.normal_fragment_maps.replace('dHdxy_fwd()', 'dHdxy_fwd() * mix(0.18, 1.0, vAttachedGingiva)'));
+ };
  return {
  // Ivory enamel with a soft, controlled sheen rather than a mirror-like clearcoat.
  // Enamel: controlled, broad highlights; a cool edge sheen suggests translucency.
  enamel:new T.MeshPhysicalMaterial({color:'#ffffff',map:enamel,roughness:.4,clearcoat:.16,clearcoatRoughness:.36,specularIntensity:.5,ior:1.55,sheen:.32,sheenColor:'#e6eef2',sheenRoughness:.45,bumpMap:enamel,bumpScale:.003,side:T.DoubleSide}),
  dentin:new T.MeshPhysicalMaterial({color:'#ffffff',map:dentin,roughness:.7,side:T.DoubleSide}),
  pulp:flesh(pulp),cementum:new T.MeshPhysicalMaterial({color:'#cdb58c',roughness:.82,side:T.DoubleSide}),
- pdl:new T.MeshPhysicalMaterial({color:'#b08a96',roughness:.74,side:T.DoubleSide}),gingiva:flesh(gum),
+ pdl:new T.MeshPhysicalMaterial({color:'#b08a96',roughness:.74,side:T.DoubleSide}),gingiva,
  bone:new T.MeshPhysicalMaterial({color:'#d6cdb9',map:bone,roughness:.92,specularIntensity:.35,bumpMap:bone,bumpScale:.03,side:T.DoubleSide}),
  vessels:flesh(pulp,'#b9423f'),nerve:new T.MeshPhysicalMaterial({color:'#caa259',roughness:.55,side:T.DoubleSide}),
  palate:flesh(gum),tongue:flesh(gum,'#d58887')

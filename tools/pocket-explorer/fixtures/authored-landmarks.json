@@ -1,0 +1,48 @@
+{
+  "base_commit": "154769ac8056324139e090d9aa7fbab49fb2c1a7",
+  "units": "illustrative model units, uncalibrated",
+  "healthy_crest_samples": [
+    {
+      "x": 4.2,
+      "z": 0,
+      "height": -3.35447425433203
+    },
+    {
+      "x": 4.6,
+      "z": 0,
+      "height": -3.3568223088945697
+    },
+    {
+      "x": 5.0,
+      "z": 0,
+      "height": -3.3588148410471272
+    },
+    {
+      "x": 6.0,
+      "z": 0,
+      "height": -3.3623997302007633
+    },
+    {
+      "x": 8.0,
+      "z": 0,
+      "height": -3.301008713926062
+    },
+    {
+      "x": 9.6,
+      "z": 0,
+      "height": -3.414785385178216
+    }
+  ],
+  "periodontitis_selected_crest_samples": [
+    {
+      "x": 4.2,
+      "z": 0,
+      "height": -8.504474254332031
+    },
+    {
+      "x": 4.6,
+      "z": 0,
+      "height": -8.50682230889457
+    }
+  ]
+}
