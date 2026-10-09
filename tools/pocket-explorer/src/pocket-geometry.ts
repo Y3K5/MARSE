@@ -4,7 +4,7 @@ import {buildMolar,tube,type Part} from './geometry';
 import {buildMouth} from './oral';
 import {PRESETS,type Health} from './pocket-science';
 import organic from './pocket-organic-input.json';
-export type PocketId = Part['id']|'plaque'|'lumen'|'epithelium'|'connective';
+export type PocketId = Part['id']|'plaque'|'lumen'|'epithelium'|'connective'|'supragingival'|'cheek';
 export interface PocketPart {id:PocketId;name:string;geometry:T.BufferGeometry;}
 export const PROFILES={
  healthy:{lumen:'M4.53,.35 L4.68,.35 Q5.05,-.65 4.85,-1.05 Q4.75,-1.45 4.42,-1.65 L4.40,-1.58 Q4.49,-.60 4.53,.35 Z',
@@ -65,7 +65,29 @@ export function buildOralContext():PocketPart[]{
  }
  return parts;
 }
-export const ANCHORS:Partial<Record<PocketId,[number,number,number]>>={enamel:[-2.55,5.9,2.05],dentin:[-1.6,1.5,0],pulp:[.7,2.2,0],cementum:[4.25,-8.5,0],pdl:[4.7,-9,0],gingiva:[-5.12,-.25,2.7],connective:[7.5,-5,0],bone:[7.4,-8.4,0],plaque:[4.5,-3,0],lumen:[4.8,-3.5,0],epithelium:[4.9,-6.1,0]};
+// Authored oral-side context for FDI 36. A lower first molar faces the cheek
+// (buccal, +z) and the tongue (lingual, -z); lips border the front teeth.
+// Each slab follows the alveolar arch curvature; positions are illustrative.
+function sideSheet(inner:Array<[number,number]>,thickness:number,side:1|-1,bend:number,x0:number,x1:number){
+ // Offset the inner profile along its normal, away from the tooth.
+ const outer=inner.map(([z,y],i)=>{const a=inner[Math.max(i-1,0)],b=inner[Math.min(i+1,inner.length-1)],tz=b[0]-a[0],ty=b[1]-a[1],l=Math.hypot(tz,ty)||1;let nz=ty/l,ny=-tz/l;if(nz*side<0){nz=-nz;ny=-ny;}return [z+thickness*nz,y+thickness*ny] as [number,number];});
+ const s=new T.Shape();
+ s.moveTo(...inner[0]);for(const p of inner.slice(1))s.lineTo(...p);for(const p of outer.reverse())s.lineTo(...p);s.closePath();
+ const g=new T.ExtrudeGeometry(s,{depth:x1-x0,steps:30,bevelEnabled:true,bevelSize:.12,bevelThickness:.25,bevelSegments:3,curveSegments:24});
+ const p=g.getAttribute('position');for(let i=0;i<p.count;i++){const u=p.getX(i),v=p.getY(i),x=p.getZ(i)+x0;p.setXYZ(i,x,v,u+bend*x*x);}
+ g.deleteAttribute('uv');g.computeVertexNormals();return g;
+}
+export function buildOralSides():PocketPart[]{
+ const curve=(pts:Array<[number,number]>)=>new T.SplineCurve(pts.map(([z,y])=>new T.Vector2(z,y))).getPoints(40).map(v=>[v.x,v.y] as [number,number]);
+ // Cheek lining folds into the buccal vestibule below the gum. Only the mesial
+ // half is shown, as if drawn back, so it never hides the buccal cut face.
+ const cheek=sideSheet(curve([[9.2,6.2],[9.0,1],[8.5,-5.5],[7.7,-8.9],[6.7,-10.1],[5.8,-10.6]]),.7,1,.028,-11,-.4);
+ const tongue=new T.SphereGeometry(1,64,40);tongue.scale(12.5,3.4,4.6);
+ const tp=tongue.getAttribute('position');for(let i=0;i<tp.count;i++){const x=tp.getX(i);tp.setXYZ(i,x,tp.getY(i)+2.6-.006*x*x,tp.getZ(i)-12.3+.02*x*x);}
+ tongue.computeVertexNormals();
+ return [{id:'cheek',name:'Buccal mucosa and vestibule (cheek side)',geometry:cheek},{id:'tongue',name:'Tongue lateral border',geometry:tongue}];
+}
+export const ANCHORS:Partial<Record<PocketId,[number,number,number]>>={supragingival:[-1.6,1.1,4.1],cheek:[-6,-2,9.4],tongue:[-6,3,-7.8],enamel:[-2.55,5.9,2.05],dentin:[-1.6,1.5,0],pulp:[.7,2.2,0],cementum:[4.25,-8.5,0],pdl:[4.7,-9,0],gingiva:[-5.12,-.25,2.7],connective:[7.5,-5,0],bone:[7.4,-8.4,0],plaque:[4.5,-3,0],lumen:[4.8,-3.5,0],epithelium:[4.9,-6.1,0]};
 
 export function buildPocket(health:Health):PocketPart[]{
  if(organic.format!=='marse.pocket-organic-packed/1'||organic.calibration!==null)throw Error('Incompatible authored geometry');

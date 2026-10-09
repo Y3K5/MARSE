@@ -12,6 +12,33 @@ test('supporting compartments are substantial closed volumes, with two distinct 
   for(const id of ['pdl','connective','gingiva'])assert.ok(volume(parts.find(p=>p.id===id))>5,health+' '+id+' collapsed');
  }
 });
+test('basal gingival edge is a continuous rolled contour without Boolean teeth',()=>{
+ // Lowest gingival vertex per azimuth traces the basal edge on the cortical plate.
+ // The earlier voxel-repaired collar measured 1.15 / 0.80 model units here.
+ for(const [health,parts] of Object.entries(asset.cases)){
+  const g=parts.find(p=>p.id==='gingiva'),bins=180,low=Array(bins).fill(Infinity);
+  for(let i=0;i<g.positions.length;i+=3){const b=Math.floor((Math.atan2(g.positions[i+2],g.positions[i])+Math.PI)/(2*Math.PI)*bins)%bins;low[b]=Math.min(low[b],g.positions[i+1]);}
+  assert.ok(low.every(Number.isFinite),health+' gingiva leaves an azimuth uncovered');
+  const worst=Math.max(...low.map((y,i)=>Math.abs(y-(low[(i+bins-1)%bins]+low[(i+1)%bins])/2)));
+  assert.ok(worst<0.25,health+' basal edge roughness '+worst.toFixed(3));
+ }
+});
+test('every exported triangle edge is shared by exactly two triangles',()=>{
+ for(const [health,parts] of Object.entries(asset.cases))for(const part of parts){
+  const uses=new Map();for(let i=0;i<part.indices.length;i+=3)for(let k=0;k<3;k++){const a=part.indices[i+k],b=part.indices[i+(k+1)%3],key=a<b?a*65536+b:b*65536+a;uses.set(key,(uses.get(key)||0)+1);}
+  assert.equal([...uses.values()].filter(c=>c!==2).length,0,health+' '+part.name);
+ }
+});
+test('plaque compartments follow the tooth above and below the margin without species positions',()=>{
+ for(const [health,parts] of Object.entries(asset.cases)){
+  const supra=parts.filter(p=>p.id==='supragingival'),sub=parts.filter(p=>p.id==='plaque');
+  assert.equal(supra.length,1,health);assert.ok(sub.length>=2,health+' needs the site ribbon and the circumferential film');
+  // The circumferential film covers both the cheek (+z) and tongue (-z) sides.
+  const film=sub.find(p=>p.name.includes('Circumferential')),z=film.positions.filter((_,i)=>i%3===2);
+  assert.ok(Math.max(...z)>3&&Math.min(...z)<-3,health);
+  for(const p of [...supra,...sub])assert.ok(volume(p)>0.05&&volume(p)<5,health+' '+p.name);
+ }
+});
 test('pocket and junctional boundary retain separate shallow and deep extents',()=>{
  const ys=(health,id)=>asset.cases[health].find(p=>p.id===id).positions.filter((_,i)=>i%3===1);
  assert.ok(Math.min(...ys('healthy','lumen'))>Math.min(...ys('periodontitis','lumen'))+4);
