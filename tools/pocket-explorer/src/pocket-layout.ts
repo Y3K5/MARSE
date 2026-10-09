@@ -13,10 +13,12 @@ export function visibleLabels(width:number,cutaway:boolean,scale:Scale,selected:
   const essential=['gingiva','plaque','bone',available.includes(selected)?selected:'enamel'] as PocketId[];
   return [...new Set(essential)].filter(id=>available.includes(id));
  }
- return available.filter(id=>primary.includes(id)||id===selected);
+ // A few anchor labels, with every tissue reachable through the inspector.
+ return available.filter(id=>['enamel','gingiva','plaque','epithelium','pdl','bone',selected].includes(id));
 }
 export function sceneCopy(scale:Scale,health:Health,cutaway:boolean){
  const form=cutaway?'quarter cutaway':'assembled';
+ if(scale==='face')return {title:'Generic adult face · oral anatomy',subtitle:'Authored facial context · illustrative registration · expert review pending'};
  if(scale==='mouth')return {title:'Oral cavity · selected FDI 36',subtitle:'Authored arches, palate and tongue · no measured tooth registration'};
  if(scale==='tooth')return {title:`FDI 35–37 tooth segment · ${health==='healthy'?'Healthy':'Periodontitis'} · ${form}`,subtitle:'Selected FDI 36 · partial neighbors are authored context · no physical scale'};
  if(scale==='biofilm')return {title:'Biofilm detail · '+PRESETS[health].title,subtitle:'Across attached plaque · schematic observations or separate saved grid'};

@@ -6,9 +6,53 @@ Authored anatomy, published qualitative observations and saved teaching fields
 remain distinct inputs. Viewer controls change presentation only.
 
 The opening view is Periodontitis / Pocket / Species / Evidence with a quarter
-cutaway and labels. Mouth → Tooth → Pocket stays within one scene. Healthy
+cutaway and labels. Face → Mouth → Tooth → Pocket stays within one scene. Healthy
 changes authored landmarks, not a progression model. All nine saved taxon
 selections remain available in their original assumed 32 × 72 grid.
+
+## Organic crevice refinement
+
+The crevice uses curved, tapered closed tissue volumes, a continuous marginal
+fold, separate matte section faces and restrained surface highlights. Camera
+buttons transition gently; manual input stops the movement and reduced motion
+uses immediate changes. The plaque-facing view keeps supporting context.
+Species identities, morphology references, numerical kernels and saved fields
+are preserved. See [the current verification record](docs/organic-crevice-verification.md).
+
+## Magnified crevice
+
+Choose **Crevice**, then **Opened section**, **Look down**, or **Biofilm surface**.
+Select a cell or taxon to focus a source-linked illustrative 3D form. All nine
+identities stay in the scene. The walls and cell sizes are independently enlarged;
+placements are a morphology library, not a colonization map or inferred cells.
+The new patch is an authored explanation, not a measured molar reconstruction.
+
+Export reusable GLBs with `node tools/export-crevice-objects.mjs <directory>`.
+Objects carry source identities, hashes and normalized authoring units. The
+exporter does not consume saved model fields. Current verification is recorded
+in [docs/crevice-verification.md](docs/crevice-verification.md).
+
+## October 9 local upgrade
+
+Face and Mouth use a source-identified BodyParts3D adult male atlas with 28
+teeth, upper/lower gingiva, jaws, tongue and palatal muscle elements. This is
+reference anatomy, not an average or a patient reconstruction. The jaw-opening
+pose is authored. The selected atlas tooth links to the independent pocket
+specimen; no measured registration is claimed.
+
+Saved model opens an enlarged original grid alongside a clickable nine-taxon
+form library. Each selection has its own qualitative microscopy reference and
+specimen context. Cell forms, artistic colors and sizes do not assign cells to
+density bins. The original 20 density displays are byte-identical to the
+starting version. Healthy spatial locations remain unresolved.
+
+The same scene includes an optional six-stage explanatory storyboard. It has
+no biological clock or predicted progression. Nerve tracing separates the
+recognized pathway from its schematic rendered course.
+
+See [00_START_HERE.md](00_START_HERE.md) for controls and
+[the current verification record](docs/anatomy-map-verification.md) for checked
+results and limitations. Earlier screenshots below are historical snapshots.
 
 ## Build and view
 
@@ -19,6 +63,8 @@ From this directory:
 
 ```sh
 npm ci
+# Prepare the pinned public reference inputs described in docs/reference-assets.md.
+# Rebuild their ignored buffers before the following anatomy/build steps.
 npm run anatomy
 npm run build
 npm run check
@@ -30,12 +76,18 @@ there are no remote runtime assets or solver calls. Evidence links are optional
 external references. Rebuild requires installed tools and dependencies; Node
 installation is separate from the Python engine. The app has a 2D fallback.
 
+See [reference-assets.md](docs/reference-assets.md) for the required public atlas
+and graphical face inputs, exact source identities and local rebuild commands.
+Those two generated buffers are ignored alongside the existing organic meshes;
+they exceed MARSE's 1 MiB file limit. A fresh checkout needs these authoring
+inputs before building or type checking. The current Mac preview retains them.
+
 Meshes, GLB, editable Blender files, packed buffers and JavaScript bundles are
 rebuildable outputs ignored by Git. No bulk trajectory, raw authoring reference,
 local execution log, Cycles metadata or native app is committed. The Python
 script retains the earlier scaffold's reference hash but generates every live
-mesh from its own rules; it does not need that reference file. No atlas triangles
-were reused. This package does not add an automatic CI release or deployment.
+mesh from its own rules; it does not need that reference file. The detailed pocket uses authored triangles. Face and Mouth now use separately
+identified BodyParts3D reference-atlas triangles; see the licence record. This package does not add an automatic CI release or deployment.
 
 ## What goes in → what happens → what comes out
 
@@ -127,7 +179,7 @@ all 16 structures remain available in the selector. Tooth view now names the
 FDI 35–37 segment. Vessel and nerve selections have anchors on their schematic
 meshes. Expanded source hashes wrap at narrow widths.
 
-**Remaining limitations:** crowns, roots and tissue contours are still procedural
+**Earlier refinement limitations (before the atlas pass below):** crowns, roots and tissue contours were procedural
 illustrations. Recession is an authored shape; nearby papillae, gingival collars
 and section transitions can still look stylised. Some pulp horns and canals lie
 outside a slice. Layer widths remain exaggerated and uncalibrated. Cheek/tongue
@@ -178,3 +230,9 @@ scope is unchanged. Nothing feeds back into solver trajectories.
 Viewer source and authored mesh rules are a MARSE contribution under the
 repository's Apache-2.0 licence. Three.js is MIT; dependency licences remain in
 the installed packages and build output. No Z-Anatomy mesh is distributed here.
+
+The current reference atlas is [BodyParts3D](https://dbarchive.biosciencedbc.jp/en/bodyparts3d/download.html).
+Its geometry is CC BY 4.0 under the updated official licence, with source hashes
+and attribution in [BODYPARTS3D_LICENSE.md](docs/BODYPARTS3D_LICENSE.md).
+An earlier MakeHuman face experiment is retained with its own licence record;
+it is not the active Face renderer.
