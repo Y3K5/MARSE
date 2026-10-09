@@ -126,3 +126,39 @@ Expert anatomical review is **pending**.
 
 Native Blender application runs, Apple Silicon/macOS behaviour, physical
 devices and real GPUs remain unverified for this pass.
+
+## Segment pass on claude/pocket-tissue-continuity (cloud verification)
+
+Same environment as the art pass above: a Linux cloud container with 4 vCPU,
+15 GiB memory and no GPU. Headless Chromium 141 ran on the SwiftShader
+**software** rasterizer, and the authoring script ran under `bpy==5.2.2`. No Mac
+or GPU checks were made.
+
+- Blender rebuild completed. Every part of both presets has 0 non-manifold edges,
+  and every exported triangle edge is shared by exactly two triangles. Detached
+  Boolean fragments removed from the continuous gingiva total at most 1.4 × 10⁻⁴
+  of its volume; the build records them under `authoring_repairs`.
+- All 768 authored 36-collar sections (192 azimuths, gingiva and core, both
+  presets) are simple polygons.
+- Package: type checking passed, and **24 tests passed**. New tests check the
+  three-tooth segment and recorded ends, one continuous gingiva covering both
+  plates along the whole segment, a smooth basal edge on each side (80 bins),
+  and interdental papillae standing above the attached gingiva beside 36. The
+  earlier azimuthal edge test was retired because rays toward the specimen ends
+  meet the cut face; the per-side test covers the same property.
+- Exported meshes now use 32-bit indices (packed format `/2`). The cortical
+  plates carved by three sockets exceed 65,535 vertices.
+- Browser:
+  - No console warnings or errors.
+  - At 390, 768 and 1440 px: no horizontal overflow and no off-screen labels.
+  - In Saved model mode, 20 of 20 grid images are byte-identical to the original
+    starting build, and evidence tags are identical.
+  - All 16 tissue-selector entries and 11 labels open the matching inspector.
+  - Healthy/Periodontitis, cutaway, Mouth and biofilm detail all switch, with
+    zero open section contours, including the specimen-end trims.
+  - Pocket → Tooth → Pocket restores the camera and Home resets exactly
+    (isolated check).
+  - Reduced motion loads normally, and the forced 2D fallback works.
+- The render check measured 0.4 frames/s at about 1.06 million triangles under
+  CPU software rasterization. That is not a GPU or device measurement, but the
+  scene is now roughly twice as heavy as the art pass.

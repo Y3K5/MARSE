@@ -129,6 +129,14 @@ results for the same manifest is always called out.
   carry no species positions. Tooth view adds cheek and tongue context, with
   restrained lighting and a revised tissue palette. Saved fields, evidence
   scope, engine and trajectories are unchanged; expert review is pending.
+- Pocket Explorer segment pass: FDI 36 sits in a three-tooth segment with
+  partial 35 and 37. One continuous gingiva has interdental papillae, the bone
+  crest is scalloped, and the specimen ends are cut faces. Crown walls are lobed
+  with rounded cusp transitions. Pocket framing is tighter, labels have more
+  contrast, and the selected tissue is highlighted. Spacing is labelled as
+  exaggerated. Cheek and tongue context emerges from the mucosa. The biofilm
+  detail is oriented and visibly separate from saved fields. Meshes use 32-bit
+  indices. Saved fields, evidence scope and engine are unchanged.
 
 - **Biomass that spreads, in a column** (Stage 2d, increment 2d.2;
   [docs/networks.md](docs/networks.md#biomass-that-spreads), theory.md §6.1

@@ -8,7 +8,7 @@ function texture(kind:'gum'|'bone'|'enamel'|'dentin'|'fiber'|'pulp',section=fals
   const noise=random()-.5,fold=Math.sin(x*.017+Math.sin(y*.013)*2)+.38*Math.sin(y*.054+x*.024),i=(y*size+x)*4;
   let r=255,g=255,b=255;
   // Natural coral soft tissue, warm ivory-tan dentin and pale cortical bone.
-  if(kind==='gum'){const v=fold*2.5+noise*7;r=216+v;g=122+v*.8;b=114+v*.7;}
+  if(kind==='gum'){const blot=5*Math.sin(x*.0061+Math.sin(y*.0047)*2.3)*Math.sin(y*.0053+x*.0021),v=fold*2+noise*6+blot;r=214+v;g=124+v*.75;b=116+v*.7;}
   else if(kind==='fiber'){const v=4*Math.sin(x*.045+Math.sin(y*.012)*11)+noise*8;r=236+v;g=192+v;b=178+v;}
   else if(kind==='pulp'){const v=fold*6+noise*9;r=196+v;g=104+v*.6;b=100+v*.6;}
   else if(kind==='enamel'){const v=.55*Math.sin(x*.11+Math.sin(y*.007)*5)+noise*1.1;r=250+v;g=245+v;b=232+v;}
@@ -44,14 +44,16 @@ function texture(kind:'gum'|'bone'|'enamel'|'dentin'|'fiber'|'pulp',section=fals
 }
 export function pocketMaterials():Record<TissueId,T.MeshPhysicalMaterial>{
  const gum=texture('gum'),bone=texture('bone'),enamel=texture('enamel'),dentin=texture('dentin'),pulp=texture('pulp');
- const flesh=(map:T.Texture,color='#ffffff')=>new T.MeshPhysicalMaterial({color,map,roughness:.5,clearcoat:.22,clearcoatRoughness:.38,bumpMap:map,bumpScale:.014,sheen:.25,sheenColor:'#f0a89a',sheenRoughness:.7,side:T.DoubleSide});
+ // Soft tissue: moist but restrained, with a low sheen rather than a uniform gloss.
+ const flesh=(map:T.Texture,color='#ffffff')=>new T.MeshPhysicalMaterial({color,map,roughness:.6,clearcoat:.12,clearcoatRoughness:.5,bumpMap:map,bumpScale:.016,sheen:.2,sheenColor:'#f0a89a',sheenRoughness:.75,side:T.DoubleSide});
  return {
  // Ivory enamel with a soft, controlled sheen rather than a mirror-like clearcoat.
- enamel:new T.MeshPhysicalMaterial({color:'#ffffff',map:enamel,roughness:.36,clearcoat:.22,clearcoatRoughness:.32,specularIntensity:.55,ior:1.55,sheen:.18,sheenColor:'#fff4dc',sheenRoughness:.6,bumpMap:enamel,bumpScale:.003,side:T.DoubleSide}),
+ // Enamel: controlled, broad highlights; a cool edge sheen suggests translucency.
+ enamel:new T.MeshPhysicalMaterial({color:'#ffffff',map:enamel,roughness:.4,clearcoat:.16,clearcoatRoughness:.36,specularIntensity:.5,ior:1.55,sheen:.32,sheenColor:'#e6eef2',sheenRoughness:.45,bumpMap:enamel,bumpScale:.003,side:T.DoubleSide}),
  dentin:new T.MeshPhysicalMaterial({color:'#ffffff',map:dentin,roughness:.7,side:T.DoubleSide}),
  pulp:flesh(pulp),cementum:new T.MeshPhysicalMaterial({color:'#cdb58c',roughness:.82,side:T.DoubleSide}),
  pdl:new T.MeshPhysicalMaterial({color:'#b08a96',roughness:.74,side:T.DoubleSide}),gingiva:flesh(gum),
- bone:new T.MeshPhysicalMaterial({color:'#d6cdb9',map:bone,roughness:.88,bumpMap:bone,bumpScale:.03,side:T.DoubleSide}),
+ bone:new T.MeshPhysicalMaterial({color:'#d6cdb9',map:bone,roughness:.92,specularIntensity:.35,bumpMap:bone,bumpScale:.03,side:T.DoubleSide}),
  vessels:flesh(pulp,'#b9423f'),nerve:new T.MeshPhysicalMaterial({color:'#caa259',roughness:.55,side:T.DoubleSide}),
  palate:flesh(gum),tongue:flesh(gum,'#d58887')
  };

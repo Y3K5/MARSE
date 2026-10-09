@@ -42,7 +42,7 @@ test('Blender tissues are closed and the dentin crown and roots form one connect
 
 test('packed browser meshes preserve the canonical Blender vertices and indices',()=>{
  const source=JSON.parse(readFileSync(new URL('../assets/pocket-organic/anatomy.json',import.meta.url)));
- for(const health of ['healthy','periodontitis']){const actual=buildPocket(health);source.cases[health].forEach((part,i)=>{assert.equal(actual[i].id,part.id);assert.deepEqual(actual[i].geometry.getAttribute('position').array,new Float32Array(part.positions));assert.deepEqual(actual[i].geometry.index.array,new Uint16Array(part.indices));actual[i].geometry.dispose();});}
+ for(const health of ['healthy','periodontitis']){const actual=buildPocket(health);source.cases[health].forEach((part,i)=>{assert.equal(actual[i].id,part.id);assert.deepEqual(actual[i].geometry.getAttribute('position').array,new Float32Array(part.positions));assert.deepEqual(actual[i].geometry.index.array,new Uint32Array(part.indices));actual[i].geometry.dispose();});}
 });
 
 const {quarterSection}=await import('../dist/pocket-core/pocket-section.mjs');

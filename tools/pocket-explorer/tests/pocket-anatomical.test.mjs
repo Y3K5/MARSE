@@ -12,17 +12,6 @@ test('supporting compartments are substantial closed volumes, with two distinct 
   for(const id of ['pdl','connective','gingiva'])assert.ok(volume(parts.find(p=>p.id===id))>5,health+' '+id+' collapsed');
  }
 });
-test('basal gingival edge is a continuous rolled contour without Boolean teeth',()=>{
- // Lowest gingival vertex per azimuth traces the basal edge on the cortical plate.
- // The earlier voxel-repaired collar measured 1.15 / 0.80 model units here.
- for(const [health,parts] of Object.entries(asset.cases)){
-  const g=parts.find(p=>p.id==='gingiva'),bins=180,low=Array(bins).fill(Infinity);
-  for(let i=0;i<g.positions.length;i+=3){const b=Math.floor((Math.atan2(g.positions[i+2],g.positions[i])+Math.PI)/(2*Math.PI)*bins)%bins;low[b]=Math.min(low[b],g.positions[i+1]);}
-  assert.ok(low.every(Number.isFinite),health+' gingiva leaves an azimuth uncovered');
-  const worst=Math.max(...low.map((y,i)=>Math.abs(y-(low[(i+bins-1)%bins]+low[(i+1)%bins])/2)));
-  assert.ok(worst<0.25,health+' basal edge roughness '+worst.toFixed(3));
- }
-});
 test('every exported triangle edge is shared by exactly two triangles',()=>{
  for(const [health,parts] of Object.entries(asset.cases))for(const part of parts){
   const uses=new Map();for(let i=0;i<part.indices.length;i+=3)for(let k=0;k<3;k++){const a=part.indices[i+k],b=part.indices[i+(k+1)%3],key=a<b?a*65536+b:b*65536+a;uses.set(key,(uses.get(key)||0)+1);}
@@ -37,6 +26,33 @@ test('plaque compartments follow the tooth above and below the margin without sp
   const film=sub.find(p=>p.name.includes('Circumferential')),z=film.positions.filter((_,i)=>i%3===2);
   assert.ok(Math.max(...z)>3&&Math.min(...z)<-3,health);
   for(const p of [...supra,...sub])assert.ok(volume(p)>0.05&&volume(p)<5,health+' '+p.name);
+ }
+});
+test('a three-tooth segment gives the gingiva somewhere natural to continue',()=>{
+ const seg=asset.authored_features.segment;
+ assert.deepEqual(seg.teeth,['FDI 35','FDI 36','FDI 37']);assert.equal(seg.selected,'FDI 36');
+ const [x0,x1]=seg.ends;
+ for(const [health,parts] of Object.entries(asset.cases)){
+  assert.equal(parts.filter(p=>p.id==='enamel').length,3,health+' enamel of 35, 36 and 37');
+  assert.ok(parts.some(p=>p.name.includes('FDI 35'))&&parts.some(p=>p.name.includes('FDI 37')),health);
+  const gum=parts.filter(p=>p.id==='gingiva');assert.equal(gum.length,1,health+' one continuous gingiva');
+  const g=gum[0].positions,bins=new Map();
+  for(let i=0;i<g.length;i+=3){const x=g[i],z=g[i+2];if(x<x0-.01||x>x1+.01)continue;const key=Math.floor((x-x0)/(x1-x0)*80)+(z>0?':b':':l');bins.set(key,Math.min(bins.get(key)??Infinity,g[i+1]));}
+  // Gingiva covers both the cheek and the tongue side along the whole segment.
+  for(const side of [':b',':l'])for(let k=0;k<80;k++)assert.ok(bins.has(k+side),health+' gap in gingiva at bin '+k+side);
+  // Its basal edge is a continuous rolled contour along each side, without the
+  // Boolean teeth of the earlier voxel-repaired collar.
+  for(const side of [':b',':l']){const low=Array.from({length:80},(_,k)=>bins.get(k+side));const worst=Math.max(...low.slice(1,-1).map((y,k)=>Math.abs(y-(low[k]+low[k+2])/2)));assert.ok(worst<0.25,health+side+' basal edge roughness '+worst.toFixed(3));}
+ }
+});
+test('interdental papillae rise above the attached gingiva beside 36',()=>{
+ const g=asset.cases.healthy.find(p=>p.id==='gingiva').positions;
+ // Highest gingiva in a thin slice across the arch, between two |z| limits.
+ const top=(x,z0,z1)=>{let y=-Infinity;for(let i=0;i<g.length;i+=3){const z=Math.abs(g[i+2]);if(Math.abs(g[i]-x)<.35&&z>=z0&&z<z1)y=Math.max(y,g[i+1]);}return y;};
+ for(const x of [-5.4,5.2]){
+  const papilla=top(x,0,1),attached=top(x,4.6,6.2);
+  assert.ok(papilla>-1.5,'papilla at x='+x+' only reaches '+papilla.toFixed(2));
+  assert.ok(papilla>attached+1,'papilla at x='+x+' ('+papilla.toFixed(2)+') not above attached gingiva ('+attached.toFixed(2)+')');
  }
 });
 test('pocket and junctional boundary retain separate shallow and deep extents',()=>{

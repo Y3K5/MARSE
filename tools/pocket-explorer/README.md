@@ -85,26 +85,52 @@ context: the cheek drawn back over the mesial half, showing the buccal
 vestibule, and the lateral tongue border. A lower first molar faces the cheek;
 the lips border the front teeth.
 
-**Remaining visual defects:** the soft tissue over the block's mesiodistal crest
-still reads as a rounded shelf, because the specimen block ends where
-neighbouring teeth would be. Cusp tips remain slightly sharp. Some pulp horns and
-canals lie outside a given slice. Pocket crops apical context intentionally;
-Tooth shows the full model. Cheek and tongue context is schematic, and the
-Mouth view is still earlier procedural art. In periodontitis the distal loss
-transition forms a steep angular step in the crest. Expert anatomical review is
-**pending** and physical calibration is unresolved. Blender Boolean
-triangulation can vary slightly across rebuilds, so this package does not promise
-byte-identical mesh exports. Saved endpoint data stays exact; viewer buffers are
-checked against each newly exported source.
+**Segment pass (claude/pocket-tissue-continuity).** FDI 36 now sits in a
+three-tooth segment with partial FDI 35 (second premolar) and FDI 37 (second
+molar, the 36 model scaled). These neighbours are authored context, not reviewed
+anatomy. The gingiva is one continuous tissue. A lofted band covers the crest
+and both plates, and its surface rises toward each neighbour's scalloped margin.
+Papillae form where the neighbouring slopes meet in the embrasures. The detailed
+36 collar emerges from that band. Bone is one alveolar segment whose crest
+scallops around each tooth. Periodontitis loss stays at the 36 distal site and
+forms a shared interdental crater with 37. The viewer trims every part to the
+specimen ends, so the cut faces show enamel, dentin, pulp, ligament, cortical
+and trabecular bone instead of a rounded demonstration block.
 
-| Before (starting commit) | After |
+The crowns gained lobed axial walls and rounded transitions into the cusp slopes,
+with flatter lingual faces. Grooves are slightly shaded so they read at a
+glance. Pocket view frames the 36 distal pocket. Labels have stronger contrast,
+and the selected tissue glows, one at a time. The pocket fluid label and
+inspector state that widths are exaggerated: in the mouth the tissue lies close
+against the tooth and no open gap is visible. Cheek and tongue context starts
+under the gum's basal edge as alveolar mucosa, folds at the vestibule or floor of
+the mouth, and fades toward the specimen ends. The biofilm detail adds an
+orientation inset showing where on 36 the across-plaque view sits. Saved fields
+carry a dashed frame and a "not placed on the tooth" badge. Exported meshes use
+32-bit indices (packed format `/2`).
+
+**Remaining visual defects:** cusp tips remain slightly sharp, and neighbour
+crowns are generic. In periodontitis the receded 36 distal site forms a narrow
+cleft beside the healthier 37 papilla, and the distal loss transition is a steep
+step. Some pulp horns and canals lie outside a given slice. Pocket crops apical
+context intentionally; Tooth shows the full segment. Cheek and tongue context is
+schematic, and the Mouth view is still earlier procedural art. The larger scene
+renders slowly under software WebGL. Expert anatomical review is **pending** and
+physical calibration is unresolved. Blender Boolean triangulation can vary
+slightly across rebuilds, so this package does not promise byte-identical mesh
+exports. Saved endpoint data stays exact; viewer buffers are checked against
+each newly exported source.
+
+| Before (art pass) | After (segment pass) |
 |---|---|
-| ![Before: quarter cutaway](docs/images/before-cutaway.jpg) | ![After: quarter cutaway](docs/images/cutaway.jpg) |
-| ![Before: exterior with ragged gum edge](docs/images/before-exterior.jpg) | ![After: exterior with rolled gum edge](docs/images/exterior.jpg) |
+| ![Before: single-tooth cutaway](docs/images/before-cutaway.jpg) | ![After: segment cutaway](docs/images/cutaway.jpg) |
+| ![Before: tooth in a demonstration block](docs/images/before-exterior.jpg) | ![After: continuous gingiva over three teeth](docs/images/exterior.jpg) |
 
 ![Healthy sulcus after the art pass](docs/images/healthy.jpg)
 
 ![Tooth view with cheek and tongue context](docs/images/tooth-context.jpg)
+
+![Biofilm detail with orientation inset](docs/images/biofilm-detail.jpg)
 
 Software/topology checks establish their stated mesh/display properties only.
 This is not clinical validation, measured pocket anatomy, diagnosis, or a model

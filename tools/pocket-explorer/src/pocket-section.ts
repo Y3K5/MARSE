@@ -21,3 +21,26 @@ export function quarterSection(input:T.BufferGeometry):SectionResult{
  for(const g of [left.surface,left.cap,right.surface,right.cap,rightClosed,closed.surface,closed.cap,rightSkin.surface,rightSkin.cap,rotated,front.surface,front.cap])g.dispose();
  return {surface,cap,loops:left.loops+right.loops+closed.loops,openChains:left.openChains+right.openChains+closed.openChains};
 }
+// Clip a closed volume at the plane x = const, keeping x <= x (below) or x >= x.
+function clipX(input:T.BufferGeometry,x:number,below:boolean):SectionResult{
+ const turn=below?-Math.PI/2:Math.PI/2,turned=input.clone().rotateY(turn);
+ const s=sectionGeometry(turned,below?x:-x);turned.dispose();s.surface.rotateY(-turn);s.cap.rotateY(-turn);return s;
+}
+// Trim the authored segment to its specimen ends, x0 <= x <= x1. The result is
+// closed: flat end faces show the tissue layers where the segment was cut.
+export function endSection(input:T.BufferGeometry,x0:number,x1:number):SectionResult{
+ const hi=clipX(input,x1,true),closed=mergeGeometries([hi.surface,hi.cap])!;
+ const lo=clipX(closed,x0,false),surface=mergeGeometries([lo.surface,lo.cap])!;
+ for(const g of [hi.surface,hi.cap,closed,lo.surface,lo.cap])g.dispose();
+ surface.computeBoundingSphere();
+ return {surface,cap:new T.BufferGeometry(),loops:hi.loops+lo.loops,openChains:hi.openChains+lo.openChains};
+}
+// Separate triangles lying on the specimen end planes so they render as cut faces.
+export function splitEnds(input:T.BufferGeometry,x0:number,x1:number){
+ const p=input.getAttribute('position'),n=input.getAttribute('normal'),attrs=Object.keys(input.attributes);
+ const keep:Record<string,number[]>={},ends:Record<string,number[]>={};for(const a of attrs){keep[a]=[];ends[a]=[];}
+ const onPlane=(i:number)=>[0,1,2].every(k=>Math.abs(p.getX(i+k)-x0)<1e-3)||[0,1,2].every(k=>Math.abs(p.getX(i+k)-x1)<1e-3);
+ for(let i=0;i<p.count;i+=3){const target=onPlane(i)&&Math.abs(n.getX(i))>.9?ends:keep;for(const a of attrs){const attr=input.getAttribute(a);for(let k=0;k<3;k++)for(let c=0;c<attr.itemSize;c++)target[a].push(attr.array[(i+k)*attr.itemSize+c]);}}
+ const build=(data:Record<string,number[]>)=>{const g=new T.BufferGeometry();for(const a of attrs)g.setAttribute(a,new T.Float32BufferAttribute(data[a],input.getAttribute(a).itemSize));g.computeBoundingSphere();return g;};
+ return {surface:build(keep),ends:build(ends)};
+}
