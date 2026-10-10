@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
-import {buildCrevice,microbialObject,microbialPlacements,creviceGap,creviceLandmarks,creviceCamera,CREVICE_CLAIM} from '../dist/pocket-core/pocket-crevice.mjs';
+import {buildCrevice,microbialObject,microbialPlacements,creviceGap,creviceLandmarks,creviceCamera,creviceProfiles,creviceLabels,crevicePoint,toothWall,CREVICE_CLAIM,CREVICE_SWEEP} from '../dist/pocket-core/pocket-crevice.mjs';
 import {TAXA,PRESETS} from '../dist/pocket-core/pocket-science.mjs';
 const hash=g=>createHash('sha256').update(Buffer.from(g.getAttribute('position').array.buffer)).digest('hex');
 test('all nine objects are deterministic, distinct, finite and source identified',()=>{
@@ -38,5 +38,59 @@ test('every authored tissue loft has closed, consistently oriented section bound
   }
   assert.ok([...edges.values()].every(v=>v[0]===2&&v[1]===0),health+' '+part.id+' open or reversed seam');assert.ok(volume>0);
   assert.deepEqual(g.groups.map(p=>p.materialIndex),[0,1]);g.dispose();
+ }
+});
+const inside=(pt,poly)=>{let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const [xi,yi]=poly[i],[xj,yj]=poly[j];if((yi>pt[1])!==(yj>pt[1])&&pt[0]<(xj-xi)*(pt[1]-yi)/(yj-yi)+xi)c=!c;}return c;};
+const crosses=(a,b,c,d)=>{const o=(p,q,r)=>Math.sign((q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]));return o(a,b,c)*o(a,b,d)<0&&o(c,d,a)*o(c,d,b)<0;};
+test('tissue profiles are simple and do not overlap one another',()=>{
+ for(const health of ['healthy','periodontitis']){
+  const profiles=creviceProfiles(health),tissues=Object.entries(profiles).filter(([k])=>k!=='cuff');
+  for(const [key,p]of Object.entries(profiles)){
+   assert.ok(p.length>=8,health+' '+key);
+   for(let i=0;i<p.length;i++)for(let j=i+2;j<p.length;j++){if(i===0&&j===p.length-1)continue;assert.ok(!crosses(p[i],p[(i+1)%p.length],p[j],p[(j+1)%p.length]),health+' '+key+' self-intersects');}
+  }
+  // Dense interior sampling: no point lies inside two tissues.
+  let samples=0;for(let x=-6.3;x<2.6;x+=.031)for(let y=-17;y<5.4;y+=.029){const n=tissues.filter(([,p])=>inside([x,y],p)).length;assert.ok(n<=1,health+' overlap at '+x.toFixed(2)+','+y.toFixed(2));samples+=n;}
+  assert.ok(samples>20000,health+' profiles cover the section');
+ }
+});
+test('sulcular and junctional epithelia, supracrestal connective tissue and ligament stay distinct',()=>{
+ for(const health of ['healthy','periodontitis']){
+  const P=creviceProfiles(health),{margin,attachment,junction,crest}=creviceLandmarks(health);
+  assert.ok(margin>attachment&&attachment>junction&&junction>crest);
+  const near=(key,y,dx)=>inside([toothWall(y)+dx,y],P[key]);
+  // Fluid space beside the tooth in the sulcus; junctional epithelium on the tooth below it.
+  const mid=(margin+attachment)/2;assert.ok(!Object.entries(P).some(([k,p])=>k!=='cuff'&&inside([toothWall(mid)+creviceGap(mid,health)/2,mid],p)),health+' sulcus is open');
+  assert.ok(near('junctional',(attachment+junction)/2,.02),health+' junctional attachment on tooth');
+  assert.ok(near('connective',(junction+crest)/2,.05),health+' supracrestal connective tissue meets cementum');
+  assert.ok(near('pdl',crest-1,.1)&&near('bone',crest-1,.5),health+' ligament between root and socket');
+  assert.ok(near('sulcular',mid,creviceGap(mid,health)+.08),health+' sulcular lining faces the fluid space');
+  assert.ok(near('cementum',-2,-.03)&&near('enamel',1,-.05),health+' root and crown coverings');
+ }
+});
+test('section labels point inside the tissue they name, on the opened face',()=>{
+ const {axis,radius,half}=CREVICE_SWEEP;
+ const profile=([x,y,z])=>[axis+Math.hypot(x-axis,z),y,Math.atan2(z,x-axis)*radius];
+ const owner={enamel:'enamel',margin:'gingiva',oral:'gingiva',plaque:'plaque',sulcular:'sulcular',junctional:'junctional',connective:'connective',cementum:'cementum',pdl:'pdl',bone:'bone',dentin:'dentin',pulp:'pulp'};
+ for(const health of ['healthy','periodontitis']){
+  const P=creviceProfiles(health);
+  for(const l of creviceLabels('section',health)){
+   const [x,y,z]=profile(l.point);assert.ok(Math.abs(z-half)<1e-6,l.key+' anchor on the section face');
+   if(owner[l.key])assert.ok(inside([x,y],P[owner[l.key]]),health+' '+l.key+' anchor outside '+owner[l.key]);
+   else assert.ok(!Object.entries(P).some(([k,p])=>k!=='cuff'&&inside([x,y],p)),health+' '+l.key+' anchor should be in the open fluid space');
+  }
+  assert.ok(creviceLabels('section',health).filter(l=>l.essential).length<=6,'compact layouts keep a short label set');
+ }
+});
+test('illustrative forms rest on the plaque film below the retained margin band',()=>{
+ const {axis}=CREVICE_SWEEP;
+ for(const health of ['healthy','periodontitis']){
+  const P=creviceProfiles(health),cuffBottom=Math.min(...P.cuff.map(p=>p[1]));
+  for(const p of microbialPlacements(health)){
+   const [x,y,z]=p.position,r=axis+Math.hypot(x-axis,z),gap=r-toothWall(y);
+   assert.ok(gap>.05&&gap<.36,health+' '+p.id+' rests on the film, not floating ('+gap.toFixed(3)+')');
+   assert.ok(y+(health==='healthy'?.45:.85)*.5<cuffBottom,health+' '+p.id+' visible below the margin band');
+   assert.ok(Math.abs(z)<2.4,health+' '+p.id+' inside the swept patch');
+  }
  }
 });

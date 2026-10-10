@@ -12,28 +12,51 @@ change a microbial simulation.
 
 Open the local preview at http://127.0.0.1:8975/pocket.html while its server runs.
 Choose **Crevice** for a magnified tooth–gum space, or open
-http://127.0.0.1:8975/pocket.html?view=crevice directly. **Opened section** exposes
-the walls and attachment; **Look down** views the entrance; **Biofilm surface**
-cuts away opposing tissue to inspect nine selectable 3D taxon/group examples.
-Click a form or use the species selector to focus it and open its morphology
-reference. The crevice now bends through its depth and tapers into the support.
-Its gingival margin is a continuous fold. Exposed surfaces use softer highlights;
-deliberate section faces are matte. Camera buttons travel gently for about half a
-second; dragging, scrolling or arrow keys stop the travel. Reduced-motion mode
-changes cameras immediately. Biofilm surface opens the lining and core while
-keeping margin, ligament and bone context. The tissue patterns are artistic
-surface cues, not measured fibers or trabeculae. Other forms remain present. These are a display library, not a
-measured natural arrangement. Widths and each cell size are independently
-exaggerated; sizes also change to fit the preset, without biological meaning.
-The crevice is a separate authored explanatory patch, not measured segmentation
-of the molar. The 2D fallback disables this 3D scale and retains Pocket.
+http://127.0.0.1:8975/pocket.html?view=crevice directly. The crevice is one small
+piece of tooth and gum, cut open at the end nearest you and curved around the
+root, so the gum wraps the tooth like a cuff. Its far, deep and inner edges fade
+into the background on purpose: they are where the drawing stops, not anatomy.
+
+Each camera answers one question:
+
+- **Opened section** — what lies between tooth and bone? Reading outward from
+  the tooth, the cut face shows:
+  - enamel, root dentin and pulp, with cementum on the root;
+  - attached plaque and the fluid space;
+  - sulcular epithelium lining the soft-tissue wall;
+  - junctional epithelium attached to the tooth at the base;
+  - connective tissue, which meets the root between the junctional epithelium
+    and the bone;
+  - periodontal ligament and the rounded alveolar crest.
+- **Look down** — how does the gum meet the tooth? The gingival margin hugs the
+  crown like a cuff around a narrow entrance. At the cut face the entrance opens
+  into the V of the sulcus or pocket.
+- **Biofilm surface** — what coats the tooth? The soft tissue is cut away to show
+  plaque on the root. A margin band, the junctional attachment and the crest are
+  kept for orientation. Nine selectable 3D forms rest on the plaque. Click a form
+  or use the species selector to focus it and open its morphology reference.
+
+Labels sit to either side and never cover the pocket. Click a label, or the
+tissue itself, to read about it in the inspector. A dashed leader means its point
+is behind tissue from the current angle. Camera buttons travel smoothly for
+under a second. Dragging, scrolling or arrow keys stop the move, and Home
+returns to the current view. Reduced-motion mode changes cameras immediately.
+
+The nine forms are a display gallery, not where these organisms live. Widths,
+plaque thickness and each cell size are enlarged independently; cell sizes also
+change between presets without biological meaning. Section patterns and the wavy
+gum-epithelium boundary are artistic cues, not measured fibres, ridges or
+trabeculae. The crevice is a separate authored explanatory patch, not measured
+segmentation of the molar. The 2D fallback disables this 3D scale and retains
+Pocket. Known limits are listed in docs/crevice-anatomy-verification.md.
 
 Generate reusable local GLB objects with `node tools/export-crevice-objects.mjs
 <output-directory>`. This exports the same nine forms with source identities,
 normalized authoring units and hashes. They can be opened in Blender or another
 GLB viewer. Exported forms never read saved density fields.
-See docs/organic-crevice-verification.md for the current checks and limits;
-docs/crevice-verification.md records the preceding scaffold pass.
+See docs/crevice-anatomy-verification.md for the current checks and limits;
+docs/organic-crevice-verification.md and docs/crevice-verification.md record the
+earlier passes.
 
 Choose Species → Saved model to enlarge the map. Click a cell-form card, or
 choose a taxon below the scene, to see its field and morphology source. “All”

@@ -1,5 +1,34 @@
 # Pocket Explorer changes
 
+## 2026-10-10 — crevice anatomy, labels and cameras
+
+Rebuilt the Crevice view:
+- **Profile sweep:** each tissue is a closed profile swept around one tapering
+  root axis, so the gingiva wraps the tooth as a cuff. Apical, far and axial
+  edges fade into the stage, while the near cut face stays crisp.
+- **Separate tissues:**
+  - enamel thinning to the junction;
+  - cementum thickening apically on a tapered, slightly curved root with pulp;
+  - sulcular epithelium and a junctional wedge;
+  - connective tissue meeting cementum above the crest;
+  - oral epithelium with a rounded margin;
+  - ligament and a rounded crest.
+- **Rendering:** matte materials with paler section faces; plaque film relief.
+- **Microbial forms:** unchanged geometry, now resting on the film below a
+  retained margin band.
+- **Cameras:** three distinct relationships per camera, and orbiting 0.72 s
+  travel that input interrupts.
+- **Labels:** in columns outside the pocket, with anchored leaders and
+  occlusion dashes.
+
+Checked locally:
+- 46 of 49 package tests pass, including four new crevice tests. The 3 atlas
+  tests fail only because the atlas source host is blocked in this sandbox.
+- All 20 saved density displays and 9 GLB objects are identical.
+- 26 of 26 browser checks pass at 390, 768 and 1440 px.
+
+Nothing was committed or pushed. See docs/crevice-anatomy-verification.md.
+
 ## 2026-10-09 — local commit preparation
 
 Prepared the existing anatomy, species and organic-crevice source changes as

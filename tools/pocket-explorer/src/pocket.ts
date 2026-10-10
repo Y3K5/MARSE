@@ -13,7 +13,7 @@ import {TAXA,SOURCES,PRESETS,observation,validateSaved,gridRGBA,type Health,type
 import rawInput from './pocket-input.json';
 import {REFERENCES,PARAMETERS,NERVE_STEPS,CROWN_REFERENCE} from './pocket-reference';
 import {MORPHOLOGY,morphologyPanel} from './pocket-morphology';
-import {buildCrevice,creviceCamera,creviceLandmarks,crevicePoint,toothWall,creviceGap,CREVICE_CLAIM,type CreviceView} from './pocket-crevice';
+import {buildCrevice,creviceCamera,creviceLabels,creviceLandmarks,CREVICE_CLAIM,CREVICE_DETAILS,CREVICE_SWEEP,type CreviceView,type CrevicePart,type CreviceFinish,type CreviceDetail,type CreviceLabel} from './pocket-crevice';
 import {SEQUENCES,stageAt,sequenceSVG,sourceForStage,type Sequence} from './pocket-sequences';
 import {neuralContext,FDI36_POSE,type ContextPart} from './pocket-context';
 import {atlasContext,ATLAS_FDI36,ATLAS_SOURCE,ATLAS_CREDIT,type AtlasPart} from './pocket-atlas';
@@ -35,8 +35,9 @@ let composer:EffectComposer|undefined,ao:SSAOPass|undefined;
 const cache=new Map<string,PocketPart[]>(),display:T.Mesh[]=[],capMats=new Map<string,T.MeshPhysicalMaterial>();
 const tissueAnchors=new Map<PocketId,T.Vector3>();
 const remembered=new Map<Scale,{position:number[];target:number[]}>();
-let creviceView:CreviceView='section';
-let cameraTravel:{start:number;from:T.Vector3;to:T.Vector3;fromTarget:T.Vector3;toTarget:T.Vector3}|undefined;
+let creviceView:CreviceView='section',creviceDetail:CreviceDetail|undefined;
+let cameraTravel:{start:number;from:T.Spherical;to:T.Spherical;fromTarget:T.Vector3;toTarget:T.Vector3}|undefined;
+const TRAVEL_MS=720;
 function stopCameraTravel(){cameraTravel=undefined;stage.dataset.cameraTransition='idle';}
 let neuro=false,sequence:Sequence='assembly',storyProgress=0,playing=false,storyLast=0;
 const referenceMatrix=new T.Matrix4().makeScale(...CROWN_REFERENCE.scale);
@@ -101,7 +102,17 @@ function travelCreviceCamera(){
  const from=camera.position.clone(),fromTarget=controls.target.clone();view(true);
  if(reducedMotion){stage.dataset.cameraTransition='reduced-motion';return;}
  const to=camera.position.clone(),toTarget=controls.target.clone();camera.position.copy(from);controls.target.copy(fromTarget);controls.update();
- cameraTravel={start:performance.now(),from,to,fromTarget,toTarget};stage.dataset.cameraTransition='moving';dirty=true;
+ // Orbit around a moving target rather than cutting straight through tissue.
+ const a=new T.Spherical().setFromVector3(from.clone().sub(fromTarget)),b=new T.Spherical().setFromVector3(to.clone().sub(toTarget));
+ b.theta=a.theta+Math.atan2(Math.sin(b.theta-a.theta),Math.cos(b.theta-a.theta));
+ cameraTravel={start:performance.now(),from:a,to:b,fromTarget,toTarget};stage.dataset.cameraTransition='moving';dirty=true;
+}
+function stepCameraTravel(){
+ if(!cameraTravel||!controls)return;
+ const t=T.MathUtils.clamp((performance.now()-cameraTravel.start)/TRAVEL_MS,0,1),e=t<.5?4*t*t*t:1-(-2*t+2)**3/2,{from:a,to:b}=cameraTravel;
+ controls.target.lerpVectors(cameraTravel.fromTarget,cameraTravel.toTarget,e);
+ const s=new T.Spherical(Math.exp(T.MathUtils.lerp(Math.log(a.radius),Math.log(b.radius),e)),T.MathUtils.lerp(a.phi,b.phi,e),T.MathUtils.lerp(a.theta,b.theta,e));
+ camera.position.copy(controls.target).add(new T.Vector3().setFromSpherical(s));controls.update();dirty=true;if(t===1)stopCameraTravel();
 }
 // Translucent oral-side context never drives framing or label placement.
 function modelBox(){const box=new T.Box3();for(const mesh of display)if(!mesh.userData.context)box.expandByObject(mesh);return box;}
@@ -164,6 +175,57 @@ function decorate(part:PreparedPart){
   g.setAttribute('attachedGingiva',new T.Float32BufferAttribute(attached,1));
  }
 }
+// Crevice finishes: restrained, mostly matte surfaces. Deliberate section faces
+// are flatter and slightly paler; connective, ligament and bone sections carry
+// faint artistic pattern cues, not measured fibres or trabeculae.
+const CREVICE_FINISH:Record<CreviceFinish,{roughness:number;clearcoat?:number;sheen?:number;sheenColor?:string;specular:number;env:number;bump?:'soft'|'bone';section:number;pattern?:'fiber'|'bone'}>={
+ enamel:{roughness:.42,clearcoat:.06,sheen:.14,sheenColor:'#eef2f0',specular:.55,env:.3,section:.74},
+ hard:{roughness:.66,specular:.35,env:.14,section:.88},
+ pulp:{roughness:.6,sheen:.2,sheenColor:'#d98a7e',specular:.35,env:.12,section:.86},
+ bone:{roughness:.86,specular:.28,env:.1,bump:'bone',section:.92,pattern:'bone'},
+ ligament:{roughness:.72,sheen:.18,sheenColor:'#d99286',specular:.35,env:.12,section:.9,pattern:'fiber'},
+ soft:{roughness:.54,clearcoat:.04,sheen:.3,sheenColor:'#efa596',specular:.45,env:.18,bump:'soft',section:.9,pattern:'fiber'},
+ lining:{roughness:.46,clearcoat:.06,sheen:.22,sheenColor:'#f3b8a8',specular:.45,env:.18,bump:'soft',section:.86},
+ film:{roughness:.82,sheen:.3,sheenColor:'#cdb683',specular:.25,env:.08,bump:'soft',section:.92},
+ cell:{roughness:.5,clearcoat:.05,specular:.45,env:.2,section:.5}
+};
+// Edge fade from world position: the apical end, the far end of the sweep and
+// the region near the root axis dissolve into the stage (premultiplied alpha
+// over the transparent canvas) instead of ending as slabs. Section faces stay
+// crisp where the specimen is deliberately opened.
+// Near-end fade (strength, width) per camera: Opened section keeps its cut face
+// crisp; Look down and Biofilm surface let the swept cuff dissolve at both ends.
+const creviceNear={value:new T.Vector3(0,1,.3)};
+function creviceShader(m:T.MeshPhysicalMaterial,pattern:number,mottle=false){
+ const {axis,radius,half}=CREVICE_SWEEP,bottom=creviceLandmarks(health).bottom,f=(n:number)=>n.toFixed(4);
+ m.customProgramCacheKey=()=>`marse-crevice-fade-3:${pattern}:${mottle}:${f(bottom)}`;
+ m.onBeforeCompile=shader=>{
+  shader.uniforms.creviceNear=creviceNear;
+  shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vCreviceWorld;').replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvCreviceWorld=(modelMatrix*vec4(transformed,1.0)).xyz;');
+  shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>
+varying vec3 vCreviceWorld;
+uniform vec3 creviceNear;
+float creviceFade(){vec2 q=vec2(vCreviceWorld.x-(${f(axis)}),vCreviceWorld.z);float arc=atan(q.y,q.x)*${f(radius)};
+ float floor0=creviceNear.z,near=mix(1.0,floor0+(1.0-floor0)*(1.0-smoothstep(${f(half)}-creviceNear.y,${f(half)},arc)),creviceNear.x);
+ return smoothstep(${f(bottom)},${f(bottom+3.4)},vCreviceWorld.y)*(floor0+(1.0-floor0)*smoothstep(${f(-half)},${f(-half)}+max(creviceNear.y,2.4),arc))*near*(.35+.65*smoothstep(.2,1.05,length(q)));}`)
+   .replace('#include <opaque_fragment>','#include <opaque_fragment>\n{float k=creviceFade();gl_FragColor=vec4(gl_FragColor.rgb*k,k);}');
+  if(pattern)shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',T.ShaderChunk.map_fragment.replace('diffuseColor *= sampledDiffuseColor;',`diffuseColor *= mix(vec4(1.0), sampledDiffuseColor, ${pattern.toFixed(2)});`));
+  // Soft, low-frequency mottling: an artistic film cue, not microcolony structure.
+  if(mottle)shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\n{vec3 w=vCreviceWorld;diffuseColor.rgb*=.9+.1*(.5+.5*sin(w.y*7.0+sin(w.z*5.0)*1.6)*sin(w.z*6.3+w.y*2.1));}');
+ };
+}
+function creviceMaterial(part:CrevicePart,muted:boolean){
+ const f=CREVICE_FINISH[part.finish??'hard'];
+ const m=new T.MeshPhysicalMaterial({color:muted?'#7e8c87':part.color,roughness:f.roughness,clearcoat:f.clearcoat??0,clearcoatRoughness:.6,sheen:f.sheen??0,sheenColor:f.sheenColor??'#ffffff',sheenRoughness:.75,specularIntensity:f.specular,envMapIntensity:f.env,side:T.FrontSide});
+ if(part.taxon){if(!muted){m.emissive.set(part.color);m.emissiveIntensity=.03;}return m;}
+ if(f.bump==='soft'){m.bumpMap=mats!.gingiva.bumpMap;m.bumpScale=.008;}
+ if(f.bump==='bone'){m.bumpMap=mats!.bone.bumpMap;m.bumpScale=.016;}
+ creviceShader(m,0,part.finish==='film');
+ const section=new T.MeshPhysicalMaterial({color:new T.Color(part.color).lerp(new T.Color('#f6ece2'),.1),roughness:f.section,specularIntensity:.22,envMapIntensity:.06,side:T.FrontSide});
+ if(f.pattern){section.map=f.pattern==='bone'?boneCapMap!:fiberCapMap!;}
+ creviceShader(section,f.pattern?(f.pattern==='bone'?.3:.22):0);
+ return [m,section];
+}
 const pocketCache=new PocketViewCache(decorate);
 const anchorCache=new Map<string,Map<PocketId,T.Vector3>>();
 function geometry(){
@@ -171,23 +233,11 @@ function geometry(){
  const started=performance.now();clear();
  if(scale==='crevice'){
   for(const part of buildCrevice(health)){
-   const muted=part.taxon&&taxon!=='all'&&part.taxon!==taxon;
-   const soft=['epithelium','connective','gingiva','pdl'].includes(part.id);
-   const m=new T.MeshPhysicalMaterial({color:muted?'#7e8c87':part.color,roughness:part.taxon?.46:soft?.48:part.id==='enamel'?.3:.57,clearcoat:part.taxon?.12:soft?.16:.06,clearcoatRoughness:.55,sheen:soft?.22:0,sheenColor:'#d88d80',sheenRoughness:.85,specularIntensity:.65,envMapIntensity:.22,side:T.FrontSide});
-   if(part.taxon){m.emissive.set(muted?'#000000':part.color);m.emissiveIntensity=.025;}
-   if(soft){m.bumpMap=mats.gingiva.bumpMap;m.bumpScale=.014;}
-   const section=m.clone();section.roughness=.84;section.clearcoat=0;section.sheen=0;section.specularIntensity=.25;section.envMapIntensity=.08;section.bumpScale=.008;
-   // Deliberate section faces use restrained artistic tissue cues. These
-   // patterns do not resolve measured fibers, trabeculae or cell-scale anatomy.
-   if(['connective','bone'].includes(part.id)){
-    section.map=part.id==='bone'?boneCapMap!:fiberCapMap!;section.color.set(part.id==='bone'?'#e9ddc2':'#de9b8b');section.bumpMap=null;
-    const uv=part.geometry.getAttribute('uv');for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*4,uv.getY(i)*4);
-    section.customProgramCacheKey=()=> 'marse-crevice-section-cues-1';
-    section.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',T.ShaderChunk.map_fragment.replace('diffuseColor *= sampledDiffuseColor;','diffuseColor *= mix(vec4(1.0), sampledDiffuseColor, 0.28);'));};
-   }
-   const mesh=new T.Mesh(part.geometry,part.taxon?m:[m,section]);if(part.taxon)section.dispose();mesh.name=part.name;mesh.userData={tissue:part.id,taxon:part.taxon,morphologySource:part.source,ephemeral:true,crevice:true};mesh.castShadow=true;mesh.receiveShadow=true;root.add(mesh);display.push(mesh);
+   const muted=!!part.taxon&&taxon!=='all'&&part.taxon!==taxon;
+   const mesh=new T.Mesh(part.geometry,creviceMaterial(part,muted));mesh.name=part.name;mesh.userData={tissue:part.id,taxon:part.taxon,detail:part.detail,views:part.views,morphologySource:part.source,ephemeral:true,crevice:true};mesh.castShadow=true;mesh.receiveShadow=true;root.add(mesh);display.push(mesh);
   }
-  stage.dataset.creviceSelection=health+':'+taxon;stage.dataset.microbialObjects=JSON.stringify(display.filter(m=>m.userData.taxon).map(m=>({taxon:m.userData.taxon,name:m.name,source:m.userData.morphologySource})));stage.dataset.creviceClaim=CREVICE_CLAIM;stage.dataset.triangles=String(display.reduce((n,m)=>n+triangleCount(m.geometry),0));stage.dataset.openContours='0';stage.dataset.closedContours='9 authored closed tissue lofts; software topology checks only';stage.dataset.geometryMs=(performance.now()-started).toFixed(2);stage.dataset.geometryCacheHit='false';dirty=true;updateLabels();return;
+  const tissues=display.filter(m=>!m.userData.taxon).length;
+  stage.dataset.creviceSelection=health+':'+taxon;stage.dataset.microbialObjects=JSON.stringify(display.filter(m=>m.userData.taxon).map(m=>({taxon:m.userData.taxon,name:m.name,source:m.userData.morphologySource})));stage.dataset.creviceClaim=CREVICE_CLAIM;stage.dataset.triangles=String(display.reduce((n,m)=>n+triangleCount(m.geometry),0));stage.dataset.openContours='0';stage.dataset.closedContours=tissues+' authored closed tissue sweeps; software topology checks only';stage.dataset.geometryMs=(performance.now()-started).toFixed(2);stage.dataset.geometryCacheHit='false';highlight();dirty=true;updateLabels();return;
  }
  let open=0,loops=0,triangles=0;
  let parts:PreparedPart[],hit=false;
@@ -249,7 +299,19 @@ function geometry(){
 }
 function highlight(){
  if(!mats)return;
- if(scale==='crevice'){for(const mesh of display){mesh.visible=creviceView!=='wall'||!['connective','epithelium'].includes(mesh.userData.tissue);if(!mesh.userData.taxon)for(const material of Array.isArray(mesh.material)?mesh.material:[mesh.material]){const m=material as T.MeshPhysicalMaterial;m.emissive.set(mesh.userData.tissue===selected&&layer==='structure'?'#71442a':'#000000');m.emissiveIntensity=.1;}}dirty=true;return;}
+ if(scale==='crevice'){
+  // Each camera shows its own tissue set; Biofilm surface swaps the full soft
+  // tissue for a retained marginal band so the tooth-facing plaque is exposed.
+  const margin=['margin','oral','cuff'];
+  creviceNear.value.set(creviceView==='wall'?1:0,1.3,creviceView==='section'?.3:0);
+  for(const mesh of display){
+   mesh.visible=!mesh.userData.views||mesh.userData.views.includes(creviceView);
+   if(mesh.userData.taxon)continue;
+   const d=mesh.userData.detail,on=layer==='structure'&&mesh.userData.tissue===selected&&(!creviceDetail||d===creviceDetail||(margin.includes(creviceDetail)&&margin.includes(d)));
+   for(const material of mesh.material as T.MeshPhysicalMaterial[]){material.emissive.set(on?'#6a3d24':'#000000');material.emissiveIntensity=.16;}
+  }
+  dirty=true;return;
+ }
  // One tissue at a time: the selected tissue and its cut faces glow warmly.
  for(const id of Object.keys(rank) as PocketId[]){const m=mat(id);m.emissive.set(id===selected?'#5a3612':'#000000');m.emissiveIntensity=.32;for(const cap of capMats.values())if(cap.userData.tissue===id){cap.emissive.copy(m.emissive);cap.emissiveIntensity=.30;}}
  if(layer==='species'){mat('plaque').emissive.set('#a17c36');mat('plaque').emissiveIntensity=.28;}
@@ -274,12 +336,8 @@ function updateLabels(){
  }
  leaders.replaceChildren();
  labels.hidden=!showLabels||scale==='biofilm';
- if(scale==='crevice'){
-  const {margin,attachment,crest}=creviceLandmarks(health),middle=(margin+attachment)/2;
-  const points:Partial<Record<PocketId,number[]>>={cementum:crevicePoint(toothWall(middle)+.08,middle,3.2),lumen:crevicePoint(toothWall(middle)+creviceGap(middle,health)/2,middle-1.1,3.2),epithelium:crevicePoint(toothWall(middle)+creviceGap(middle,health)+.14,middle,3.2),gingiva:crevicePoint(toothWall(margin)+.4,margin+.1,3.2),bone:crevicePoint(2.2,crest-.35,3.2),pdl:crevicePoint(toothWall((attachment+crest)/2)+.4,(attachment+crest)/2,3.2)};
-  for(const [id,b]of labelElements){b.hidden=!points[id]||creviceView==='wall';b.setAttribute('aria-label','Inspect '+names[id]);if(b.hidden)continue;const p=new T.Vector3(...points[id] as [number,number,number]).project(camera);b.textContent=id==='cementum'?'Tooth surface':id==='epithelium'?'Tissue lining':id==='lumen'?'Fluid space':id==='gingiva'?'Pocket entrance':id==='pdl'?'Ligament':'Bone crest';const ax=(p.x+1)/2*stage.clientWidth,ay=(-p.y+1)/2*canvas.clientHeight+62,dx=id==='cementum'||id==='pdl'?-72:id==='epithelium'?88:id==='gingiva'?48:0,dy=id==='gingiva'?-28:id==='lumen'?35:0,x=T.MathUtils.clamp(ax+dx,58,stage.clientWidth-68),y=T.MathUtils.clamp(ay+dy,92,stage.clientHeight-136);b.style.left=x+'px';b.style.top=y+'px';leaders.setAttribute('viewBox',`0 0 ${stage.clientWidth} ${stage.clientHeight}`);const line=document.createElementNS('http://www.w3.org/2000/svg','path');line.setAttribute('d',`M${ax},${ay}L${x},${y}`);line.setAttribute('stroke','#b5c4b1');line.setAttribute('stroke-opacity','.45');line.setAttribute('fill','none');leaders.append(line);}
-  return;
- }
+ for(const b of creviceLabelElements.values())b.hidden=true;
+ if(scale==='crevice'){for(const b of labelElements.values())b.hidden=true;layoutCreviceLabels();return;}
  if(scale==='mouth'||scale==='face'){
   for(const [id,b]of labelElements){b.setAttribute('aria-label','Inspect '+names[id]);b.hidden=id!=='plaque';if(id==='plaque'){b.textContent='Selected FDI 36 →';b.setAttribute('aria-label','Open FDI 36 tooth detail');const p=ATLAS_FDI36.clone().project(camera);b.style.left=((p.x+1)/2*stage.clientWidth)+'px';b.style.top=((-p.y+1)/2*canvas.clientHeight+62+24)+'px';}}
   return;
@@ -306,6 +364,66 @@ function updateLabels(){
   const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');dot.setAttribute('cx',String(item.ax));dot.setAttribute('cy',String(item.ay));dot.setAttribute('r','2');dot.setAttribute('fill','#d8bc8b');leaders.append(dot);
  }}
 }
+// Crevice labels stand in two columns on either side of the fluid space, never
+// on the narrow pocket itself. Each leader ends on its projected anchor, which
+// lies on the section face or a surface the camera faces.
+const creviceLabelElements=new Map<string,HTMLButtonElement>(),creviceOcclusion=new Map<string,boolean>();
+let creviceAnchors:Array<{key:string;point:T.Vector3;taxon?:string}>=[],occlusionTimer:ReturnType<typeof setTimeout>|undefined;
+function layoutCreviceLabels(){
+ const width=stage.clientWidth,top=62,h=canvas.clientHeight||stage.clientHeight-175,compact=width<560;
+ stage.dataset.labelMode=compact?'compact':'full';
+ const items=creviceLabels(creviceView,health,taxon).filter(s=>!compact||s.essential).map(s=>{const p=new T.Vector3(...s.point).project(camera);return {s,ax:(p.x+1)/2*width,ay:(-p.y+1)/2*h+top,ok:p.z<1};})
+  .filter(i=>i.ok&&Number.isFinite(i.ax)&&Number.isFinite(i.ay)&&i.ax>4&&i.ax<width-4&&i.ay>top+4&&i.ay<top+h-4);
+ const pivot=items.find(i=>i.s.key==='lumen')??items.find(i=>i.s.key==='plaque'),split=pivot?pivot.ax:width/2;
+ // Screen extent of the visible specimen, from a sparse vertex sample above the faded apical end.
+ let minX=Infinity,maxX=-Infinity;const v=new T.Vector3(),floor=creviceLandmarks(health).bottom+1.2;
+ for(const m of display){if(!m.visible||m.userData.taxon)continue;const a=m.geometry.getAttribute('position');for(let k=0;k<a.count;k+=23){v.fromBufferAttribute(a,k);if(v.y<floor)continue;v.project(camera);if(v.z>=1)continue;const sx=(v.x+1)/2*width;minX=Math.min(minX,sx);maxX=Math.max(maxX,sx);}}
+ const columns={left:items.filter(i=>i.ax<split),right:items.filter(i=>i.ax>=split)};
+ const gap=compact?27:31,anchors:typeof creviceAnchors=[];
+ leaders.setAttribute('viewBox',`0 0 ${width} ${stage.clientHeight}`);
+ for(const [side,list]of Object.entries(columns) as Array<['left'|'right',typeof items]>){
+  const placed=list.map(i=>{
+   let b=creviceLabelElements.get(i.s.key);
+   if(!b){b=document.createElement('button');b.className='crevice-label';labels.append(b);creviceLabelElements.set(i.s.key,b);}
+   const spec=i.s;b.onclick=()=>selectCrevice(spec);
+   b.hidden=false;b.textContent=compact?i.s.short:i.s.text;b.setAttribute('aria-label','Inspect '+i.s.text);b.dataset.side=side;
+   b.dataset.selected=String(layer==='structure'&&scale==='crevice'&&!!i.s.detail&&i.s.detail===creviceDetail||(!!i.s.taxon&&i.s.taxon===taxon));
+   return {...i,b,w:b.offsetWidth,y:i.ay};
+  }).sort((a,b)=>a.ay-b.ay);
+  if(!placed.length)continue;
+  const widest=Math.max(...placed.map(p=>p.w));
+  // Columns sit just outside their anchors and away from the pocket opening.
+  const edge=side==='left'?T.MathUtils.clamp(Math.min(minX-14,...placed.map(p=>p.ax-26)),8+widest,Math.max(8+widest,split-34)):T.MathUtils.clamp(Math.max(maxX+14,...placed.map(p=>p.ax+26)),Math.min(width-8-widest,split+34),width-8-widest);
+  let last=top+12-gap;for(const p of placed){p.y=Math.max(p.y,last+gap);last=p.y;}
+  let next=top+h-12+gap;for(const p of [...placed].reverse()){p.y=Math.min(p.y,next-gap);next=p.y;}
+  for(const p of placed){
+   p.b.style.left=edge+'px';p.b.style.top=p.y+'px';
+   const occluded=creviceOcclusion.get(p.s.key)??false;p.b.dataset.occluded=String(occluded);
+   const x=side==='left'?edge+3:edge-3,line=document.createElementNS('http://www.w3.org/2000/svg','path');
+   line.setAttribute('d',`M${x},${p.y}L${p.ax},${p.ay}`);line.setAttribute('class','crevice-leader');line.setAttribute('stroke-dasharray',occluded?'3 4':'');leaders.append(line);
+   const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');dot.setAttribute('cx',String(p.ax));dot.setAttribute('cy',String(p.ay));dot.setAttribute('r','2.6');dot.setAttribute('class','crevice-anchor');leaders.append(dot);
+   p.b.dataset.anchor=`${p.ax.toFixed(1)},${p.ay.toFixed(1)}`;anchors.push({key:p.s.key,point:new T.Vector3(...p.s.point),taxon:p.s.taxon});
+  }
+ }
+ creviceAnchors=anchors;
+ if(!cameraTravel){clearTimeout(occlusionTimer);occlusionTimer=setTimeout(checkCrevice,160);}
+}
+// After the camera settles, anchors hidden behind tissue get dashed leaders.
+function checkCrevice(){
+ if(scale!=='crevice')return;
+ const ray=new T.Raycaster(),targets=display.filter(m=>m.visible);let changed=false;
+ for(const a of creviceAnchors){
+  const d=a.point.clone().sub(camera.position),distance=d.length();ray.set(camera.position,d.normalize());ray.far=distance-.12;
+  // A form's own body never hides its own label anchor.
+  const hidden=ray.intersectObjects(a.taxon?targets.filter(m=>m.userData.taxon!==a.taxon):targets,false).length>0;if(creviceOcclusion.get(a.key)!==hidden){creviceOcclusion.set(a.key,hidden);changed=true;}
+ }
+ stage.dataset.labelOcclusion=JSON.stringify(Object.fromEntries(creviceOcclusion));
+ if(changed)updateLabels();
+}
+function selectCrevice(spec:Pick<CreviceLabel,'id'|'detail'|'taxon'>){
+ if(spec.taxon){taxon=spec.taxon;layer='species';showInspector();refresh();return;}
+ selected=spec.id;creviceDetail=spec.detail;layer='structure';showInspector();refresh();
+}
 function addSource(key:keyof typeof SOURCES){const s=SOURCES[key],a=document.createElement('a');a.href=s.url;a.textContent=s.title+' ↗';a.target='_blank';a.rel='noopener noreferrer';get('inspect-sources').append(a);}
 function showInspector(){inspector=true;get('inspector').hidden=false;get('workspace').classList.remove('inspector-closed');get('show-inspector').hidden=true;resize();}
 function inspect(title:string,is:string,shown:string,support:string,tag:string,source:keyof typeof SOURCES){
@@ -328,7 +446,7 @@ function inspectAtlas(identity:AtlasPart['atlasIdentity'],reveal=false){
  if(reveal)showInspector();inspect(identity.fdi?'FDI '+identity.fdi+' · atlas tooth':identity.name,'A named part of the BodyParts3D adult male reference atlas.','Source geometry in a shared coordinate system. Lower-jaw opening is an authored display pose; whole-tooth meshes do not separate enamel, dentin or pulp. The pocket detail is an independent specimen.','Source element '+identity.element+' · '+identity.concept+'. '+ATLAS_CREDIT+'. Reduced atlas meshes are not patient measurements or a population average. Expert review pending.','Reference atlas · authored opening pose','anatomy');get('inspect-sources').replaceChildren();const a=document.createElement('a');a.href=ATLAS_SOURCE;a.textContent='BodyParts3D source and identities ↗';a.target='_blank';a.rel='noopener noreferrer';get('inspect-sources').append(a);get('nerve-inspector').hidden=true;
 }
 function selectTissue(id:PocketId){
- if(scale==='crevice'){selected=id;layer='structure';showInspector();refresh();return;}
+ if(scale==='crevice'){selected=id;creviceDetail=undefined;layer='structure';showInspector();refresh();return;}
  if((scale==='mouth'||scale==='face')&&id==='plaque'){setScale('tooth');return;}
  selected=id;get<HTMLSelectElement>('tissue').value=id;showInspector();if(scale==='mouth'||scale==='face'){const m=display.find(m=>m.userData.atlasIdentity&&m.userData.tissue===id);if(m)inspectAtlas(m.userData.atlasIdentity);return;}if(id==='plaque'&&layer==='species'){inspectSpecies();if(scale!=='biofilm')setScale('biofilm');}
  else if(id==='supragingival')inspect(names[id],...descriptions[id],'This viewer assigns no species positions to supragingival plaque. The selected spatial observations concern attached subgingival biofilm in advanced periodontitis and are not transferred here.','Authored compartment · species locations unresolved','plaque');
@@ -387,7 +505,7 @@ function renderEnvironment(){
 }
 function refresh(){
  if(fallback&&scale==='crevice')scale='pocket';
- if(scale==='crevice'&&stage.dataset.creviceSelection!==health+':'+taxon){geometry();if(creviceView==='wall')view(true);}
+ if(scale==='crevice'&&stage.dataset.creviceSelection!==health+':'+taxon){geometry();if(creviceView==='wall')travelCreviceCamera();}
  document.body.classList.toggle('crevice-view',scale==='crevice');stage.classList.toggle('crevice-mode',scale==='crevice');get('crevice-controls').hidden=scale!=='crevice';get('crevice-key').hidden=scale!=='crevice';
  for(const b of document.querySelectorAll<HTMLButtonElement>('[data-crevice-view]'))b.setAttribute('aria-pressed',String(b.dataset.creviceView===creviceView));
  stage.dataset.health=health;stage.dataset.scale=scale;stage.dataset.layer=layer;stage.dataset.basis=basis;stage.dataset.taxon=taxon;stage.dataset.cutaway=String(cutaway);stage.dataset.host='human';stage.dataset.anatomy=scale==='face'||scale==='mouth'?'BodyParts3D reference atlas; authored jaw opening; independent pocket detail':'Reference-sized crown; surrounding geometry authored; expert review pending';stage.dataset.referenceScale=JSON.stringify(CROWN_REFERENCE);stage.dataset.neuro=String(neuro);
@@ -409,11 +527,16 @@ function refresh(){
  else {note.textContent='Margin, epithelial attachment and bone crest are separate authored presets. The crown is reference-sized; pocket and tissue geometry remain authored. Expert anatomical review is pending.';inspect(names[selected],...descriptions[selected],SOURCES.anatomy.method+' '+SOURCES.anatomy.limit,'Authored anatomy · expert review pending','anatomy');}
  if(scale==='mouth'||scale==='face'){get('scene-title').textContent=scale==='face'?'Craniofacial atlas':'Oral atlas · opened display pose';get('scene-subtitle').textContent='BodyParts3D adult male reference · pocket detail is an independent authored specimen';get('orientation').textContent='Subject left = +x · crown ↑';note.textContent=ATLAS_CREDIT+'. Jaw opening is authored; no disease geometry or species map is inferred for this atlas.';inspectAtlas(display.find(m=>m.userData.atlasIdentity?.fdi===36)!.userData.atlasIdentity);}else get('orientation').textContent='Crown ↑ / apex ↓';
  if(scale==='crevice'){
-  get('scene-title').textContent='Inside the tooth–gum crevice';get('scene-subtitle').textContent='Magnified schematic · '+(health==='healthy'?'Healthy sulcus':'Periodontitis pocket')+' · width and cell size exaggerated';get('orientation').textContent=creviceView==='wall'?'Tooth-facing surface':'Entrance ↑ · attachment ↓';get('crevice-key').querySelector('strong')!.textContent=creviceView==='wall'?'Plaque surface · margin and support retained':'Tooth surface · fluid space · tissue lining';stage.dataset.creviceView=creviceView;note.textContent=CREVICE_CLAIM;
+  get('scene-title').textContent='Inside the tooth–gum crevice';get('scene-subtitle').textContent='Magnified schematic · '+(health==='healthy'?'Healthy sulcus':'Periodontitis pocket')+' · width and cell size exaggerated';const copy={section:['Crown ↑ · apex ↓ · section face toward you','Opened section · tooth → fluid space → epithelium → connective tissue → bone','Layers are authored and magnified · not measured histology'],entrance:['Looking down past the margin','Look down · the gingival cuff wraps the tooth around a narrow entrance','Entrance width exaggerated so it can be seen'],wall:['Tooth-facing surface · soft tissue cut away','Biofilm surface · plaque on the tooth, margin and attachment retained',taxon==='all'?'Illustrative gallery of nine forms · not measured positions, counts or contacts':'Illustrative form resting on the plaque film · location unresolved']}[creviceView];
+  get('orientation').textContent=copy[0];get('crevice-key').querySelector('strong')!.textContent=copy[1];get('crevice-key').querySelector('span')!.textContent=copy[2];stage.dataset.creviceView=creviceView;note.textContent=CREVICE_CLAIM;
   if(layer==='species'){
    if(taxon==='all'){inspect('Nine microbial forms','An illustrative 3D form library beside the tooth-facing plaque.','All nine exemplar identities remain in the scene. Positions, counts and relative sizes are display choices, not colonization or measured cell contacts. Click a cell or select a taxon to inspect its shape.','Source-linked qualitative microscopy. Healthy/disease presets do not infer which organisms exist at this site.','3D forms · placement unresolved','plaque');get('inspect-sources').replaceChildren();const a=document.createElement('a');a.href=SOURCES.plaque.url;a.textContent='Attached-plaque compartment reference ↗';a.target='_blank';a.rel='noopener noreferrer';get('inspect-sources').append(a);}
    else {const t=TAXA.find(t=>t.id===taxon)!,m=MORPHOLOGY[taxon];inspect(t.name,m.observation,'A selectable 3D '+m.label.toLowerCase()+'. Other exemplar taxa remain in the scene in muted colors. '+CREVICE_CLAIM,m.context,'Qualitative morphology · location unresolved','plaque');get('inspect-sources').replaceChildren();const a=document.createElement('a');a.href=m.source;a.textContent='Morphology microscopy reference ↗';a.target='_blank';a.rel='noopener noreferrer';get('inspect-sources').append(a);}
-  }else if(layer==='structure')get('inspect-shown').textContent=descriptions[selected][1]+' This magnified crevice is a separately authored explanatory surface; no measured registration or millimetre scale is implied.';
+  }else if(layer==='structure'){
+   const d=creviceDetail&&CREVICE_DETAILS[creviceDetail],magnified=' This magnified crevice is a separately authored explanatory surface; no measured registration or millimetre scale is implied.';
+   if(d)inspect(d.title,d.is,d.shown+magnified,SOURCES.anatomy.method+' '+SOURCES.anatomy.limit,'Authored anatomy · magnified · expert review pending','anatomy');
+   else get('inspect-shown').textContent=descriptions[selected][1]+magnified;
+  }
  }
  renderLens();if(!get('storyboard').hidden)renderStory();
  if(neuro&&['nerve','vessels'].includes(selected))renderNeuralInspector();resize();highlight();
@@ -490,7 +613,7 @@ get<HTMLSelectElement>('compartment').onchange=renderEnvironment;
 get('provenance').textContent='Source: '+saved.source.file+' · SHA-256 '+saved.source.sha256+'. '+saved.source.precision+' Both cases show their fixed endpoint; model time is not physical elapsed time.';
 get('render-check').onclick=()=>{if(!renderer){get('performance').textContent='2D fallback active; WebGL performance not measured.';return;}if(scale==='biofilm')setScale('pocket');measuring=true;measureStart=performance.now();frameCount=0;renderMS=[];get('performance').textContent='Measuring 60 rendered frames…';dirty=true;};
 canvas.addEventListener('keydown',e=>{if(!controls)return;if(e.key==='Home'){e.preventDefault();view(true);return;}if(!e.key.startsWith('Arrow'))return;e.preventDefault();stopCameraTravel();const offset=camera.position.clone().sub(controls.target),s=new T.Spherical().setFromVector3(offset);s.theta+=e.key==='ArrowLeft'?-.10:e.key==='ArrowRight'?.10:0;s.phi=T.MathUtils.clamp(s.phi+(e.key==='ArrowUp'?-.08:e.key==='ArrowDown'?.08:0),.1,Math.PI-.1);camera.position.copy(controls.target).add(new T.Vector3().setFromSpherical(s));controls.update();dirty=true;updateLabels();});
-let down=[0,0];canvas.addEventListener('pointerdown',e=>{stopCameraTravel();down=[e.clientX,e.clientY];});canvas.addEventListener('wheel',stopCameraTravel,{passive:true});canvas.addEventListener('pointerup',e=>{if(!renderer||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;const r=canvas.getBoundingClientRect(),pointer=new T.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),ray=new T.Raycaster();ray.setFromCamera(pointer,camera);const hits=ray.intersectObjects(display).filter(h=>h.object.visible),hit=hits.find(h=>!h.object.userData.context)||hits[0];if(hit){if(hit.object.userData.taxon){taxon=hit.object.userData.taxon;layer='species';showInspector();refresh();}else if(hit.object.userData.atlasIdentity)inspectAtlas(hit.object.userData.atlasIdentity,true);else selectTissue(hit.object.userData.tissue)};});
+let down=[0,0];canvas.addEventListener('pointerdown',e=>{stopCameraTravel();down=[e.clientX,e.clientY];});canvas.addEventListener('wheel',stopCameraTravel,{passive:true});canvas.addEventListener('pointerup',e=>{if(!renderer||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;const r=canvas.getBoundingClientRect(),pointer=new T.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),ray=new T.Raycaster();ray.setFromCamera(pointer,camera);const hits=ray.intersectObjects(display).filter(h=>h.object.visible),hit=hits.find(h=>!h.object.userData.context)||hits[0];if(hit){if(hit.object.userData.taxon){taxon=hit.object.userData.taxon;layer='species';showInspector();refresh();}else if(hit.object.userData.crevice){const d=hit.object.userData.detail;selectCrevice({id:hit.object.userData.tissue,detail:d==='margin'&&hit.point.y<creviceLandmarks(health).margin-.3?'oral':d});}else if(hit.object.userData.atlasIdentity)inspectAtlas(hit.object.userData.atlasIdentity,true);else selectTissue(hit.object.userData.tissue)};});
 function fallbackScene(reason:string){fallback=true;stage.dataset.renderer='2d-fallback';canvas.hidden=true;get('fallback').hidden=false;status(reason+' The 2D anatomy and all evidence/model controls remain available.');updateFallback();}
 try{
  if(new URLSearchParams(location.search).get('render')==='2d')throw Error('2D fallback requested');
@@ -509,7 +632,7 @@ try{
 }catch(error){fallbackScene((error as Error).message+'.');}
 refresh();resize();if(controls)view(true);document.body.dataset.ready='true';
 new ResizeObserver(resize).observe(stage);
-function tick(){requestAnimationFrame(tick);if(cameraTravel&&controls){const t=T.MathUtils.clamp((performance.now()-cameraTravel.start)/460,0,1),ease=t*t*(3-2*t);camera.position.lerpVectors(cameraTravel.from,cameraTravel.to,ease);controls.target.lerpVectors(cameraTravel.fromTarget,cameraTravel.toTarget,ease);controls.update();dirty=true;if(t===1)stopCameraTravel();}if(playing){const now=performance.now();if(!storyLast)storyLast=now;storyProgress=Math.min(5,storyProgress+Math.min(100,now-storyLast)/2600);storyLast=now;renderStory();if(storyProgress>=5)stopStory();}
+function tick(){requestAnimationFrame(tick);stepCameraTravel();if(playing){const now=performance.now();if(!storyLast)storyLast=now;storyProgress=Math.min(5,storyProgress+Math.min(100,now-storyLast)/2600);storyLast=now;renderStory();if(storyProgress>=5)stopStory();}
  if(renderer&&!fallback&&(dirty||measuring)&&scale!=='biofilm'){
  const start=performance.now();composer?composer.render():renderer.render(scene,camera);dirty=false;updateLabels();
  if(measuring){renderMS.push(performance.now()-start);frameCount++;if(frameCount>=60){measuring=false;const wall=performance.now()-measureStart,sorted=renderMS.slice().sort((a,b)=>a-b),fps=frameCount*1000/wall;stage.dataset.measuredFps=fps.toFixed(1);stage.dataset.renderMedianMs=sorted[Math.floor(sorted.length/2)].toFixed(2);get('performance').textContent=` ${fps.toFixed(1)} frames/s over ${frameCount} frames · median CPU submission ${sorted[Math.floor(sorted.length/2)].toFixed(2)} ms · ${Math.round(stage.clientWidth)} × ${Math.round(stage.clientHeight)} CSS pixels. This measures display execution, not biological accuracy.`;}}

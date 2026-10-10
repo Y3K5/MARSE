@@ -10,14 +10,17 @@ cutaway and labels. Face → Mouth → Tooth → Pocket stays within one scene. 
 changes authored landmarks, not a progression model. All nine saved taxon
 selections remain available in their original assumed 32 × 72 grid.
 
-## Organic crevice refinement
+## Crevice anatomy
 
-The crevice uses curved, tapered closed tissue volumes, a continuous marginal
-fold, separate matte section faces and restrained surface highlights. Camera
-buttons transition gently; manual input stops the movement and reduced motion
-uses immediate changes. The plaque-facing view keeps supporting context.
-Species identities, morphology references, numerical kernels and saved fields
-are preserved. See [the current verification record](docs/organic-crevice-verification.md).
+Each crevice tissue is a closed profile swept around one tapering root axis,
+so the gingiva wraps the tooth as a cuff. Sulcular and junctional epithelium,
+connective tissue, oral epithelium, cementum, ligament and a rounded crest are
+separate volumes; apical and far edges fade instead of ending as slabs. The
+three cameras show the layered section, the cuff around its narrow entrance and
+the plaque on the tooth. Labels stay outside the pocket with leaders ending on
+their anchors. Species identities, morphology references, numerical kernels
+and saved fields are preserved. See [the current verification record](docs/crevice-anatomy-verification.md);
+[docs/organic-crevice-verification.md](docs/organic-crevice-verification.md) records the previous pass.
 
 ## Magnified crevice
 
