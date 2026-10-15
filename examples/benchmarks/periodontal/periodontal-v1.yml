@@ -1,0 +1,19 @@
+id: periodontal-v1
+title: Periodontal file, version 1, unverified engine only
+adapter: marse
+experiment: examples/experiments/periodontal_pathogen_biofilm.json
+command: ecosystem
+notes: >
+  Records the version-1 file on legacy_ecosystem_v1. The engine is
+  unverified, so this case cannot pass. Biomass is not scored against the
+  version-2 column, because the two files are not the same experiment.
+  These numbers are not a result to cite. The file stays.
+metrics:
+  - id: recorded
+    kind: manifest_present
+  - id: summary
+    kind: summary_present
+  - id: page
+    kind: report_present
+  - id: disclosed
+    kind: unverified_disclosed

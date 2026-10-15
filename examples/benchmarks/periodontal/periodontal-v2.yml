@@ -1,0 +1,35 @@
+id: periodontal-v2
+title: Periodontal column, version 2, carbon nitrogen and electrons
+adapter: marse
+experiment: examples/networks/periodontal_pathogen_v2.json
+command: run
+notes: >
+  Scores the version-2 column on reactive_transport. Carbon, nitrogen and
+  electrons must stay within the residual tests/test_periodontal_v2.py
+  already checks. This is not a pocket, not a measurement, and not the
+  version-1 cell map. Yields, rates and the biomass formula are
+  placeholders. A pass is not a calibration and not a comparison with the
+  version-1 file.
+metrics:
+  - id: recorded
+    kind: manifest_present
+  - id: summary
+    kind: summary_present
+  - id: page
+    kind: report_present
+  - id: disclosed
+    kind: unverified_disclosed
+  - id: replay
+    kind: replay_matches
+  - id: carbon
+    kind: balance_residual
+    quantity: carbon
+    tolerance: 1.0e-12
+  - id: nitrogen
+    kind: balance_residual
+    quantity: nitrogen
+    tolerance: 1.0e-12
+  - id: electrons
+    kind: balance_residual
+    quantity: electrons
+    tolerance: 1.0e-12

@@ -145,6 +145,9 @@ is a date.
    version-1 file stays. Retiring it means a later change that stops treating
    its numbers as a result to cite, after the defects in `validation.md` are
    fixed or the file is withdrawn. This milestone does not delete it.
+   The cases are `examples/benchmarks/periodontal/periodontal-v2.yml` and
+   `periodontal-v1.yml`. What they score is
+   [periodontal.md](periodontal.md).
 
 ## Acceptance
 
