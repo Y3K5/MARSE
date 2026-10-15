@@ -1,0 +1,3 @@
+sample,taxon,abundance,unit
+sample-1,taxon-a,0.25,relative
+sample-1,taxon-b,0.75,relative
