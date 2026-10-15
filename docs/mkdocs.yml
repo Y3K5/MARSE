@@ -34,6 +34,7 @@ nav:
   - Reference:
       - Architecture: architecture.md
       - Table import: ingest.md
+      - Structure scores: structure.md
       - Specification: specification.md
       - Parameters: parameters.md
       - Networks: networks.md

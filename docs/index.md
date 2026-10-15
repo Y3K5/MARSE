@@ -16,5 +16,6 @@ build. The site is not deployed from pull requests.
 
 - [Architecture](architecture.md) — the package as it is.
 - [Table import](ingest.md) — checked tables. Abundance is not biomass.
+- [Structure scores](structure.md) — pLDDT and PAE. A score is not a parameter.
 - [Validation](validation.md) — what has been checked, and what has not.
 - [Periodontal study](periodontal-pathogen-study.md) — the version-2 column, and the unverified version-1 file. The [benchmark](benchmarks/periodontal.md) scores the column's balance and does not score version 1.
