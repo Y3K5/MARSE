@@ -62,6 +62,11 @@ results for the same manifest is always called out.
   builds it. It is not deployed. The YAML check loads that one file with
   `--unsafe` so the mermaid fence tag is accepted; every other YAML file
   still uses the safe loader.
+- **Benchmark harness checks.** A case file that is not valid YAML exits 2
+  instead of raising. `marse bench run` with no cases exits 2. A run on the
+  unverified ecosystem engine prints the same warning as `marse ecosystem`
+  and cannot pass. A damaged `manifest.json` fails its metric instead of
+  aborting the scorer.
 - **Benchmark harness.** `marse bench list`, `run`, and `report` load YAML
   cases, run them through an in-process MARSE adapter, and write `bench.json`
   and `bench.html` beside the existing run directory. The adapter does not

@@ -93,7 +93,10 @@ def load_case(path: Path, root: Path) -> Case:
 
 
 def _mapping(path: Path) -> dict[str, Any]:
-    loaded: Any = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        loaded: Any = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as error:
+        raise CaseError(f"{path}: {error}") from error
     if not isinstance(loaded, dict):
         raise CaseError(f"{path}: a case file must be a mapping")
     return loaded

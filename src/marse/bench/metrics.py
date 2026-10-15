@@ -80,7 +80,10 @@ def evaluate(case: Case, output_dir: Path, *, unverified: bool) -> Evaluation:
 def _read_json(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
-    loaded: Any = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        loaded: Any = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
     return loaded if isinstance(loaded, dict) else None
 
 

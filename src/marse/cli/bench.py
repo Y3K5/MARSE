@@ -13,6 +13,7 @@ from marse.bench.adapters import adapter_for
 from marse.bench.cases import Case, CaseError, load_cases
 from marse.bench.metrics import evaluate
 from marse.bench.report import document, read_reports, write_report
+from marse.cli.present import warn_unverified
 
 
 def command_bench(args: argparse.Namespace) -> int:
@@ -35,12 +36,16 @@ def command_bench_run(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     cases = load_cases(Path(args.cases), root)
     selected = _select(cases, args.case)
+    if not selected:
+        raise CaseError(f"no cases in {args.cases}")
     output = Path(args.output)
     failed = False
     for case in selected:
         adapter = adapter_for(case.adapter)
         case_dir = output / case.id
         record = adapter.run(case, case_dir, root)
+        if record.unverified:
+            warn_unverified()
         evaluation = evaluate(case, case_dir, unverified=record.unverified)
         payload = document(
             case,

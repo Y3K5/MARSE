@@ -180,6 +180,64 @@ def test_an_unknown_adapter_is_refused(tmp_path: Path):
     assert code == 2
 
 
+def test_yaml_that_does_not_parse_exits_2(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    case = tmp_path / "broken.yml"
+    case.write_text("id: [unterminated\n", encoding="utf-8")
+    with pytest.raises(CaseError, match=r"broken\.yml"):
+        load_case(case, tmp_path)
+    cases = tmp_path / "cases"
+    cases.mkdir()
+    (cases / "broken.yml").write_text("id: [unterminated\n", encoding="utf-8")
+    code = main(["bench", "list", str(cases), "--root", str(tmp_path)])
+    assert code == 2
+    assert "invalid benchmark case" in capsys.readouterr().out
+
+
+def test_a_directory_with_no_cases_is_not_a_pass(tmp_path: Path):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    _batch(tmp_path / "batch.json")
+    code = main(["bench", "run", str(empty), "-o", str(tmp_path / "out"), "--root", str(tmp_path)])
+    assert code == 2
+    assert not (tmp_path / "out").exists()
+
+
+def test_an_unverified_engine_cannot_pass(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    experiment = "examples/experiments/two_species_ecosystem.json"
+    cases = tmp_path / "cases"
+    cases.mkdir()
+    (cases / "eco.yml").write_text(
+        "\n".join(
+            [
+                "id: eco",
+                "title: Unverified engine",
+                "adapter: marse",
+                f"experiment: {experiment}",
+                "command: ecosystem",
+                "notes: This engine is unverified. The case must not pass.",
+                "metrics:",
+                "  - id: disclosed",
+                "    kind: unverified_disclosed",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    root = Path(".").resolve()
+    output = tmp_path / "out"
+    code = main(["bench", "run", str(cases), "-o", str(output), "--root", str(root)])
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "unverified" in captured.err
+    payload = json.loads((output / "eco" / "bench.json").read_text(encoding="utf-8"))
+    assert payload["passed"] is False
+    assert payload["reason"] == "unverified engine"
+    assert payload["unverified"] is True
+    assert payload["engine"] == "legacy_ecosystem_v1"
+    assert payload["metrics"][0]["passed"] is True
+    assert str(tmp_path) not in (output / "eco" / "bench.json").read_text(encoding="utf-8")
+
+
 def test_bench_help_exits_zero():
     for argv in (
         ["bench", "--help"],

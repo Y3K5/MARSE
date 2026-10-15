@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from marse.bench.cases import Case
+from marse.bench.cases import Case, CaseError
 from marse.bench.metrics import Evaluation
 
 
@@ -60,7 +60,10 @@ def read_reports(directory: Path) -> list[dict[str, Any]]:
     paths = [directory / "bench.json"] if (directory / "bench.json").is_file() else []
     paths.extend(sorted(path for path in directory.glob("*/bench.json") if path not in paths))
     for path in paths:
-        loaded: Any = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            loaded: Any = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as error:
+            raise CaseError(f"{path.name}: {error}") from error
         if isinstance(loaded, dict):
             found.append(loaded)
     return sorted(found, key=lambda row: str(row.get("case_id", "")))
@@ -83,7 +86,6 @@ def _html(payload: dict[str, Any]) -> str:
             "</tr>"
         )
     body = "\n".join(rows)
-    limit = "A replay can be repeated. It does not show that the model is right."
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -94,7 +96,7 @@ def _html(payload: dict[str, Any]) -> str:
 <h1>{title}</h1>
 <p>{status}. {reason}</p>
 <p>{notes}</p>
-<p>{limit}</p>
+<p>Replay shows that this run can be repeated. It does not show that the model is right.</p>
 <p><a href="report.html">Run report</a></p>
 <table>
 <thead><tr><th>Metric</th><th>Kind</th><th>Result</th><th>Detail</th></tr></thead>
