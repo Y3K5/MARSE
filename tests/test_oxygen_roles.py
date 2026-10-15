@@ -18,7 +18,7 @@ import pytest
 from marse.cli import main
 from marse.core.config import ConfigError
 from marse.core.well_mixed import run
-from marse.schemas import OXYGEN_ROLES, experiment_from_dict, load_network, network_from_dict
+from marse.model import OXYGEN_ROLES, experiment_from_dict, load_network, network_from_dict
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = [

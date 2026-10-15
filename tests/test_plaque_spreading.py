@@ -23,13 +23,13 @@ import numpy as np
 import pytest
 
 import marse.core.reactive_transport as reactive_transport
-from marse.biofilm.spreading import SPREADING_VERSION, Spreading, remap
 from marse.cli import main
 from marse.core.config import ConfigError
-from marse.oral import film_share, liquid_share, renewal_over, renewal_per_h
-from marse.schemas import experiment_from_dict
-from marse.schemas.domain import Film
-from marse.spatial.grid import Grid
+from marse.environments.oral import film_share, liquid_share, renewal_over, renewal_per_h
+from marse.model import experiment_from_dict
+from marse.model.domain import Film
+from marse.processes.spreading import SPREADING_VERSION, Spreading, remap
+from marse.space.grid import Grid
 
 ROOT = Path(__file__).resolve().parents[1]
 RINSE = ROOT / "examples" / "environments" / "oral" / "stephan_rinse.json"

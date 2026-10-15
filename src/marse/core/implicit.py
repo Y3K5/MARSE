@@ -4,8 +4,8 @@ On a grid, concentrations change as
 
     dc/dt = divergence of the face fluxes + N^T r(c),
 
-diffusion (:mod:`marse.spatial.transport`) and reactions
-(:mod:`marse.microbes.kinetics`) at once. Diffusion at physical diffusivities is
+diffusion (:mod:`marse.space.transport`) and reactions
+(:mod:`marse.processes.kinetics`) at once. Diffusion at physical diffusivities is
 stiff: an explicit step on 2 um voxels would have to be a quarter of a
 millisecond (docs/theory.md, section 9.1). Splitting reactions from transport
 fails differently: at practical steps it starves a biofilm, because each step
@@ -54,18 +54,18 @@ everything is integrated together, implicitly (docs/theory.md, section 9.8):
   their quasi-steady state, and a step that tried to cross that in one go
   would only fail.
 
-Where cells in the liquid bind to the substratum (:mod:`marse.microbes.adhesion`,
+Where cells in the liquid bind to the substratum (:mod:`marse.processes.adhesion`,
 docs/theory.md, section 6.4), the bottom face carries a second exchange beside
 the top one. Deposition arrives through it and detachment leaves through it, as
 face transfers. The limiter scales them like any other, and the ledger counts
 them as imports. Locking turns reversibly bound cells into biomass, as an extra
 row of the stoichiometric matrix acting in the bottom layer.
 
-Where the top face is at the air (:mod:`marse.spatial.air`, docs/theory.md,
+Where the top face is at the air (:mod:`marse.space.air`, docs/theory.md,
 section 4.10), the gases it holds cross it as two more processes per gas in
 the top layer, and the ledger counts what they exchange as an import.
 
-Where a column's plaque spreads (:mod:`marse.biofilm.spreading`, docs/theory.md,
+Where a column's plaque spreads (:mod:`marse.processes.spreading`, docs/theory.md,
 section 6.1), every step is followed by packing the solid from the substratum
 up, which detaches whatever passes the plaque's maximum height. Wear is taken
 off in two halves, before the step and after it (Strang splitting), so the
@@ -73,7 +73,7 @@ step stays second order. What detaches leaves the box, and the ledger counts
 it as an export.
 
 The linear systems are solved by :mod:`marse.spatial.multigrid`, or, in a
-column, directly by :mod:`marse.spatial.column`. One matrix, with the
+column, directly by :mod:`marse.space.column`. One matrix, with the
 Jacobian at the start of the step, serves both stages, and it is rebuilt only
 when Newton converges slowly.
 """
@@ -87,12 +87,12 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from marse.biofilm.spreading import Spreading
-from marse.microbes.adhesion import SurfaceExchange
-from marse.spatial.air import AirExchange
-from marse.spatial.column import ColumnSystem
+from marse.processes.adhesion import SurfaceExchange
+from marse.processes.spreading import Spreading
+from marse.space.air import AirExchange
+from marse.space.column import ColumnSystem
+from marse.space.transport import Diffusion, divergence
 from marse.spatial.multigrid import ImplicitSystem
-from marse.spatial.transport import Diffusion, divergence
 
 __all__ = ["GAMMA", "NewtonFailure", "ReactionTransport", "StepStats"]
 

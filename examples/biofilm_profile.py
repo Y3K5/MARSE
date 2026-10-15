@@ -17,13 +17,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from marse.spatial.diffusion import solve_steady_state
-from marse.spatial.domain import Grid1D
-from marse.spatial.solutes import (
+from marse.space.solutes import (
     OXYGEN_MOLAR_MASS,
     oxygen_diffusivity_m2_per_s,
     oxygen_saturation_mg_per_l,
 )
+from marse.spatial.diffusion import solve_steady_state
+from marse.spatial.domain import Grid1D
 from marse.validation.analytical import zero_order_penetration_depth
 
 RELATIVE_DIFFUSIVITY = 0.43  # small nonpolar solutes in biofilms (Stewart 1998)

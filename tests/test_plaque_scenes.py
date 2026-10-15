@@ -21,9 +21,9 @@ import numpy as np
 import pytest
 
 import marse.core.reactive_transport as reactive_transport
-from marse.chemistry import ChargeBalance
 from marse.cli import main
-from marse.schemas import experiment_from_dict
+from marse.model import experiment_from_dict
+from marse.processes.acid_base import ChargeBalance
 
 SCENES = Path(__file__).resolve().parents[1] / "examples" / "environments" / "oral"
 FILES = ("oxygen_profile.json", "plaque_day.json")

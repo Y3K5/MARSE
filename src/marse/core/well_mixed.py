@@ -32,12 +32,12 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from marse.chemistry import ChargeBalance
 from marse.core.integrators import integrate
 from marse.core.ledger import Ledger
 from marse.core.provenance import Manifest
-from marse.microbes.kinetics import compile_rates, process_rates
-from marse.schemas.experiment import WellMixedConfig
+from marse.model.experiment import WellMixedConfig
+from marse.processes.acid_base import ChargeBalance
+from marse.processes.kinetics import compile_rates, process_rates
 
 __all__ = [
     "ENGINE_VERSION",

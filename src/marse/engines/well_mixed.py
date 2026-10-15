@@ -10,9 +10,9 @@ from marse.core.provenance import Manifest
 from marse.core.well_mixed import run as run_well_mixed
 from marse.engines.base import Completed
 from marse.io.results import write_run_files
-from marse.schemas.experiment import WellMixedConfig
-from marse.schemas.experiment import experiment_from_dict as network_from_dict
-from marse.schemas.experiment import load_experiment as load_network
+from marse.model.experiment import WellMixedConfig
+from marse.model.experiment import experiment_from_dict as network_from_dict
+from marse.model.experiment import load_experiment as load_network
 
 
 class WellMixed:

@@ -1,6 +1,5 @@
-"""Spatial domain and transport.
+"""Steady one-dimensional diffusion, the multigrid solver, and VTK export.
 
-Domains, grids, neighbourhood lookups and diffusion/transport of resources.
-Transport is updated independently of microbial state so that each numerical
-method can be validated on its own (docs/validation.md).
+Grids, transport, surfaces and column spreading live in :mod:`marse.space`.
+The old ``marse.spatial.<name>`` paths for those modules still import, and warn.
 """

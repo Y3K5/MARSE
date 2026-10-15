@@ -14,11 +14,11 @@ from fractions import Fraction
 import numpy as np
 import pytest
 
-from marse.chemistry import ChargeBalance, ph_of_hydrogen
 from marse.core.config import ConfigError
-from marse.microbes.cardinal import cardinal_ph, cardinal_ph_slope
-from marse.microbes.kinetics import compile_rates, process_rates, rate_jacobian
-from marse.schemas.network import network_from_dict
+from marse.model.network import network_from_dict
+from marse.processes.acid_base import ChargeBalance, ph_of_hydrogen
+from marse.processes.cardinal import cardinal_ph, cardinal_ph_slope
+from marse.processes.kinetics import compile_rates, process_rates, rate_jacobian
 
 SALIVA_AND_PLAQUE = {
     "schema_version": 2,
@@ -541,7 +541,7 @@ from pathlib import Path  # noqa: E402
 from marse.cli import main  # noqa: E402
 from marse.core.reactive_transport import run as run_in_space  # noqa: E402
 from marse.core.well_mixed import run as run_well_mixed  # noqa: E402
-from marse.schemas import experiment_from_dict  # noqa: E402
+from marse.model import experiment_from_dict  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 

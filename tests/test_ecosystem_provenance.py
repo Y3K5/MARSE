@@ -28,9 +28,9 @@ from marse.ecosystem import (
     run,
 )
 from marse.ecosystem.model import ENGINE_VERSION, _state_digest, ecosystem_from_dict
-from marse.experimental.host.immune import ImmuneInteraction, MolecularNeutralizer
-from marse.microbes.additives import AdditiveEffect
-from marse.microbes.niche import Capability
+from marse.processes.additives import AdditiveEffect
+from marse.processes.host.immune import ImmuneInteraction, MolecularNeutralizer
+from marse.processes.niche import Capability
 
 EXPERIMENTS = Path(__file__).resolve().parents[1] / "examples" / "experiments"
 

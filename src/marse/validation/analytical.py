@@ -186,7 +186,7 @@ def cosine_mode_rate(
     A field cos(k_x x) cos(k_y y) cos(k_z z) decays as exp(rate t). In the
     continuum the rate is -D (k_x^2 + k_y^2 + k_z^2). On a grid of spacing h,
     with the field sampled at voxel centres, the finite-volume operator of
-    :mod:`marse.spatial.transport` has the same field as an exact eigenvector,
+    :mod:`marse.space.transport` has the same field as an exact eigenvector,
     with rate -D sum (4 / h^2) sin^2(k h / 2). That holds for periodic lateral
     axes (k = 2 pi m / L), and in height, with no flux through the substratum
     and zero at the top face, for k = (2 n + 1) pi / (2 L). The two rates differ

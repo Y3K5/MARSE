@@ -30,7 +30,7 @@ from marse.ecosystem.framestore import (
 )
 from marse.ecosystem.model import recorded_steps
 from marse.ecosystem.viewer import _rounded
-from marse.microbes.niche import Capability
+from marse.processes.niche import Capability
 
 
 def config(**overrides) -> EcosystemConfig:
@@ -276,7 +276,13 @@ def _experiment(tmp_path: Path) -> Path:
 def test_cli_streams_frames_and_writes_no_frames_json(tmp_path: Path):
     output = tmp_path / "run"
     assert main(["ecosystem", str(_experiment(tmp_path)), "-o", str(output)]) == 0
-    assert sorted(p.name for p in output.iterdir()) == ["frames", "manifest.json", "viewer.html"]
+    assert sorted(p.name for p in output.iterdir()) == [
+        "frames",
+        "manifest.json",
+        "report.html",
+        "summary.json",
+        "viewer.html",
+    ]
     index = json.loads((output / "frames" / "index.json").read_text("utf-8"))
     assert index["complete"] is True
     assert index["frame_count"] == config().steps + 1  # 100 steps: under the default cap
@@ -298,4 +304,10 @@ def test_cli_replay_with_output_writes_the_same_layout(tmp_path: Path):
     assert main(["ecosystem", str(_experiment(tmp_path)), "-o", str(output)]) == 0
     again = tmp_path / "again"
     assert main(["replay", str(output / "manifest.json"), "-o", str(again)]) == 0
-    assert sorted(p.name for p in again.iterdir()) == ["frames", "manifest.json", "viewer.html"]
+    assert sorted(p.name for p in again.iterdir()) == [
+        "frames",
+        "manifest.json",
+        "report.html",
+        "summary.json",
+        "viewer.html",
+    ]

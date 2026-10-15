@@ -10,26 +10,24 @@ import importlib
 import pkgutil
 import subprocess
 import sys
+import warnings
 
 import pytest
 
 import marse
-
-MOVED = {
-    "marse.niche": "marse.microbes.niche",
-    "marse.genotype": "marse.microbes.genotype",
-    "marse.additives": "marse.microbes.additives",
-    "marse.science": "marse.evidence.science",
-    "marse.calibration": "marse.analysis.calibration",
-    "marse.uncertainty": "marse.analysis.uncertainty",
-    "marse.ensemble": "marse.analysis.ensemble",
-    "marse.immune": "marse.experimental.host.immune",
-    "marse.actions": "marse.experimental.host.actions",
-}
+from marse._compat import MOVED
 
 
 @pytest.mark.parametrize(("old", "new"), MOVED.items())
 def test_an_old_path_warns_and_is_the_same_module_underneath(old: str, new: str):
+    names = old.split(".")
+    # Load parent aliases first. Their own warnings are checked as separate cases.
+    for index in range(2, len(names)):
+        parent = ".".join(names[:index])
+        if parent not in sys.modules:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                importlib.import_module(parent)
     sys.modules.pop(old, None)  # make the alias run again, so its warning is observable
     with pytest.warns(DeprecationWarning, match=f"{old} has moved to {new}"):
         alias = importlib.import_module(old)

@@ -1,15 +1,14 @@
 # Architecture
 
-MARSE (Microbial Adaptability Resource Simulation Engine) is the simulation
-kernel of YAUVI. YAUVI is the wider programme: data integration, a structural
-workbench, a benchmark harness and an explorer. This repository is MARSE
-only, one installable package named `marse`. Those other pieces are not in
-this install.
+MARSE (Microbial Adaptability Resource Simulation Engine) is open-source
+software for reproducible simulation of microbial populations and biofilms.
+This repository is that software, one installable package named `marse`.
 
-The layout below is the code as it is. A later internal rearrangement
-(schemas into `model/`, processes, environments, `space/`) is deliberately
-not done yet; splitting into several distributions is not done yet either.
-See [what is still to do](#still-to-do-from-the-consolidation).
+The layout below is the code as it is. Schemas and the science modules now
+live in `model/`, `processes/`, `environments/` and `space/`. The numerical
+engines stay where they were (`core/` and `spatial/` for the solvers);
+`engines/` is the selection layer in front of them. This repository is still
+one installable package.
 
 ## Principles
 
@@ -43,27 +42,34 @@ flowchart LR
 src/marse/
   cli/             one module per command; marse.cli:main is the dispatcher
   engines/         Engine protocol, registry, and one adapter per engine
-  io/              the frame store (frames.py) and the shared result writers
+  io/              frame store, result writers, and the shared run directory
+  model/           configuration schema v2: formula, network, experiment, domain
+  processes/       growth, kinetics, adhesion, niche, genotype, additives,
+                   acid-base, biofilm biomass and packed spreading; host/ is
+                   experimental
+  environments/    oral/: mouth, salivary film, diet, Stephan-curve measures
+  space/           grids, transport, surfaces, air, column, solutes, continuum
+                   spreading
   core/            state, seeds, provenance, the legacy batch loop, and the
                    version-2 solvers (well_mixed, reactive_transport, implicit)
-  schemas/         configuration schema v2: formula, network, experiment, domain
-  spatial/         grids, transport, the 1-D steady solver, surfaces, VTK
-  oral/            mouth, salivary film, diet, Stephan-curve measures
-  chemistry/       acid-base equilibrium
-  microbes/        growth, kinetics, adhesion, niche, genotype, additives
-  biofilm/         biomass and column spreading
+  spatial/         the 1-D steady solver, multigrid, and VTK export
   ecosystem/       the unverified 2-D engine (model, providers, viewer)
   analysis/        calibration, uncertainty, ensemble
   evidence/        culture evidence and context checks
-  experimental/    host actions and immune pressure, outside the v1.0 claims
+  experimental/    package kept so the old host path can warn; the code is in
+                   processes/host
   validation/      analytical references and the benchmark registry
-  _compat.py       deprecated import paths (marse.niche and the rest)
+  _compat.py       deprecated import paths
 ```
 
 `adaptation/` and `interventions/` are not implemented. Importing the old
 names still works for one release and warns; the modules are not in the tree.
-The same hook keeps `marse.niche`, `marse.actions`, `marse.calibration` and
-the other moved top-level modules working. Nothing inside MARSE imports them.
+The same hook keeps the earlier top-level names (`marse.niche`,
+`marse.actions`, `marse.calibration` and the rest) and the package paths from
+before this move (`marse.schemas`, `marse.microbes`, `marse.chemistry`,
+`marse.biofilm`, `marse.oral`, `marse.experimental.host`, and the grid and
+transport modules that left `marse.spatial`). Nothing inside MARSE imports
+an old path.
 
 These files are not in the tree, whatever an older sketch of this page said:
 `microbes/resource_use.py`, `microbes/phenotype.py`, `microbes/interactions.py`,
@@ -121,9 +127,16 @@ that class, so `FrameStore` is the same object from either path.
 Frames are for looking at a run. The exact result is the final state in the
 manifest, reproduced by `marse replay`.
 
-Output directories are still per engine (trajectory or profile; totals, VTK
-and frames; ecosystem frames and a viewer). One run-directory contract for
-every engine is not in place yet.
+Every run directory, whichever engine wrote it, contains `manifest.json`,
+`summary.json` and `report.html`, plus that engine's scientific files
+(trajectory or profile; totals, VTK and frames; ecosystem frames and a
+viewer). `summary.json` names the engine and lists the files. It is not part
+of the manifest, so `config_sha256` and the recorded outputs are unchanged
+and a manifest written before this layout still replays. The parent directory
+gains `index.json`, a list of those runs by folder name, with no absolute
+path. `marse ls` reads the manifests. `marse compare` reports whether two
+manifests share a configuration checksum and the same recorded outputs. It
+does not re-run them.
 
 ## Providers
 
@@ -198,19 +211,25 @@ module that is not listed must be clean, and a listed module may not grow
 new errors. Further runtime dependencies are a design change and belong in
 the pull request that adds them.
 
-## Still to do from the consolidation
+## Still to do after this consolidation
 
-- Move the scientific modules into the target internal layout (`model/`,
-  `processes/`, `environments/`, `space/`) behind the current import paths.
-- One run directory for every engine, and `marse ls` / `compare`.
-- Port the periodontal study off ecosystem v1 onto the version-2 engine, which
-  is what retires defects 1–8 for that study. The v1 command stays, and warns,
-  until that port exists.
-- A docs site. This page and the README are the navigation for now.
+The four items above are in place: the science modules have moved, runs share
+a directory layout and an index, the periodontal study has a version-2
+column (see [periodontal-pathogen-study.md](periodontal-pathogen-study.md)),
+and the docs are an MkDocs Material site (`docs/mkdocs.yml`). What remains
+in this repository:
+
+- Moving the numerical solvers out of `core/` and `spatial/` into engine
+  subpackages. `engines/` selects them; it does not contain the solvers.
+- Two-dimensional biomass spreading, lineage-based adaptation, and a real
+  interventions layer.
+- The version-1 ecosystem engine stays, warns, and is not a validated model.
+  Its known defects are unchanged. The version-2 periodontal column does not
+  use those mechanisms; it also does not calibrate a pocket.
 
 ## Extension points after v1.0
 
 The interfaces leave room for later work without changes to the core: richer
 metabolic models, host-cell and immune-state models, molecular providers,
 learned policies, intervention-specific models and multiscale coupling.
-Those belong to YAUVI packages that do not exist in this repository yet.
+None of that is a package in this tree.

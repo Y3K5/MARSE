@@ -24,7 +24,7 @@ from xml.sax.saxutils import quoteattr
 import numpy as np
 from numpy.typing import NDArray
 
-from marse.spatial.grid import Grid
+from marse.space.grid import Grid
 
 __all__ = ["read_vti", "write_pvd", "write_vti"]
 

@@ -18,9 +18,9 @@ import pytest
 
 from marse.cli import main
 from marse.core.config import ConfigError
-from marse.schemas import ContinuityError, load_network, network_from_dict
-from marse.schemas._reading import DIMENSIONLESS, NUMERIC_KINDS, UNIT_SUFFIXES
-from marse.schemas.network import SCHEMA
+from marse.model import ContinuityError, load_network, network_from_dict
+from marse.model._reading import DIMENSIONLESS, NUMERIC_KINDS, UNIT_SUFFIXES
+from marse.model.network import SCHEMA
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "examples" / "networks" / "glucose_cross_feeding.json"

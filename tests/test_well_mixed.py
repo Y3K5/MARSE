@@ -19,8 +19,8 @@ from marse.core.integrators import positive_conservative_step
 from marse.core.provenance import Manifest
 from marse.core.simulation import ConservationError
 from marse.core.well_mixed import ENGINE_VERSION, ExhaustedComponentError, run
-from marse.microbes.kinetics import compile_rates, process_rates
-from marse.schemas import experiment_from_dict
+from marse.model import experiment_from_dict
+from marse.processes.kinetics import compile_rates, process_rates
 from marse.validation.analytical import batch_final_biomass, monod_batch_time
 
 EXAMPLE = (

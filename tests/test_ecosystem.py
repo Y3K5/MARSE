@@ -22,9 +22,9 @@ from marse.ecosystem import (
     run,
     write_viewer,
 )
-from marse.experimental.host.immune import ImmuneInteraction
-from marse.microbes.additives import AdditiveEffect, apply_effect, hill_response
-from marse.microbes.niche import Capability
+from marse.processes.additives import AdditiveEffect, apply_effect, hill_response
+from marse.processes.host.immune import ImmuneInteraction
+from marse.processes.niche import Capability
 
 
 def config(**overrides) -> EcosystemConfig:

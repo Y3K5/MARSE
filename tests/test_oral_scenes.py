@@ -26,10 +26,10 @@ import numpy as np
 import pytest
 
 import marse.core.reactive_transport as reactive_transport
-from marse.chemistry import ChargeBalance
 from marse.cli import main
-from marse.oral import CRITICAL_PH, StephanCurve, area_below, back_above, minutes_below
-from marse.schemas import experiment_from_dict
+from marse.environments.oral import CRITICAL_PH, StephanCurve, area_below, back_above, minutes_below
+from marse.model import experiment_from_dict
+from marse.processes.acid_base import ChargeBalance
 
 SCENES = Path(__file__).resolve().parents[1] / "examples" / "environments" / "oral"
 FILES = ("stephan_rinse.json", "sipping.json", "pocket.json")

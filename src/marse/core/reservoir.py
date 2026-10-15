@@ -32,7 +32,7 @@ The state holds both, shape ``(J, voxels + 1)``: the box flattened, then the
 pool. :meth:`ReservoirTransport.pack` and :meth:`~ReservoirTransport.unpack`
 convert.
 
-Where the film's surface is at the air (:mod:`marse.spatial.air`), so is the
+Where the film's surface is at the air (:mod:`marse.space.air`), so is the
 mouth's liquid, spread over the mouth's surfaces as a film of its own: a film
 0.1 mm deep comes to equilibrium with the air within seconds. The pool holds
 each gas at its saturation, so the film is renewed with saturated saliva, and
@@ -49,7 +49,6 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from marse.biofilm.spreading import Spreading
 from marse.core.implicit import (  # the engine's own step, reused
     GAMMA,
     ReactionTransport,
@@ -58,11 +57,12 @@ from marse.core.implicit import (  # the engine's own step, reused
     _magnitude,
     _Stage,
 )
-from marse.microbes.adhesion import SurfaceExchange
-from marse.spatial.air import AirExchange
-from marse.spatial.column import ColumnSystem
+from marse.processes.adhesion import SurfaceExchange
+from marse.processes.spreading import Spreading
+from marse.space.air import AirExchange
+from marse.space.column import ColumnSystem
+from marse.space.transport import Diffusion, divergence
 from marse.spatial.multigrid import ImplicitSystem
-from marse.spatial.transport import Diffusion, divergence
 
 __all__ = ["BorderedSystem", "ReservoirPath", "ReservoirTransport"]
 

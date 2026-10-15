@@ -3,11 +3,9 @@
 [![CI](https://github.com/Y3K5/MARSE/actions/workflows/ci.yml/badge.svg)](https://github.com/Y3K5/MARSE/actions/workflows/ci.yml)
 [![Privacy](https://github.com/Y3K5/MARSE/actions/workflows/privacy.yml/badge.svg)](https://github.com/Y3K5/MARSE/actions/workflows/privacy.yml)
 
-**MARSE** (Microbial Adaptability Resource Simulation Engine) is the simulation
-kernel of **YAUVI**: open-source software for reproducible simulation of
-microbial populations and biofilms. This repository is that kernel, one
-package named `marse`. Data integration, a structural workbench, a benchmark
-harness and an explorer are the rest of YAUVI, and they are not in this install.
+**MARSE** (Microbial Adaptability Resource Simulation Engine) is open-source
+software for reproducible simulation of microbial populations and biofilms.
+This repository is that software, one package named `marse`.
 
 Every run writes a manifest and can be replayed from it. What that replay
 proves is that the run is reproducible, not that the model is right. The
@@ -16,8 +14,8 @@ table is the distinction.
 | | What | Where to look |
 |---|---|---|
 | **Validated** | Well-mixed batch growth and two-species competition (V1, V2, V5). The 1-D steady biofilm oxygen profile against analytical limits (V3). Version-2 reaction networks that conserve carbon, nitrogen and electrons in a closed box, checked again on every step. Bit-exact replay of a manifest (V8). | [validation.md](docs/validation.md), `marse run` |
-| **Experimental** | Version-2 reaction-transport in 1/2/3-D: the same conservation law in space, not yet scored on the IWA biofilm benchmarks. The 2-D ecosystem engine (`marse ecosystem`), including the periodontal study: eight known defects, and the command prints a warning. Replay of that engine works; the results are not a validated model. | [validation.md](docs/validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified) |
-| **Planned** | The periodontal study on the version-2 engine. Lineage-based adaptation and a real interventions layer. One run directory for every engine, and `marse ls` / `compare`. The rest of YAUVI (data, workbench, cross-tool benchmarks, Explorer). | [architecture.md](docs/architecture.md#still-to-do-from-the-consolidation), [roadmap](docs/roadmap.md) |
+| **Experimental** | Version-2 reaction-transport in 1/2/3-D: the same conservation law in space, not yet scored on the IWA biofilm benchmarks. The periodontal column on that engine (`examples/networks/periodontal_pathogen_v2.json`): stoichiometry holds, the organisms are obligate anaerobes, and the coefficients are placeholders, not a calibrated pocket. The 2-D ecosystem engine (`marse ecosystem`), including the original periodontal file: eight known defects, and the command prints a warning. | [validation.md](docs/validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified), [periodontal study](docs/periodontal-pathogen-study.md) |
+| **Planned** | Lineage-based adaptation and a real interventions layer. Two-dimensional biomass spreading. | [architecture.md](docs/architecture.md#still-to-do-after-this-consolidation), [roadmap](docs/roadmap.md) |
 
 `marse run` picks the engine from the file. A top-level `"engine"` field
 (`legacy_batch`, `steady_biofilm`, `well_mixed`, `reactive_transport`,
@@ -172,28 +170,26 @@ src/marse/         the Python package
   cli/             command dispatcher; one module per command
   engines/         engine protocol and registry (batch, steady biofilm, well mixed,
                    reactive transport, unverified ecosystem v1)
-  io/              the frame store shared by every engine
+  io/              the frame store, and the run directory shared by every engine
+  model/           configuration schema v2: formulas and balanced reaction networks
+  processes/       growth, kinetics, adhesion, niches, genotypes, dose responses,
+                   acid-base equilibria, biofilm biomass and packed spreading
+  environments/    oral/: saliva, the film over the teeth, the diet, Stephan-curve measures
+  space/           voxel grids, diffusion, surfaces, air exchange, continuum spreading
   core/            run loop, state, configuration, seeds, provenance, version-2 solvers
-  schemas/         configuration schema v2: formulas and balanced reaction networks
-  spatial/         voxel grids in 1, 2 or 3 dimensions, diffusion, multigrid, surfaces and the
-                   delivery of cells to them, gases from the air, ParaView output
-  oral/            the mouth: saliva secreted and swallowed, the film over the teeth, the diet,
-                   and the measures of a Stephan curve
-  chemistry/       acid-base equilibria: the pH that every voxel's charges set
-  microbes/        growth kinetics, cardinal models, adhesion, niches, genotypes, dose responses
-  biofilm/         biomass, and plaque that spreads up a column and is worn and brushed off
+  spatial/         the 1-D steady solver, multigrid, and ParaView output
   ecosystem/       the unverified 2-D multispecies engine and its viewer
   analysis/        calibration, uncertainty and sensitivity, ensembles
   evidence/        culture conditions and measurements, with their sources, and the
                    context exchange that checks evidence metadata before it joins a run
-  experimental/    outside the v1.0 claims (host/: host-pressure primitives)
+  experimental/    kept so the old host path warns; the code is in processes/host
   validation/      analytical references, benchmark and regression cases
 examples/          runnable reference calculations
   experiments/     experiment configurations for `marse run` and `marse ecosystem`
   networks/        reaction networks for `marse check` and `marse run` (configuration schema v2)
   environments/    scenes: surfaces, liquids, flows and the cells that bind to them, and the mouth
 tests/             test suite
-docs/              theory, parameters, specification, architecture, validation, roadmap
+docs/              the MkDocs site: reference, validation, and plans
 tools/             repository tooling (privacy and repository guards, mypy baseline)
 ```
 

@@ -14,10 +14,10 @@ import pytest
 
 from marse.core.framestore import FrameStore as CoreFrameStore
 from marse.ecosystem.framestore import FrameStore as EcosystemFrameStore
-from marse.spatial.column import ColumnSystem
-from marse.spatial.grid import Grid
+from marse.space.column import ColumnSystem
+from marse.space.grid import Grid
+from marse.space.transport import Diffusion
 from marse.spatial.multigrid import ImplicitSystem, inverse
-from marse.spatial.transport import Diffusion
 from marse.spatial.vtk import read_vti, write_pvd, write_vti
 from marse.validation.analytical import cosine_mode_rate, point_source_diffusion_3d
 

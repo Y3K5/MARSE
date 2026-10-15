@@ -22,7 +22,7 @@ import pytest
 import marse.core.reactive_transport as reactive_transport
 from marse.cli import main
 from marse.core.config import ConfigError
-from marse.schemas import experiment_from_dict
+from marse.model import experiment_from_dict
 
 ROOT = Path(__file__).resolve().parents[1]
 RINSE = ROOT / "examples" / "environments" / "oral" / "stephan_rinse.json"

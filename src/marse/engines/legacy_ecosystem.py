@@ -1,9 +1,10 @@
 """The version-1 two-dimensional ecosystem engine.
 
 Unverified. ``docs/validation.md`` records the known defects, and the command
-line warns before every run and replay. The periodontal study still uses this
-engine; porting it to version 2 is a follow-up. The implementation remains
-:mod:`marse.ecosystem`.
+line warns before every run and replay. The version-1 periodontal file still
+uses this engine. A separate version-2 column lives in
+``examples/networks/periodontal_pathogen_v2.json`` and does not run here.
+The implementation remains :mod:`marse.ecosystem`.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from marse.ecosystem import run as run_ecosystem
 from marse.ecosystem.framestore import EcosystemFrameSink, FrameStore, StoredFrames
 from marse.ecosystem.model import ecosystem_from_dict, recorded_steps
 from marse.engines.base import Completed
+from marse.io.layout import publish_run
 
 MAX_STORED_FRAMES = 200
 """About how many frames ``marse ecosystem`` stores by default, whatever the run length."""
@@ -112,6 +114,7 @@ def _run_into(
     finally:
         store.close()  # release the memory maps, which Windows requires before files move
     manifest = result.manifest.write(output_dir / "manifest.json")
+    publish_run(output_dir, result.manifest)
     return result, capacity, (index, viewer, manifest)
 
 

@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from marse.microbes.cardinal import cardinal_ph, cardinal_temperature, ratkowsky
-from marse.microbes.growth import (
+from marse.processes.cardinal import cardinal_ph, cardinal_temperature, ratkowsky
+from marse.processes.growth import (
     baranyi_roberts,
     doubling_time,
     haldane,
@@ -15,7 +15,7 @@ from marse.microbes.growth import (
     specific_growth_rate,
     substrate_uptake_rate,
 )
-from marse.spatial.solutes import (
+from marse.space.solutes import (
     OXYGEN_MOLAR_MASS,
     oxygen_diffusivity_m2_per_s,
     oxygen_saturation_mg_per_l,

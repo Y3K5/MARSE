@@ -62,7 +62,7 @@ $$
 t_d = \frac{\ln 2}{\mu}.
 $$
 
-Implemented as `marse.microbes.growth.doubling_time` and
+Implemented as `marse.processes.growth.doubling_time` and
 `specific_growth_rate`. Converting between the two is the single most common
 source of factor-of-$\ln 2$ errors in the literature, so MARSE stores $\mu$
 internally and converts only for display.
@@ -132,7 +132,7 @@ algebraic form of Michaelis–Menten enzyme kinetics. The resemblance is not a
 derivation — $K_S$ is a population-level property that depends on transporter
 expression, and it varies with growth history.
 
-Implemented as `marse.microbes.growth.monod`. Negative concentrations, which
+Implemented as `marse.processes.growth.monod`. Negative concentrations, which
 appear as numerical undershoot in explicit solvers, are clamped to zero rather
 than producing negative growth.
 
@@ -211,7 +211,7 @@ This non-monotonicity has a real consequence: in a chemostat it creates two
 steady states at the same dilution rate, one stable and one unstable, so the
 outcome depends on the initial condition (Andrews 1968).
 
-Implemented as `marse.microbes.growth.haldane`.
+Implemented as `marse.processes.growth.haldane`.
 
 ### 1.6 Lag phase: the Baranyi–Roberts model
 
@@ -261,7 +261,7 @@ Three properties make this the preferred primary model in MARSE:
 Asymptotically the exponential phase is the no-lag line shifted right by
 exactly $\lambda$, which is the behaviour the test suite checks.
 
-Implemented as `marse.microbes.growth.baranyi_roberts`, evaluated with
+Implemented as `marse.processes.growth.baranyi_roberts`, evaluated with
 `logaddexp`/`log1p` so that the exponentials do not overflow for large
 $m\mu_{\max}A$.
 
@@ -340,7 +340,7 @@ temperature limit is set by protein denaturation, which is cooperative and
 therefore abrupt, while the low-temperature limit is set by reaction rates
 slowing smoothly.
 
-Implemented as `marse.microbes.cardinal.cardinal_temperature`.
+Implemented as `marse.processes.cardinal.cardinal_temperature`.
 
 ### 2.3 Cardinal pH model (CPM)
 
@@ -375,7 +375,7 @@ with $n' = 2\,\mathrm{pH} - \mathrm{pH}_{\min} - \mathrm{pH}_{\max}$ and
 $d' = n' - 2(\mathrm{pH} - \mathrm{pH}_{\mathrm{opt}})$, and zero outside the
 limits.
 
-Implemented as `marse.microbes.cardinal.cardinal_ph` and `cardinal_ph_slope`.
+Implemented as `marse.processes.cardinal.cardinal_ph` and `cardinal_ph_slope`.
 
 ### 2.4 Ratkowsky square-root model
 
@@ -395,7 +395,7 @@ the biokinetic range: plots of $\ln\mu$ against $1/T$ curve rather than
 straightening (Ratkowsky et al. 1982). MARSE does not offer an Arrhenius
 growth provider.
 
-Implemented as `marse.microbes.cardinal.ratkowsky`.
+Implemented as `marse.processes.cardinal.ratkowsky`.
 
 ---
 
@@ -443,7 +443,7 @@ $$
 r_S = \left(\frac{\mu}{Y^{\mathrm{true}}} + m_S\right) X .
 $$
 
-Implemented as `marse.microbes.growth.substrate_uptake_rate`.
+Implemented as `marse.processes.growth.substrate_uptake_rate`.
 
 ### 3.3 Product formation (Luedeking–Piret)
 
@@ -460,7 +460,7 @@ form for matrix production and for cross-feeding metabolites, where the two
 components behave very differently: a $\beta$-dominated product keeps
 accumulating in a stationary biofilm, an $\alpha$-dominated one does not.
 
-Implemented as `marse.microbes.growth.product_formation_rate`.
+Implemented as `marse.processes.growth.product_formation_rate`.
 
 ### 3.4 Mass balance as an invariant
 
@@ -603,7 +603,7 @@ rounded once to double precision, so $\sum_j \nu_{pj} I_{jk}$ is zero to within
 a few units in the last place. The runtime ledger of §9.5 is built on that
 margin.
 
-Implemented as `marse.schemas.network`.
+Implemented as `marse.model.network`.
 
 ### 3.7 Rates
 
@@ -644,8 +644,8 @@ component that is genuinely never limiting may be declared
 `assumed_in_excess`, the explicit form of an assumption the activated-sludge
 models make for ammonium. A run in which it runs out stops with an error.
 
-Implemented as `marse.microbes.kinetics`; the switching functions are those of
-§1.3 and §1.5 (`marse.microbes.growth`).
+Implemented as `marse.processes.kinetics`; the switching functions are those of
+§1.3 and §1.5 (`marse.processes.growth`).
 
 ### 3.8 Acid–base equilibria and pH
 
@@ -768,8 +768,8 @@ because $h$ is not part of the state but a function of it.
 - **Instant equilibria.** Protonation is far faster than diffusion across a
   voxel or any metabolism.
 
-Implemented as `marse.chemistry.acid_base`, and the factor in
-`marse.microbes.kinetics`.
+Implemented as `marse.processes.acid_base`, and the factor in
+`marse.processes.kinetics`.
 
 ### 3.9 Oxygen roles
 
@@ -805,7 +805,7 @@ has. They constrain the form of the rates, not their constants: whether an
 inhibition constant is small enough to stop growth in air is a parameter, and
 is graded like any other ([parameters.md](parameters.md)).
 
-Implemented in `marse.schemas.network`.
+Implemented in `marse.model.network`.
 
 ---
 
@@ -894,7 +894,7 @@ silently: **dissolved salts lower solubility** (culture media hold measurably
 less oxygen than pure water), and a **5 % CO₂ atmosphere** displaces oxygen
 proportionally, giving roughly $0.95\,C^{*}$.
 
-Implemented as `marse.spatial.solutes.oxygen_saturation_mg_per_l`.
+Implemented as `marse.space.solutes.oxygen_saturation_mg_per_l`.
 
 ### 4.5 Oxygen: diffusivity
 
@@ -913,7 +913,7 @@ diffusivity of oxygen while decreasing how much of it dissolves.** The two
 effects act in opposite directions on delivery, so neither can be neglected
 when comparing runs at different temperatures.
 
-Implemented as `marse.spatial.solutes.oxygen_diffusivity_m2_per_s`.
+Implemented as `marse.space.solutes.oxygen_diffusivity_m2_per_s`.
 
 ### 4.6 Temperature scaling for other solutes
 
@@ -938,7 +938,7 @@ manifest whenever it is applied.
 
 The spatial engine divides a box above a flat substratum into cubic voxels of
 edge $h$, in one, two or three dimensions; the last axis is height
-(`marse.spatial.grid`). Each voxel holds the mean concentration of each
+(`marse.space.grid`). Each voxel holds the mean concentration of each
 component. Between two neighbouring voxels, the flux through their shared face
 is
 
@@ -1079,7 +1079,7 @@ up, a component has fallen to $(H_{\text{resid}}/H_{\max})^N$ of what it was.
   later, at most a minute. This changes when the swallows fall, not what is
   conserved.
 
-Implemented as `marse.oral` and `marse.core.reservoir`.
+Implemented as `marse.environments.oral` and `marse.core.reservoir`.
 
 ### 4.9 The diet
 
@@ -1154,8 +1154,8 @@ an optimum thickness for the lowest pH. More fixed buffer makes the fall
 shallower and the low phase longer (Dibdin 1990). The numbers are in
 [validation.md](validation.md#the-stephan-curve).
 
-Implemented as `marse.oral.diet`, with the measures of a curve in
-`marse.oral.stephan`.
+Implemented as `marse.environments.oral.diet`, with the measures of a curve in
+`marse.environments.oral.stephan`.
 
 ### 4.10 Oxygen from the air
 
@@ -1218,7 +1218,7 @@ colony biofilm grown on a membrane does.
 - **The air offers no resistance**: the face is at saturation, however fast
   the box takes the gas up.
 
-Implemented as `marse.spatial.air` and, under a film, `marse.core.reservoir`.
+Implemented as `marse.space.air` and, under a film, `marse.core.reservoir`.
 
 ## 5. Reaction–diffusion coupling
 
@@ -1365,7 +1365,7 @@ one-dimensional form of the linear expansion of §6.2.
 that moves in the proportions it is found in, and conserve each exactly. Both
 run in a column for now.
 
-- **Packed** (`displacement_1d_v1`, `marse.biofilm.spreading`): the plaque of
+- **Packed** (`displacement_1d_v1`, `marse.processes.spreading`): the plaque of
   the oral scenes. After every step of the integration, the solid of voxel $k$
   occupies the cumulative volume between $V_{k-1}$ and
   $V_k = \sum_{i \le k} \phi_i$, in voxels, and new voxel $j$ takes whatever
@@ -1375,7 +1375,7 @@ run in a column for now.
   hold its differences, so nothing goes negative and everything is accounted
   for. The front is sharp: full voxels, then at most one partly filled. Where
   growth slows below a voxel's capacity, the column settles.
-- **Continuum** (`continuum_pressure_v1`, `marse.spatial.spreading`): growth
+- **Continuum** (`continuum_pressure_v1`, `marse.space.spreading`): growth
   runs in place for an interval, and the excess is then pushed on by the
   pressure it makes, keeping material in order. A voxel that empties stays
   empty, and the method extends to two and three dimensions (§9.10).
@@ -1605,9 +1605,9 @@ $$
 
 Implemented across four modules:
 
-- `marse.spatial.colloids`: delivery;
-- `marse.spatial.surface`: which material each face is;
-- `marse.microbes.adhesion`: binding, detachment and locking;
+- `marse.space.colloids`: delivery;
+- `marse.space.surface`: which material each face is;
+- `marse.processes.adhesion`: binding, detachment and locking;
 - `marse.core.implicit`: the exchange within the integration.
 
 ---
@@ -1867,7 +1867,7 @@ voxel only to its two neighbours. Block Gaussian elimination from the
 substratum up, then back substitution (the Thomas algorithm, in blocks),
 solves it exactly in $O(nJ^3)$. It is three times faster than multigrid on the
 1-D example, and its results agree with multigrid's to about $10^{-14}$.
-Implemented as `marse.spatial.column`.
+Implemented as `marse.space.column`.
 
 ### 9.8 Implicit reaction–transport integration
 
@@ -2153,7 +2153,7 @@ previous step had a third of the next steps rejected.
 the splitting error in the film's biovolume is first order, with observed
 orders 1.05 to 1.22 as $\Delta$ falls from 0.1 h to 0.0125 h. At $\Delta$ = 0.25 h,
 the default, a film fed from the liquid thickens within 0.14% of its rate as
-$\Delta \to 0$. Implemented as `marse.spatial.spreading`, and run by
+$\Delta \to 0$. Implemented as `marse.space.spreading`, and run by
 `marse.core.reactive_transport`.
 
 ## 10. Assumptions and limitations

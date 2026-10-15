@@ -11,7 +11,6 @@ from typing import Any
 
 import numpy as np
 
-from marse.chemistry import ChargeBalance
 from marse.core.config import ConfigError
 from marse.core.provenance import Manifest
 from marse.core.reactive_transport import ReactiveTransportResult
@@ -19,9 +18,10 @@ from marse.core.reactive_transport import run as run_reactive_transport
 from marse.engines.base import Completed
 from marse.io.frames import FrameStore
 from marse.io.results import write_run_files
-from marse.schemas.experiment import ReactiveTransportConfig
-from marse.schemas.experiment import experiment_from_dict as network_from_dict
-from marse.schemas.experiment import load_experiment as load_network
+from marse.model.experiment import ReactiveTransportConfig
+from marse.model.experiment import experiment_from_dict as network_from_dict
+from marse.model.experiment import load_experiment as load_network
+from marse.processes.acid_base import ChargeBalance
 from marse.spatial.vtk import write_pvd, write_vti
 
 

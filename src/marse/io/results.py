@@ -11,6 +11,7 @@ from pathlib import Path
 from marse.core.reactive_transport import ReactiveTransportResult
 from marse.core.simulation import BiofilmProfileResult, SimulationResult
 from marse.core.well_mixed import WellMixedResult
+from marse.io.layout import publish_run
 
 Result = SimulationResult | BiofilmProfileResult | WellMixedResult | ReactiveTransportResult
 
@@ -25,4 +26,5 @@ def write_run_files(result: Result, output_dir: Path) -> tuple[Path, Path]:
     else:
         data = result.write_trajectory(output_dir / "trajectory.csv")
     manifest = result.manifest.write(output_dir / "manifest.json")
+    publish_run(output_dir, result.manifest)
     return data, manifest

@@ -17,13 +17,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from marse.biofilm.biomass import BiofilmState, Population, solve_growth_profile
-from marse.spatial.domain import Grid1D
-from marse.spatial.solutes import (
+from marse.processes.biomass import BiofilmState, Population, solve_growth_profile
+from marse.space.solutes import (
     OXYGEN_MOLAR_MASS,
     oxygen_diffusivity_um2_per_h,
     oxygen_saturation_mg_per_l,
 )
+from marse.spatial.domain import Grid1D
 
 RELATIVE_DIFFUSIVITY = 0.43  # small nonpolar solutes in biofilms (Stewart 1998)
 DENSITY_G_PER_L = 25.0
