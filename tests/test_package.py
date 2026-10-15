@@ -25,6 +25,7 @@ SUBPACKAGES = [
     "cli",
     "io",
     "bench",
+    "ingest",
 ]
 
 

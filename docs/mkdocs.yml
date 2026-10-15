@@ -33,6 +33,7 @@ nav:
   - Home: index.md
   - Reference:
       - Architecture: architecture.md
+      - Table import: ingest.md
       - Specification: specification.md
       - Parameters: parameters.md
       - Networks: networks.md

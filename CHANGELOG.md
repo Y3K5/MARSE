@@ -62,6 +62,12 @@ results for the same manifest is always called out.
   builds it. It is not deployed. The YAML check loads that one file with
   `--unsafe` so the mermaid fence tag is accepted; every other YAML file
   still uses the safe loader.
+- **Table importers.** `marse ingest` reads a CSV or TSV abundance,
+  transcriptomics, metabolomics, or environment table, checks it, and writes
+  a `marse.ingest/1` feed. Temperature and pH, and one metabolite already in
+  mol per m3, can fill an experiment fragment. Abundances and transcript
+  counts are not written into an experiment. The examples under
+  `examples/ingest/` are synthetic. No simulation result changes.
 - **Periodontal benchmark cases.** `marse bench` scores
   `examples/networks/periodontal_pathogen_v2.json` on carbon, nitrogen and
   electrons, at the residual `tests/test_periodontal_v2.py` already checks.

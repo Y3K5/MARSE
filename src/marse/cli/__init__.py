@@ -11,6 +11,7 @@ The commands are:
     marse bench list cases/          list benchmark cases without running them
     marse bench run cases/ -o bench/ run the cases and write a scored report
     marse bench report bench/        print a scored report without re-running
+    marse ingest environment t.csv  check a table and write a feed JSON
 
 ``run`` selects the engine from the file. A top-level ``engine`` field names
 one explicitly (``legacy_batch``, ``steady_biofilm``, ``well_mixed``,
@@ -37,12 +38,14 @@ from marse.cli.bench import (
 )
 from marse.cli.check import _command_check
 from marse.cli.ecosystem import command_ecosystem, command_ecosystem_batch
+from marse.cli.ingest import add_ingest_parser
 from marse.cli.niche import command_niche_scan
 from marse.cli.replay import command_replay
 from marse.cli.run import command_run
 from marse.cli.runs import command_compare, command_ls
 from marse.core.config import ConfigError
 from marse.engines.legacy_ecosystem import MAX_STORED_FRAMES
+from marse.ingest.errors import IngestError
 from marse.processes.niche import NicheError
 
 __all__ = ["build_parser", "main"]
@@ -137,6 +140,7 @@ def build_parser() -> argparse.ArgumentParser:
     bench_report = bench_sub.add_parser("report", help="print a scored report without re-running")
     bench_report.add_argument("directory", help="directory written by 'marse bench run'")
     bench_report.set_defaults(handler=command_bench_report)
+    add_ingest_parser(commands)
     return parser
 
 
@@ -157,6 +161,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     except CaseError as error:
         print(f"marse: invalid benchmark case: {error}")
+        return 2
+    except IngestError as error:
+        print(f"marse: invalid table: {error}")
         return 2
     except (OSError, ValueError, KeyError) as error:
         print(f"marse: {type(error).__name__}: {error}")
