@@ -72,6 +72,9 @@ results for the same manifest is always called out.
   and `bench.html` beside the existing run directory. The adapter does not
   use a container. PyYAML is a runtime dependency for the case files. No
   example checksum changes. The periodontal case is a later change.
+- **The benchmark-harness plan** states that an empty case directory and a
+  case file that does not parse both exit 2, and that an unverified engine
+  cannot pass.
 - **A plan for the benchmark harness**
   ([docs/benchmarks/phase2-plan.md](docs/benchmarks/phase2-plan.md)).
   It describes case files, an in-process adapter, metrics, and

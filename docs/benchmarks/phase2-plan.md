@@ -122,8 +122,11 @@ re-run. `marse bench list` reads case files and prints id, adapter, and
 experiment. It does not run.
 
 The command exits 0 when every selected case passed, and 1 when a case ran
-and failed a metric. A case file that does not load exits 2, the same
-convention as an invalid experiment.
+and failed a metric. A directory with no case files is not a pass:
+`marse bench run` exits 2. A case file that does not load, including YAML
+that does not parse, exits 2, the same convention as an invalid experiment.
+An unverified engine prints the same warning as `marse ecosystem` and
+cannot pass.
 
 ## Milestones
 
