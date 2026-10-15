@@ -62,6 +62,11 @@ results for the same manifest is always called out.
   builds it. It is not deployed. The YAML check loads that one file with
   `--unsafe` so the mermaid fence tag is accepted; every other YAML file
   still uses the safe loader.
+- **A plan for the benchmark harness**
+  ([docs/benchmarks/phase2-plan.md](docs/benchmarks/phase2-plan.md)).
+  It describes case files, an in-process adapter, metrics, and
+  `marse bench`. No harness code in that change, and no simulation result
+  changes.
 
 - **Experimental Pocket Explorer refinement.** The authored FDI 35–37 segment
   uses lighter display meshes and cached cut surfaces. Pocket cutaways now use
