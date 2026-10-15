@@ -8,6 +8,9 @@ The commands are:
     marse ls runs/                   list run directories
     marse compare runs/a runs/b      compare two manifests
     marse check network.json         check a reaction network (schema version 2)
+    marse bench list cases/          list benchmark cases without running them
+    marse bench run cases/ -o bench/ run the cases and write a scored report
+    marse bench report bench/        print a scored report without re-running
 
 ``run`` selects the engine from the file. A top-level ``engine`` field names
 one explicitly (``legacy_batch``, ``steady_biofilm``, ``well_mixed``,
@@ -25,6 +28,13 @@ from collections.abc import Sequence
 import numpy as np
 
 from marse import __version__
+from marse.bench.cases import CaseError
+from marse.cli.bench import (
+    command_bench,
+    command_bench_list,
+    command_bench_report,
+    command_bench_run,
+)
 from marse.cli.check import _command_check
 from marse.cli.ecosystem import command_ecosystem, command_ecosystem_batch
 from marse.cli.niche import command_niche_scan
@@ -103,6 +113,30 @@ def build_parser() -> argparse.ArgumentParser:
     compare_command.add_argument("left", help="a manifest.json, or a run directory")
     compare_command.add_argument("right", help="a manifest.json, or a run directory")
     compare_command.set_defaults(handler=command_compare)
+
+    bench_command = commands.add_parser("bench", help="list, run, or report benchmark cases")
+    bench_command.set_defaults(handler=command_bench)
+    bench_sub = bench_command.add_subparsers(dest="bench_command")
+
+    bench_list = bench_sub.add_parser("list", help="list cases without running them")
+    bench_list.add_argument("cases", help="directory of YAML case files")
+    bench_list.add_argument("--root", default=".", help="repository root for experiment paths")
+    bench_list.set_defaults(handler=command_bench_list)
+
+    bench_run = bench_sub.add_parser("run", help="run cases and write a scored report")
+    bench_run.add_argument("cases", help="directory of YAML case files")
+    bench_run.add_argument(
+        "-o", "--output", required=True, help="directory for run and report files"
+    )
+    bench_run.add_argument("--root", default=".", help="repository root for experiment paths")
+    bench_run.add_argument(
+        "--case", action="append", help="run only this case id; repeat to select more"
+    )
+    bench_run.set_defaults(handler=command_bench_run)
+
+    bench_report = bench_sub.add_parser("report", help="print a scored report without re-running")
+    bench_report.add_argument("directory", help="directory written by 'marse bench run'")
+    bench_report.set_defaults(handler=command_bench_report)
     return parser
 
 
@@ -120,6 +154,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     except NicheError as error:
         print(f"marse: invalid niche scan: {error}")
+        return 2
+    except CaseError as error:
+        print(f"marse: invalid benchmark case: {error}")
         return 2
     except (OSError, ValueError, KeyError) as error:
         print(f"marse: {type(error).__name__}: {error}")
