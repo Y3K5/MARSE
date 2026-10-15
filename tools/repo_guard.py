@@ -117,6 +117,7 @@ REQUIRED_PACKAGE_DIRS = (
     "engines",
     "cli",
     "io",
+    "bench",
 )
 """The architecture from docs/architecture.md. Removing one is a design change."""
 

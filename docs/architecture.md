@@ -59,6 +59,7 @@ src/marse/
   experimental/    package kept so the old host path can warn; the code is in
                    processes/host
   validation/      analytical references and the benchmark registry
+  bench/           benchmark case files, the in-process adapter, metrics, reports
   _compat.py       deprecated import paths
 ```
 
@@ -205,7 +206,8 @@ mechanisms. The core does not depend on any external policy package.
 
 ## Dependencies
 
-The install depends on NumPy. Tests need pytest. Type checking needs mypy,
+The install depends on NumPy and PyYAML. PyYAML loads benchmark case files.
+Tests need pytest. Type checking needs mypy,
 which CI runs against a per-module baseline (`tools/mypy-baseline.txt`): a
 module that is not listed must be clean, and a listed module may not grow
 new errors. Further runtime dependencies are a design change and belong in
