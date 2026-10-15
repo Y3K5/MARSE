@@ -28,15 +28,15 @@ from numpy.typing import NDArray
 from marse.core.provenance import Manifest
 from marse.core.seeds import SeedRegistry
 from marse.ecosystem.providers import EcosystemProviders, NoBoundary
-from marse.experimental.host.immune import (
+from marse.processes.additives import AdditiveEffect, apply_effect
+from marse.processes.cardinal import cardinal_ph, cardinal_temperature
+from marse.processes.growth import monod
+from marse.processes.host.immune import (
     ImmuneInteraction,
     MolecularNeutralizer,
     apply_immune_pressure,
 )
-from marse.microbes.additives import AdditiveEffect, apply_effect
-from marse.microbes.cardinal import cardinal_ph, cardinal_temperature
-from marse.microbes.growth import monod
-from marse.microbes.niche import Capability
+from marse.processes.niche import Capability
 
 __all__ = [
     "AdditiveConfig",

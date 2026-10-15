@@ -20,7 +20,7 @@ import json
 from pathlib import Path
 
 from marse.core.reactive_transport import run
-from marse.schemas.experiment import experiment_from_dict
+from marse.model.experiment import experiment_from_dict
 
 SCENE = Path(__file__).resolve().parent / "environments" / "dental" / "dental_surfaces.json"
 HOURS = (1, 2, 6, 12, 24)

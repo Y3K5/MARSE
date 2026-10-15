@@ -6,7 +6,7 @@ Phase 2. What this module owns is everything that is *not* biology: the clock,
 the canonical state, the order in which models are applied, seeded randomness,
 checkpoints, conservation checks and the run manifest.
 
-The biology comes from the tested providers in :mod:`marse.microbes`, which
+The biology comes from the tested providers in :mod:`marse.processes`, which
 this module calls without reimplementing:
 
     dX_i/dt = (mu_i - b_i) X_i
@@ -28,13 +28,13 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from marse.biofilm.biomass import BiofilmState, GrowthProfile, Population, solve_growth_profile
 from marse.core.config import ExperimentConfig
 from marse.core.provenance import Manifest
 from marse.core.seeds import SeedRegistry
 from marse.core.state import SimulationState
-from marse.microbes.cardinal import cardinal_ph, cardinal_temperature
-from marse.microbes.growth import monod
+from marse.processes.biomass import BiofilmState, GrowthProfile, Population, solve_growth_profile
+from marse.processes.cardinal import cardinal_ph, cardinal_temperature
+from marse.processes.growth import monod
 from marse.spatial.domain import Grid1D
 
 __all__ = [

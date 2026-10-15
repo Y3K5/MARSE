@@ -28,16 +28,16 @@ from marse.core.config import ConfigError
 from marse.core.provenance import Manifest
 from marse.core.reactive_transport import run
 from marse.core.simulation import ConservationError
-from marse.schemas import experiment_from_dict
-from marse.schemas.domain import DEFAULT_SPREADING_INTERVAL_H, Domain
-from marse.spatial.diffusion import solve_steady_state
-from marse.spatial.domain import Grid1D
-from marse.spatial.spreading import (
+from marse.model import experiment_from_dict
+from marse.model.domain import DEFAULT_SPREADING_INTERVAL_H, Domain
+from marse.space.spreading import (
     ContinuumSpreading,
     SpreadingError,
     _column_pressure,
     volume_fraction,
 )
+from marse.spatial.diffusion import solve_steady_state
+from marse.spatial.domain import Grid1D
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "examples" / "networks" / "spreading_column.json"

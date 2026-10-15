@@ -36,8 +36,8 @@ from marse.ecosystem import (
     run,
 )
 from marse.ecosystem.model import ecosystem_from_dict
-from marse.microbes.niche import Capability
-from marse.spatial.solutes import oxygen_diffusivity_um2_per_h
+from marse.processes.niche import Capability
+from marse.space.solutes import oxygen_diffusivity_um2_per_h
 
 EXPERIMENTS = Path(__file__).resolve().parents[1] / "examples" / "experiments"
 

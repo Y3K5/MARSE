@@ -11,14 +11,14 @@ import math
 import numpy as np
 import pytest
 
-from marse.spatial.colloids import (
+from marse.space.colloids import (
     LEVEQUE,
     film_wall_shear_rate_per_s,
     leveque_transfer_um_per_s,
     stokes_einstein_um2_per_s,
 )
-from marse.spatial.grid import Grid
-from marse.spatial.surface import Patch, Substratum
+from marse.space.grid import Grid
+from marse.space.surface import Patch, Substratum
 from marse.validation.analytical import adhesion_kinetics
 
 # --- transport to the surface -----------------------------------------------------------

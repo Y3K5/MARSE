@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from marse.spatial.solutes import (
+from marse.space.solutes import (
     OXYGEN_MOLAR_MASS,
     oxygen_diffusivity_m2_per_s,
     oxygen_saturation_mg_per_l,

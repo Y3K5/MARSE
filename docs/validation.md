@@ -100,9 +100,18 @@ flips its test, which must then become an ordinary regression test.
 | 9 | ~~Ecosystem runs write no manifest and cannot be replayed~~ **Fixed:** they write a manifest (kind `ecosystem`) and replay exactly | — | The reproducibility claim now covers this engine; its manifests name the engine `ecosystem_v1_unverified` |
 
 Until these are fixed, results from `marse ecosystem`, including the
-periodontal study, support no quantitative or comparative conclusion. The
-[roadmap](roadmap.md#order-of-work-correctness-first) fixes them before any
-new mechanism is added.
+version-1 periodontal file, support no quantitative or comparative conclusion.
+The [roadmap](roadmap.md#order-of-work-correctness-first) fixes them before any
+new mechanism is added on that engine.
+
+The version-2 periodontal column
+(`examples/networks/periodontal_pathogen_v2.json`) does not use this engine.
+It is a schema-version-2 network: three obligate anaerobes, no oxygen Monod
+term, stoichiometry checked at load, and continuum spreading that shares one
+column. That avoids defects 1–8 for *that file*. It does not mark the tests
+of those defects as fixed, and it is not a calibrated model of a pocket. The
+spatial engine it runs on is still the experimental reaction-transport solver,
+not an IWA benchmark score.
 
 The benchmark registry in `marse.validation.benchmarks` has one case scored
 against simulator output so far: the first-order oxygen profile, met by the
@@ -121,7 +130,7 @@ These give validation case V4 a quantitative target it currently lacks.
 ## Stratified growth
 
 Coupling the solute field to the biomass that consumes it
-(`marse.biofilm.biomass`) reproduces the behaviour that motivates spatial
+(`marse.processes.biomass`) reproduces the behaviour that motivates spatial
 modelling in the first place. With identical cells at uniform density, growth
 is confined to a surface layer whose depth stops increasing once the biofilm
 passes the penetration depth, so the biofilm-averaged growth rate falls
@@ -219,7 +228,7 @@ checks, in `tests/test_well_mixed.py` and `tests/test_integrators.py`:
 ## Transport in one, two and three dimensions
 
 The spatial engine moves dissolved components between cubic voxels by
-finite-volume diffusion (`marse.spatial.transport`,
+finite-volume diffusion (`marse.space.transport`,
 [theory.md §4.7](theory.md#47-finite-volume-transport-on-voxels)). The checks,
 in `tests/test_transport.py`:
 
@@ -367,7 +376,7 @@ jamming binds no more.
 
 The tests in detail:
 
-- **Delivery** (`marse.spatial.colloids`). A cell's delivery is checked three
+- **Delivery** (`marse.space.colloids`). A cell's delivery is checked three
   ways:
   - the Lévêque constant is checked against its closed form;
   - the wall flux of the convection–diffusion equation, marched downstream on
@@ -377,7 +386,7 @@ The tests in detail:
 
   Stokes–Einstein matches the known diffusivity of a micron sphere, and the
   salivary film shears its surface at 0.4 to 5.4 s⁻¹.
-- **The substratum** (`marse.spatial.surface`). Patches give every face
+- **The substratum** (`marse.space.surface`). Patches give every face
   exactly one material, by where its centre lies. A pattern with a gap, an
   overlap, a patch outside the box or covering no face, or the wrong number of
   bounds is refused with the reason.

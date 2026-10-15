@@ -25,12 +25,12 @@ import numpy as np
 import pytest
 
 import marse.core.reactive_transport as reactive_transport
-from marse.chemistry import ChargeBalance
 from marse.cli import main
 from marse.core.config import ConfigError
-from marse.oral import OralFluid, film_layers, renewal_per_h
-from marse.schemas import experiment_from_dict, network_from_dict
-from marse.spatial.grid import Grid
+from marse.environments.oral import OralFluid, film_layers, renewal_per_h
+from marse.model import experiment_from_dict, network_from_dict
+from marse.processes.acid_base import ChargeBalance
+from marse.space.grid import Grid
 
 ROOT = Path(__file__).resolve().parents[1]
 NETWORK = {

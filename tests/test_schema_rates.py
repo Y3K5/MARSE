@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from marse.core.config import ConfigError
-from marse.schemas import experiment_from_dict, network_from_dict
+from marse.model import experiment_from_dict, network_from_dict
 
 EXAMPLE = (
     Path(__file__).resolve().parents[1] / "examples" / "networks" / "glucose_cross_feeding.json"

@@ -12,8 +12,8 @@ import numpy as np
 import pytest
 
 from marse.core.reservoir import ReservoirPath, ReservoirTransport
-from marse.spatial.grid import Grid
-from marse.spatial.transport import Diffusion
+from marse.space.grid import Grid
+from marse.space.transport import Diffusion
 
 
 def _no_reactions(components):

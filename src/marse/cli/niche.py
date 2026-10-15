@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from marse.microbes.niche import load_niche_scan, run_niche_scan
+from marse.processes.niche import load_niche_scan, run_niche_scan
 
 
 def command_niche_scan(args: argparse.Namespace) -> int:

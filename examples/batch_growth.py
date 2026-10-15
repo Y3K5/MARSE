@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from marse.microbes.cardinal import cardinal_temperature
-from marse.microbes.growth import doubling_time, monod, substrate_uptake_rate
+from marse.processes.cardinal import cardinal_temperature
+from marse.processes.growth import doubling_time, monod, substrate_uptake_rate
 from marse.validation.analytical import batch_final_biomass, monod_batch_time
 
 # Illustrative parameters; units are hours, mM and g/L throughout.

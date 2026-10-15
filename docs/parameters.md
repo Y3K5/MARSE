@@ -74,7 +74,7 @@ transport there by a factor of 2 to 3. The CO₂, ammonium and lactate values
 are graded C and must be checked against a primary source before any published
 analysis.
 
-Implemented in `marse.spatial.solutes`. Both oxygen correlations refuse to
+Implemented in `marse.space.solutes`. Both oxygen correlations refuse to
 extrapolate outside their stated validity ranges (0–40 °C and 0–95 °C
 respectively) rather than returning a plausible-looking wrong number.
 

@@ -82,7 +82,7 @@ def _load_config(kind: str, raw: dict[str, Any]) -> RunConfig:
 
         return ecosystem_from_dict(raw)
     if kind in ("well_mixed", "reactive_transport"):
-        from marse.schemas.experiment import experiment_from_dict as network_experiment
+        from marse.model.experiment import experiment_from_dict as network_experiment
 
         return network_experiment(raw)
     raise ValueError(f"manifest kind {kind!r} is not supported by MARSE {__version__}")

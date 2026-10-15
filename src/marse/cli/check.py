@@ -9,13 +9,13 @@ from pathlib import Path
 
 import numpy as np
 
-from marse.chemistry import ChargeBalance
 from marse.core.config import ConfigError
-from marse.schemas import Network, experiment_from_dict
-from marse.schemas._reading import load_json
-from marse.schemas.experiment import ReactiveTransportConfig, RunConfig
-from marse.schemas.formula import ELEMENT_QUANTITIES
-from marse.schemas.network import RUN_FIELDS, SCHEMA_VERSION, read_document
+from marse.model import Network, experiment_from_dict
+from marse.model._reading import load_json
+from marse.model.experiment import ReactiveTransportConfig, RunConfig
+from marse.model.formula import ELEMENT_QUANTITIES
+from marse.model.network import RUN_FIELDS, SCHEMA_VERSION, read_document
+from marse.processes.acid_base import ChargeBalance
 from marse.spatial.multigrid import hierarchy
 
 
@@ -172,7 +172,7 @@ def _report_domain(config: ReactiveTransportConfig) -> None:
 
 def _report_spreading(config: ReactiveTransportConfig) -> None:
     from marse.core.reactive_transport import build_model
-    from marse.spatial.spreading import volume_fraction
+    from marse.space.spreading import volume_fraction
 
     spreading = config.domain.spreading
     assert spreading is not None
@@ -209,7 +209,7 @@ def _report_spreading(config: ReactiveTransportConfig) -> None:
 
 
 def _report_mouth(config: ReactiveTransportConfig) -> None:
-    from marse.oral import OralFluid, renewal_per_h
+    from marse.environments.oral import OralFluid, renewal_per_h
 
     domain = config.domain
     film, mouth = domain.film, domain.mouth
@@ -285,7 +285,7 @@ def _report_air(config: ReactiveTransportConfig) -> None:
 
 
 def _report_plaque(config: ReactiveTransportConfig) -> None:
-    from marse.biofilm.spreading import SPREADING_VERSION
+    from marse.processes.spreading import SPREADING_VERSION
 
     plaque = config.domain.plaque
     assert plaque is not None
@@ -321,7 +321,7 @@ def _clock(hours: float) -> str:
 
 def _report_surface(config: ReactiveTransportConfig) -> None:
     from marse.core.reactive_transport import transfer_velocities_um_per_s
-    from marse.microbes.adhesion import JAMMING_COVERAGE
+    from marse.processes.adhesion import JAMMING_COVERAGE
 
     domain = config.domain
     substratum = domain.substratum

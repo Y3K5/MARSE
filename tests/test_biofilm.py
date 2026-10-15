@@ -11,13 +11,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from marse.biofilm.biomass import BiofilmState, Population, solve_growth_profile
-from marse.spatial.domain import Grid1D
-from marse.spatial.solutes import (
+from marse.processes.biomass import BiofilmState, Population, solve_growth_profile
+from marse.space.solutes import (
     OXYGEN_MOLAR_MASS,
     oxygen_diffusivity_um2_per_h,
     oxygen_saturation_mg_per_l,
 )
+from marse.spatial.domain import Grid1D
 
 # Oxygen at 37 C, in the hours-and-micrometres units MARSE works in.
 DIFFUSIVITY = 0.43 * float(oxygen_diffusivity_um2_per_h(37.0))
@@ -198,7 +198,7 @@ def test_active_zone_threshold_is_validated():
 
 def test_the_hours_conversion_matches_the_per_second_value():
     per_second = float(oxygen_diffusivity_um2_per_h(37.0)) / 3600.0
-    from marse.spatial.solutes import oxygen_diffusivity_m2_per_s
+    from marse.space.solutes import oxygen_diffusivity_m2_per_s
 
     assert per_second == pytest.approx(float(oxygen_diffusivity_m2_per_s(37.0)) * 1e12)
 

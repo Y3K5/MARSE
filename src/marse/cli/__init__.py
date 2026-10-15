@@ -1,10 +1,12 @@
 """Command-line entry point: ``marse``.
 
-The commands are unchanged:
+The commands are:
 
     marse run experiment.json        run a batch, biofilm, or version-2 network
     marse ecosystem experiment.json  run a 2-D multispecies ecosystem (unverified)
     marse replay manifest.json       re-run any of them from its manifest and compare
+    marse ls runs/                   list run directories
+    marse compare runs/a runs/b      compare two manifests
     marse check network.json         check a reaction network (schema version 2)
 
 ``run`` selects the engine from the file. A top-level ``engine`` field names
@@ -28,9 +30,10 @@ from marse.cli.ecosystem import command_ecosystem, command_ecosystem_batch
 from marse.cli.niche import command_niche_scan
 from marse.cli.replay import command_replay
 from marse.cli.run import command_run
+from marse.cli.runs import command_compare, command_ls
 from marse.core.config import ConfigError
 from marse.engines.legacy_ecosystem import MAX_STORED_FRAMES
-from marse.microbes.niche import NicheError
+from marse.processes.niche import NicheError
 
 __all__ = ["build_parser", "main"]
 
@@ -88,6 +91,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     check_command.add_argument("network", help="path to a network JSON file (schema version 2)")
     check_command.set_defaults(handler=_command_check)
+
+    ls_command = commands.add_parser("ls", help="list runs under a directory")
+    ls_command.add_argument("directory", help="a run directory, or a directory that contains runs")
+    ls_command.add_argument("--json", action="store_true", help="print the index as JSON")
+    ls_command.set_defaults(handler=command_ls)
+
+    compare_command = commands.add_parser(
+        "compare", help="compare two manifests without re-running them"
+    )
+    compare_command.add_argument("left", help="a manifest.json, or a run directory")
+    compare_command.add_argument("right", help="a manifest.json, or a run directory")
+    compare_command.set_defaults(handler=command_compare)
     return parser
 
 

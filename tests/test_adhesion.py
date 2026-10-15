@@ -20,9 +20,9 @@ from marse.core.config import ConfigError
 from marse.core.ledger import Ledger
 from marse.core.reactive_transport import build_model, surface_exchange
 from marse.core.reactive_transport import run as run_in_space
-from marse.microbes.adhesion import JAMMING_COVERAGE
-from marse.schemas.experiment import experiment_from_dict
-from marse.schemas.formula import QUANTITIES
+from marse.model.experiment import experiment_from_dict
+from marse.model.formula import QUANTITIES
+from marse.processes.adhesion import JAMMING_COVERAGE
 from marse.validation.analytical import adhesion_kinetics
 
 ROOT = Path(__file__).resolve().parents[1]

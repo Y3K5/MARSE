@@ -26,15 +26,15 @@ from marse.core.reactive_transport import build_model
 from marse.core.reactive_transport import run as run_in_space
 from marse.core.simulation import ConservationError
 from marse.core.well_mixed import run as run_well_mixed
-from marse.microbes.kinetics import compile_rates, process_rates, rate_jacobian
-from marse.schemas.experiment import (
+from marse.model.experiment import (
     ReactiveTransportConfig,
     WellMixedConfig,
     experiment_from_dict,
 )
-from marse.schemas.formula import QUANTITIES
-from marse.spatial.grid import Grid
-from marse.spatial.transport import Diffusion
+from marse.model.formula import QUANTITIES
+from marse.processes.kinetics import compile_rates, process_rates, rate_jacobian
+from marse.space.grid import Grid
+from marse.space.transport import Diffusion
 from marse.validation.analytical import cosine_mode_rate
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -381,7 +381,7 @@ def test_a_run_gives_the_same_result_on_any_number_of_threads(scene, hours):
     script = (
         "import json, sys\n"
         "from marse.core.reactive_transport import run\n"
-        "from marse.schemas.experiment import experiment_from_dict\n"
+        "from marse.model.experiment import experiment_from_dict\n"
         "raw = json.loads(open(sys.argv[1], encoding='utf-8').read())\n"
         "raw['duration_h'] = float(sys.argv[2])\n"
         "print(run(experiment_from_dict(raw)).manifest.outputs['final_state_sha256'])\n"

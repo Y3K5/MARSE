@@ -30,8 +30,8 @@ from pathlib import Path
 import numpy as np
 
 from marse.core.reactive_transport import ReactiveTransportResult, run
-from marse.oral import CRITICAL_PH, StephanCurve
-from marse.schemas.experiment import experiment_from_dict
+from marse.environments.oral import CRITICAL_PH, StephanCurve
+from marse.model.experiment import experiment_from_dict
 
 SCENES = Path(__file__).resolve().parent / "environments" / "oral"
 NAMES = {"stephan_rinse.json": "rinse", "sipping.json": "sipping", "pocket.json": "pocket"}

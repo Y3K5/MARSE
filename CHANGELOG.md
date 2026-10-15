@@ -19,8 +19,8 @@ results for the same manifest is always called out.
   `marse` and `python -m marse` are unchanged.
 - **The 2-D ecosystem engine warns that it is unverified.** `marse ecosystem`,
   `marse ecosystem-batch` and a replay of an ecosystem manifest print the
-  warning on stderr. The periodontal study still runs on this engine; moving
-  it to version 2 is a follow-up. Simulation results are unchanged.
+  warning on stderr. The version-1 periodontal file still runs on this
+  engine. Simulation results are unchanged.
 - **Deprecated top-level modules and the empty packages are no longer files.**
   `marse.niche`, `marse.actions` and the other moved imports still work, and
   still warn, through `marse._compat`. `marse.adaptation` and
@@ -33,9 +33,35 @@ results for the same manifest is always called out.
   frame store are clean, including the previous optional-manifest,
   `diffusion_h` and replay-narrowing failures.
 - **Docs name the project once.** MARSE (Microbial Adaptability Resource
-  Simulation Engine) is the simulation kernel of YAUVI. The README opens with
+  Simulation Engine) is the software in this repository. The README opens with
   a validated / experimental / planned table, and `docs/architecture.md`
   describes the tree as it is.
+- **Schemas and science modules moved.** Configuration schema v2 is
+  `marse.model`. Growth, kinetics, adhesion, niche, genotype, additives,
+  acid-base and biofilm spreading are `marse.processes` (host actions and
+  immune pressure in `marse.processes.host`). The mouth is
+  `marse.environments.oral`. Grids, transport, surfaces, air and continuum
+  spreading are `marse.space`. The previous paths (`marse.schemas`,
+  `marse.microbes`, `marse.chemistry`, `marse.biofilm`, `marse.oral`,
+  `marse.experimental.host`, and the moved `marse.spatial.*` modules) still
+  import and warn. The steady one-dimensional solver, multigrid and VTK stay
+  in `marse.spatial`. Numerical results are unchanged.
+- **One run directory.** Every engine writes `manifest.json`, `summary.json`
+  and `report.html` beside its existing scientific files. The manifest format
+  and `config_sha256` are unchanged, so a manifest from before this layout
+  still replays. The parent directory's `index.json` lists runs by folder
+  name. `marse ls` and `marse compare` read those records and do not re-run
+  a simulation.
+- **The periodontal study has a version-2 column.**
+  `examples/networks/periodontal_pathogen_v2.json` is three obligate
+  anaerobes sharing alanine in a film column, with placeholder coefficients.
+  It is not a calibrated pocket and not a reproduction of the version-1 cell
+  map. `marse ecosystem` and `periodontal_pathogen_biofilm.json` remain, and
+  still warn.
+- **Docs build with MkDocs Material.** `docs/mkdocs.yml` is the site. CI
+  builds it. It is not deployed. The YAML check loads that one file with
+  `--unsafe` so the mermaid fence tag is accepted; every other YAML file
+  still uses the safe loader.
 
 - **Experimental Pocket Explorer refinement.** The authored FDI 35–37 segment
   uses lighter display meshes and cached cut surfaces. Pocket cutaways now use

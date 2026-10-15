@@ -39,7 +39,8 @@ dependencies = ["numpy>=2.0"]
 [project.optional-dependencies]
 test = ["pytest>=9"]
 typecheck = ["mypy>=1.18"]
-dev = ["marse[test]", "marse[typecheck]", "pre-commit>=4.6"]
+docs = ["mkdocs-material>=9.5"]
+dev = ["marse[test]", "marse[typecheck]", "marse[docs]", "pre-commit>=4.6"]
 
 [project.scripts]
 marse = "marse.cli:main"

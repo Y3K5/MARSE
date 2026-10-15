@@ -35,7 +35,7 @@ from pathlib import Path
 import numpy as np
 
 from marse.core.reactive_transport import run
-from marse.schemas.experiment import experiment_from_dict
+from marse.model.experiment import experiment_from_dict
 
 SCENES = Path(__file__).resolve().parent / "environments" / "oral"
 EVERY_MIN = 3.0

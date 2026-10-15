@@ -24,13 +24,13 @@ Amounts are reported per m² of substratum, the unit biofilm measurements use:
 a 1-D column and a 3-D box of the same chemistry report the same numbers.
 
 Where the domain says what its substratum is made of, cells in the liquid bind
-to it as the run goes (:mod:`marse.microbes.adhesion`). The run then also
+to it as the run goes (:mod:`marse.processes.adhesion`). The run then also
 records bound cells per cm² of each material, and the area each has covered.
 
-Where the network's charges set a pH (:mod:`marse.chemistry.acid_base`), the
+Where the network's charges set a pH (:mod:`marse.processes.acid_base`), the
 run records the pH over the substratum and its range in the box.
 
-Where the domain spreads its biomass (:mod:`marse.spatial.spreading`), each
+Where the domain spreads its biomass (:mod:`marse.space.spreading`), each
 recording step is cut into spans of at most the spreading interval. After
 each span the excess biomass is spread, and the engine checks what the
 spreading did, whichever mechanism did it (docs/theory.md, section 9.10):
@@ -38,7 +38,7 @@ nothing negative, each component's total unchanged, nothing else moved, every
 voxel within its room, and the top layer still clear. The ledger is then
 checked as after any span. The run also records the biofilm's structure.
 
-Where the domain has a salivary film and a mouth (:mod:`marse.oral`), the
+Where the domain has a salivary film and a mouth (:mod:`marse.environments.oral`), the
 film is renewed from the mouth's saliva, whose composition is solved with the
 box (:mod:`marse.core.reservoir`). The run then advances in spans of at most a
 minute that end at every swallow, and at the start and end of every intake of
@@ -46,15 +46,15 @@ the diet. A second ledger checks the box and the mouth together, against what
 the glands secreted, what was eaten and drunk, and what was swallowed or
 expelled, and the run records the mouth's volume, flow and composition.
 
-Where a column's plaque spreads (:mod:`marse.biofilm.spreading`), the solid
+Where a column's plaque spreads (:mod:`marse.processes.spreading`), the solid
 packs the column from the substratum up after every step, wears at its
 surface, and what passes its maximum height is detached: into the bulk liquid,
 or under a film into the mouth, which swallows it. Brushing and flossing take
 a share of it off at their times, and the mouth expels it. The run records
 the plaque's thickness and what left it. The film rides on the plaque's
-surface, wherever it is (:mod:`marse.oral.film`).
+surface, wherever it is (:mod:`marse.environments.oral.film`).
 
-Where the top face is at the air (:mod:`marse.spatial.air`), the gases the
+Where the top face is at the air (:mod:`marse.space.air`), the gases the
 air holds cross it; under a film, the air holds the mouth's saliva at their
 saturation too. Both ledgers count what the air gave and took, and the run
 records it.
@@ -74,17 +74,13 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from marse.biofilm.spreading import SPREADING_VERSION, Spreading
-from marse.chemistry import ChargeBalance
 from marse.core.config import ConfigError
 from marse.core.implicit import ReactionTransport
 from marse.core.ledger import Ledger
 from marse.core.provenance import Manifest
 from marse.core.reservoir import ReservoirPath, ReservoirTransport
 from marse.core.simulation import ConservationError
-from marse.microbes.adhesion import AttachingSpecies, SurfaceExchange
-from marse.microbes.kinetics import compile_rates, process_rates, rate_jacobian
-from marse.oral import (
+from marse.environments.oral import (
     Diet,
     Inflow,
     OralFluid,
@@ -93,16 +89,20 @@ from marse.oral import (
     renewal_over,
     renewal_per_h,
 )
-from marse.schemas.experiment import ReactiveTransportConfig
-from marse.spatial.air import AirExchange
-from marse.spatial.colloids import leveque_transfer_um_per_s, stokes_einstein_um2_per_s
-from marse.spatial.spreading import (
+from marse.model.experiment import ReactiveTransportConfig
+from marse.processes.acid_base import ChargeBalance
+from marse.processes.adhesion import AttachingSpecies, SurfaceExchange
+from marse.processes.kinetics import compile_rates, process_rates, rate_jacobian
+from marse.processes.spreading import SPREADING_VERSION, Spreading
+from marse.space.air import AirExchange
+from marse.space.colloids import leveque_transfer_um_per_s, stokes_einstein_um2_per_s
+from marse.space.spreading import (
     CAPACITY_TOLERANCE,
     ContinuumSpreading,
     SpreadingError,
     volume_fraction,
 )
-from marse.spatial.transport import Diffusion
+from marse.space.transport import Diffusion
 
 __all__ = ["ENGINE_VERSION", "INTEGRATOR_VERSION", "ReactiveTransportResult", "run"]
 

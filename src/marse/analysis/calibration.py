@@ -14,7 +14,7 @@ from typing import Literal
 import numpy as np
 from numpy.typing import NDArray
 
-from marse.microbes.growth import baranyi_roberts
+from marse.processes.growth import baranyi_roberts
 
 __all__ = ["CalibrationError", "GrowthCurve", "GrowthFit", "fit_growth_curve"]
 

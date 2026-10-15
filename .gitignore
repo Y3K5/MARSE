@@ -61,6 +61,7 @@ venv/
 coverage.xml
 htmlcov/
 .ipynb_checkpoints/
+/site/
 
 # --- Operating systems and editors (these record usernames and local paths) -
 .DS_Store

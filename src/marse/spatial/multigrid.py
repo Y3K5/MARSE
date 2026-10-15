@@ -7,7 +7,7 @@ iteration, the solution of
 
 for ``x`` of shape ``(components, *shape)``, where
 
-- ``L`` is diffusion (:mod:`marse.spatial.transport`) with the bulk held at
+- ``L`` is diffusion (:mod:`marse.space.transport`) with the bulk held at
   zero, as a correction equation requires;
 - ``B`` holds one small matrix per voxel, the Jacobian of the reactions there,
   which couples the components within a voxel but not across voxels;
@@ -44,7 +44,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from marse.spatial.transport import diagonal, divergence, face_fluxes
+from marse.space.transport import diagonal, divergence, face_fluxes
 
 __all__ = ["ImplicitSystem", "gmres", "hierarchy", "inverse"]
 

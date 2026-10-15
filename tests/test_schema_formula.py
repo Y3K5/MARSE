@@ -10,7 +10,7 @@ from fractions import Fraction
 import pytest
 
 from marse.core.config import ConfigError
-from marse.schemas.formula import parse_formula
+from marse.model.formula import parse_formula
 
 
 def test_counts_are_the_exact_decimals_written():
