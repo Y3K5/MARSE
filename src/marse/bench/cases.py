@@ -127,7 +127,9 @@ def _experiment(value: object, path: Path, root: Path) -> str:
     if not isinstance(value, str) or not value.strip():
         raise CaseError(f"{path}: experiment is required")
     relative = Path(value)
-    if relative.is_absolute() or ".." in relative.parts:
+    # A leading slash is absolute on POSIX and anchored on Windows. Either one
+    # would leave the repository root, so both are refused.
+    if relative.is_absolute() or relative.anchor or ".." in relative.parts:
         raise CaseError(f"{path}: experiment must stay inside the repository")
     resolved = (root / relative).resolve()
     if not resolved.is_relative_to(root.resolve()) or not resolved.is_file():
