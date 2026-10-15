@@ -108,13 +108,16 @@ REQUIRED_PACKAGE_DIRS = (
     "spatial",
     "microbes",
     "biofilm",
-    "adaptation",
-    "interventions",
     "validation",
     "ecosystem",
     "analysis",
     "evidence",
     "experimental",
+    "chemistry",
+    "oral",
+    "engines",
+    "cli",
+    "io",
 )
 """The architecture from docs/architecture.md. Removing one is a design change."""
 

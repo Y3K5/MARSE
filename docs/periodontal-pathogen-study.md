@@ -1,5 +1,12 @@
 # Periodontal pathogen biofilm study
 
+**Unverified.** This study runs on ecosystem v1 (`marse ecosystem`). That
+engine has known defects, listed in
+[validation.md](validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified),
+and the command prints a warning. The numbers below are not a result to cite.
+Porting the study onto the version 2 reaction-transport engine is the fix;
+until that lands, treat this page as a record of the experiment's structure.
+
 The `periodontal_pathogen_biofilm.json` experiment is a reproducible,
 exploratory starting point for comparing *Treponema denticola* (T. denticola),
 *Tannerella forsythia* (T. forsythia), and *Porphyromonas gingivalis*

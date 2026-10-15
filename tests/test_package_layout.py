@@ -1,9 +1,9 @@
 """Modules moved into subpackages keep working at their old paths, for one release.
 
-Each old top-level path (``marse.niche`` and so on) is now an alias that warns
-and re-exports the same objects. Nothing inside MARSE may use an alias: the
-suite runs with warnings as errors, and the last test imports every module in
-a fresh interpreter to prove it.
+Each old top-level path (``marse.niche`` and so on) is now an alias, installed
+by :mod:`marse._compat`, that warns and re-exports the same objects. Nothing
+inside MARSE may use an alias: the suite runs with warnings as errors, and the
+last test imports every module in a fresh interpreter to prove it.
 """
 
 import importlib

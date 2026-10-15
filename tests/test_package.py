@@ -15,10 +15,16 @@ SUBPACKAGES = [
     "spatial",
     "microbes",
     "biofilm",
-    "adaptation",
-    "interventions",
     "validation",
     "ecosystem",
+    "analysis",
+    "evidence",
+    "experimental",
+    "chemistry",
+    "oral",
+    "engines",
+    "cli",
+    "io",
 ]
 
 
@@ -32,6 +38,15 @@ def test_architecture_subpackages_are_importable_and_documented(name):
     module = importlib.import_module(f"marse.{name}")
     assert module.__doc__
     assert module.__doc__.strip()
+
+
+@pytest.mark.parametrize("name", ["adaptation", "interventions"])
+def test_removed_placeholder_packages_warn(name: str):
+    """The empty packages stay importable, and say they are not implemented."""
+    sys.modules.pop(f"marse.{name}", None)
+    with pytest.warns(DeprecationWarning, match=f"marse.{name} is not implemented"):
+        module = importlib.import_module(f"marse.{name}")
+    assert module.__doc__
 
 
 def test_cli_reports_version(capsys):

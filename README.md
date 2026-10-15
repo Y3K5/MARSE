@@ -1,19 +1,28 @@
-# MARSE: Microbial Adaptability Resource Simulation Engine
+# MARSE
 
 [![CI](https://github.com/Y3K5/MARSE/actions/workflows/ci.yml/badge.svg)](https://github.com/Y3K5/MARSE/actions/workflows/ci.yml)
 [![Privacy](https://github.com/Y3K5/MARSE/actions/workflows/privacy.yml/badge.svg)](https://github.com/Y3K5/MARSE/actions/workflows/privacy.yml)
 
-MARSE is open-source research software for **reproducible, spatial simulation of
-microbial populations and biofilms**. It models species, resources and
-environmental conditions on a spatial domain, represents adaptation as explicit
-state transitions, applies controlled perturbations, and records the full
-provenance of every run so that any result can be replayed.
+**MARSE** (Microbial Adaptability Resource Simulation Engine) is the simulation
+kernel of **YAUVI**: open-source software for reproducible simulation of
+microbial populations and biofilms. This repository is that kernel, one
+package named `marse`. Data integration, a structural workbench, a benchmark
+harness and an explorer are the rest of YAUVI, and they are not in this install.
 
-> **Status: Phase 3, microbial dynamics.** MARSE can define, run, save and
-> reproduce a well-mixed batch simulation; solve the steady reaction-diffusion
-> profile through a biofilm; and couple the two, so growth follows the local
-> concentration rather than a well-mixed average. Letting that growth reshape
-> the biofilm over time is next; see the [roadmap](docs/roadmap.md).
+Every run writes a manifest and can be replayed from it. What that replay
+proves is that the run is reproducible, not that the model is right. The
+table is the distinction.
+
+| | What | Where to look |
+|---|---|---|
+| **Validated** | Well-mixed batch growth and two-species competition (V1, V2, V5). The 1-D steady biofilm oxygen profile against analytical limits (V3). Version-2 reaction networks that conserve carbon, nitrogen and electrons in a closed box, checked again on every step. Bit-exact replay of a manifest (V8). | [validation.md](docs/validation.md), `marse run` |
+| **Experimental** | Version-2 reaction-transport in 1/2/3-D: the same conservation law in space, not yet scored on the IWA biofilm benchmarks. The 2-D ecosystem engine (`marse ecosystem`), including the periodontal study: eight known defects, and the command prints a warning. Replay of that engine works; the results are not a validated model. | [validation.md](docs/validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified) |
+| **Planned** | The periodontal study on the version-2 engine. Lineage-based adaptation and a real interventions layer. One run directory for every engine, and `marse ls` / `compare`. The rest of YAUVI (data, workbench, cross-tool benchmarks, Explorer). | [architecture.md](docs/architecture.md#still-to-do-from-the-consolidation), [roadmap](docs/roadmap.md) |
+
+`marse run` picks the engine from the file. A top-level `"engine"` field
+(`legacy_batch`, `steady_biofilm`, `well_mixed`, `reactive_transport`,
+`legacy_ecosystem_v1`) forces the choice and is not stored in the manifest.
+Without it, the command behaves as it always has.
 
 Run a simulation and then reproduce it exactly from its manifest:
 
@@ -160,7 +169,11 @@ predict clinical or vaccine outcomes, or produce experimental evidence; the
 
 ```text
 src/marse/         the Python package
-  core/            run loop, state, configuration, seeds, provenance, frame store
+  cli/             command dispatcher; one module per command
+  engines/         engine protocol and registry (batch, steady biofilm, well mixed,
+                   reactive transport, unverified ecosystem v1)
+  io/              the frame store shared by every engine
+  core/            run loop, state, configuration, seeds, provenance, version-2 solvers
   schemas/         configuration schema v2: formulas and balanced reaction networks
   spatial/         voxel grids in 1, 2 or 3 dimensions, diffusion, multigrid, surfaces and the
                    delivery of cells to them, gases from the air, ParaView output
@@ -168,11 +181,8 @@ src/marse/         the Python package
                    and the measures of a Stephan curve
   chemistry/       acid-base equilibria: the pH that every voxel's charges set
   microbes/        growth kinetics, cardinal models, adhesion, niches, genotypes, dose responses
-  biofilm/         biomass, plaque that spreads up a column and is worn and brushed off, matrix,
-                   maturation
-  ecosystem/       the 2-D multispecies engine and its viewer
-  adaptation/      state transitions and decision policies
-  interventions/   perturbations
+  biofilm/         biomass, and plaque that spreads up a column and is worn and brushed off
+  ecosystem/       the unverified 2-D multispecies engine and its viewer
   analysis/        calibration, uncertainty and sensitivity, ensembles
   evidence/        culture conditions and measurements, with their sources, and the
                    context exchange that checks evidence metadata before it joins a run
@@ -184,7 +194,7 @@ examples/          runnable reference calculations
   environments/    scenes: surfaces, liquids, flows and the cells that bind to them, and the mouth
 tests/             test suite
 docs/              theory, parameters, specification, architecture, validation, roadmap
-tools/             repository tooling (privacy and repository guards)
+tools/             repository tooling (privacy and repository guards, mypy baseline)
 ```
 
 Planned: `paper/` for the software paper.

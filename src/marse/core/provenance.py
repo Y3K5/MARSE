@@ -45,10 +45,16 @@ _CORE_KINDS = ("batch", "biofilm_profile")
 
 
 class RunConfig(Protocol):
-    """What a configuration must offer to be recorded in, and rebuilt from, a manifest."""
+    """What a configuration must offer to be recorded in, and rebuilt from, a manifest.
 
-    experiment_id: str
-    seed: int
+    The members are read-only so a frozen configuration satisfies the protocol.
+    """
+
+    @property
+    def experiment_id(self) -> str: ...
+
+    @property
+    def seed(self) -> int: ...
 
     @property
     def kind(self) -> str: ...
