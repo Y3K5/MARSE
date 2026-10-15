@@ -62,6 +62,9 @@ results for the same manifest is always called out.
   builds it. It is not deployed. The YAML check loads that one file with
   `--unsafe` so the mermaid fence tag is accepted; every other YAML file
   still uses the safe loader.
+- **The benchmark-harness plan** states that an empty case directory and a
+  case file that does not parse both exit 2, and that an unverified engine
+  cannot pass.
 - **A plan for the benchmark harness**
   ([docs/benchmarks/phase2-plan.md](docs/benchmarks/phase2-plan.md)).
   It describes case files, an in-process adapter, metrics, and
