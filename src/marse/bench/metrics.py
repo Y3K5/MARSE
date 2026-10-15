@@ -109,8 +109,6 @@ def _score(
         return _replay(spec, output_dir)
     if spec.kind == "balance_residual":
         return _balance(spec, manifest)
-    if spec.kind == "not_scored":
-        return _result(spec, False, None, spec.statement or "not scored")
     return _arrays(spec)
 
 

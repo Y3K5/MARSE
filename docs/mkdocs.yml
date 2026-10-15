@@ -46,7 +46,6 @@ nav:
       - Validation: validation.md
       - Benchmarks: benchmarks.md
       - Periodontal benchmark: benchmarks/periodontal.md
-      - Unscored limits: benchmarks/limits.md
       - Uncertainty: uncertainty.md
       - Modeling landscape: modeling-landscape.md
   - Studies:

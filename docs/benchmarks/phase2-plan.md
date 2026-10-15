@@ -56,8 +56,7 @@ notes: >
   The sentence that says what this case does not claim.
 ```
 
-`command` is `run`, `ecosystem`, or `none`. `none` does not start an
-engine. An `ecosystem` case uses the unverified
+`command` is `run` or `ecosystem`. An `ecosystem` case uses the unverified
 engine, so the report cannot call it a quantitative pass. `notes` is required
 and is copied into the report.
 
@@ -101,7 +100,6 @@ engines already write.
 | `replay_matches` | Replaying the manifest reproduces `outputs`. Optional, because some runs are slow. Same comparison as `marse compare` after a replay |
 | `balance_residual` | The manifest's `outputs.balance` entry for `quantity` has `largest_relative_residual` at most `tolerance`. Version-2 engines write this field. A case that asks for it on a run without the field fails |
 | `array_reference` | `compare_benchmark` score is within `tolerance` |
-| `not_scored` | Never. The statement is stored and the case fails. Use it when the repository has no reference to score |
 
 A case passes only when every metric passes. An unverified engine forces the
 case result to not-passed, and the report says why. Metric rows are still
