@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-_COMMANDS = frozenset({"run", "ecosystem"})
+_COMMANDS = frozenset({"run", "ecosystem", "none"})
 _KINDS = frozenset(
     {
         "manifest_present",
@@ -19,6 +19,7 @@ _KINDS = frozenset(
         "replay_matches",
         "balance_residual",
         "array_reference",
+        "not_scored",
     }
 )
 _ARRAY_METRICS = frozenset({"rmse", "max_absolute", "max_relative"})
@@ -41,6 +42,7 @@ class MetricSpec:
     unit: str | None = None
     expected: tuple[float, ...] | None = None
     simulated: tuple[float, ...] | None = None
+    statement: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +81,7 @@ def load_case(path: Path, root: Path) -> Case:
     adapter = _text(raw, "adapter", path)
     command = _text(raw, "command", path)
     if command not in _COMMANDS:
-        raise CaseError(f"{path}: command must be 'run' or 'ecosystem'")
+        raise CaseError(f"{path}: command must be 'run', 'ecosystem', or 'none'")
     notes = _text(raw, "notes", path)
     experiment = _experiment(raw.get("experiment"), path, root)
     metrics_raw = raw.get("metrics")
@@ -158,6 +160,9 @@ def _metric(item: object, path: Path) -> MetricSpec:
         raise CaseError(f"{path}: metric '{metric_id}' needs a quantity")
     if kind == "array_reference":
         _check_arrays(path, str(metric_id), metric_name, unit, expected, simulated)
+    statement = _optional_text(item.get("statement"))
+    if kind == "not_scored" and not statement:
+        raise CaseError(f"{path}: metric '{metric_id}' needs a statement")
     return MetricSpec(
         str(metric_id).strip(),
         str(kind),
@@ -167,6 +172,7 @@ def _metric(item: object, path: Path) -> MetricSpec:
         unit,
         expected,
         simulated,
+        statement,
     )
 
 

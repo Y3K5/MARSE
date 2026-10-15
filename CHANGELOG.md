@@ -62,6 +62,12 @@ results for the same manifest is always called out.
   builds it. It is not deployed. The YAML check loads that one file with
   `--unsafe` so the mermaid fence tag is accepted; every other YAML file
   still uses the safe loader.
+- **Unscored benchmark cases.** `command: none` does not run an engine.
+  `not_scored` fails the case and keeps the statement. Peptidoglycan and
+  antigen selection use it: this repository has no peptidoglycan reaction
+  or measurement, and antigen design stays deferred in `specification.md`.
+  Neither case selects a molecule or writes a parameter.
+  [docs/benchmarks/limits.md](docs/benchmarks/limits.md).
 - **Structure score adapters.** ESMFold and AlphaFold adapters take a
   caller the process supplies. They do not download a model. pLDDT and, when
   present, PAE are checked and summarised with AlphaFold's published bins.

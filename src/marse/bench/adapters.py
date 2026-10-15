@@ -36,6 +36,15 @@ class MarseAdapter:
     def run(self, case: Case, output_dir: Path, root: Path) -> RunRecord:
         experiment = root / case.experiment
         output_dir.mkdir(parents=True, exist_ok=True)
+        if case.command == "none":
+            return RunRecord(
+                output_dir / "manifest.json",
+                output_dir / "summary.json",
+                output_dir / "report.html",
+                "not_run",
+                False,
+                self.container,
+            )
         if case.command == "ecosystem":
             plan = legacy_ecosystem_v1.load(experiment)
             legacy_ecosystem_v1.run(plan, output_dir)

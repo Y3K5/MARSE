@@ -1,0 +1,13 @@
+id: antigen-selection
+title: Antigen selection is not scored
+adapter: marse
+experiment: examples/benchmarks/limits/not-run.json
+command: none
+notes: >
+  The specification defers vaccine efficacy prediction and de novo antigen
+  design. This case does not run a model and does not choose an antigen.
+  The case fails because there is nothing to score.
+metrics:
+  - id: limit
+    kind: not_scored
+    statement: Antigen design is deferred. This case does not select an antigen.

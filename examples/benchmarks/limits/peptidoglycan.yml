@@ -1,0 +1,13 @@
+id: peptidoglycan
+title: No peptidoglycan score is available
+adapter: marse
+experiment: examples/benchmarks/limits/not-run.json
+command: none
+notes: >
+  This repository has no peptidoglycan reaction and no measurement of one.
+  The file named here is not an experiment and is not run. The case fails
+  because there is nothing to score. It is not a cell-wall model.
+metrics:
+  - id: limit
+    kind: not_scored
+    statement: No peptidoglycan reaction or measurement is in this repository.
