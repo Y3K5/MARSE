@@ -62,6 +62,11 @@ results for the same manifest is always called out.
   builds it. It is not deployed. The YAML check loads that one file with
   `--unsafe` so the mermaid fence tag is accepted; every other YAML file
   still uses the safe loader.
+- **Benchmark harness.** `marse bench list`, `run`, and `report` load YAML
+  cases, run them through an in-process MARSE adapter, and write `bench.json`
+  and `bench.html` beside the existing run directory. The adapter does not
+  use a container. PyYAML is a runtime dependency for the case files. No
+  example checksum changes. The periodontal case is a later change.
 - **A plan for the benchmark harness**
   ([docs/benchmarks/phase2-plan.md](docs/benchmarks/phase2-plan.md)).
   It describes case files, an in-process adapter, metrics, and

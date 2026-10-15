@@ -184,6 +184,7 @@ src/marse/         the Python package
                    context exchange that checks evidence metadata before it joins a run
   experimental/    kept so the old host path warns; the code is in processes/host
   validation/      analytical references, benchmark and regression cases
+  bench/           benchmark case files, the in-process adapter, and marse bench
 examples/          runnable reference calculations
   experiments/     experiment configurations for `marse run` and `marse ecosystem`
   networks/        reaction networks for `marse check` and `marse run` (configuration schema v2)
