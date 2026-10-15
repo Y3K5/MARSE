@@ -1,0 +1,20 @@
+# Allowed mypy errors per module. A module not listed here must be clean.
+# Lower a count when you fix errors; CI fails if a count rises or falls.
+src/marse/analysis/calibration.py 2
+src/marse/chemistry/acid_base.py 2
+src/marse/core/config.py 6
+src/marse/core/reactive_transport.py 3
+src/marse/core/reservoir.py 4
+src/marse/core/simulation.py 20
+src/marse/ecosystem/framestore.py 2
+src/marse/ecosystem/model.py 18
+src/marse/ecosystem/providers.py 2
+src/marse/ecosystem/viewer.py 1
+src/marse/evidence/context.py 12
+src/marse/experimental/host/immune.py 3
+src/marse/microbes/kinetics.py 1
+src/marse/microbes/niche.py 3
+src/marse/schemas/_reading.py 1
+src/marse/schemas/network.py 2
+src/marse/spatial/grid.py 1
+src/marse/spatial/multigrid.py 2

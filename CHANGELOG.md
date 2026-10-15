@@ -9,6 +9,34 @@ results for the same manifest is always called out.
 
 ### Changed
 
+- **Engines are selected from the experiment file.** `marse run` and
+  `marse replay` go through an `Engine` registry (`marse.engines`) instead of
+  branching on file layout in the command line. A top-level `engine` field
+  (`legacy_batch`, `steady_biofilm`, `well_mixed`, `reactive_transport`,
+  `legacy_ecosystem_v1`) names the engine and is removed before the schema is
+  read, so manifests and checksums are unchanged. Without the field, `marse run`
+  chooses as before. The command-line module is now the `marse.cli` package;
+  `marse` and `python -m marse` are unchanged.
+- **The 2-D ecosystem engine warns that it is unverified.** `marse ecosystem`,
+  `marse ecosystem-batch` and a replay of an ecosystem manifest print the
+  warning on stderr. The periodontal study still runs on this engine; moving
+  it to version 2 is a follow-up. Simulation results are unchanged.
+- **Deprecated top-level modules and the empty packages are no longer files.**
+  `marse.niche`, `marse.actions` and the other moved imports still work, and
+  still warn, through `marse._compat`. `marse.adaptation` and
+  `marse.interventions` import with a deprecation warning and do nothing.
+- **One frame store.** The implementation lives in `marse.io.frames`.
+  `marse.core.framestore` and `marse.ecosystem.framestore` re-export the same
+  `FrameStore`.
+- **mypy runs in CI** against `tools/mypy-baseline.txt`. Modules that are not
+  listed must be clean. The command-line package, the engine registry and the
+  frame store are clean, including the previous optional-manifest,
+  `diffusion_h` and replay-narrowing failures.
+- **Docs name the project once.** MARSE (Microbial Adaptability Resource
+  Simulation Engine) is the simulation kernel of YAUVI. The README opens with
+  a validated / experimental / planned table, and `docs/architecture.md`
+  describes the tree as it is.
+
 - **Experimental Pocket Explorer refinement.** The authored FDI 35–37 segment
   uses lighter display meshes and cached cut surfaces. Pocket cutaways now use
   386,619 triangles (Healthy) and 379,439 (Periodontitis), with a tested 600,000

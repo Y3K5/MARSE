@@ -1,4 +1,10 @@
-"""A small, explicit 2D ecosystem model.
+"""A small, explicit 2D ecosystem model. Unverified.
+
+This is ecosystem v1 (``legacy_ecosystem_v1``). ``marse ecosystem`` warns
+before every run. docs/validation.md records known defects in transport,
+yields, oxygen use, mutation and carrying capacity; results from this module,
+including the periodontal study, support no quantitative conclusion. Replay
+reproduces a run. It does not show that the run was right.
 
 The model is intentionally a foundation rather than a claim of whole-organism
 realism. Species grow from nutrient fields, consume those fields, and diffuse

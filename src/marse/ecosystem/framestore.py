@@ -10,8 +10,8 @@ tool that reads NumPy files can read the store without MARSE.
 ``index.json`` beside the arrays records the format, how many frames were
 written, their times and steps, each field's shape and type, and metadata such
 as the names that label each axis. :class:`FrameStore` lives in
-:mod:`marse.core.framestore` and knows nothing about ecosystems; this module
-maps ecosystem frames onto it and re-exports it.
+:mod:`marse.io.frames` and knows nothing about ecosystems; this module maps
+ecosystem frames onto it and re-exports it.
 
 Frames are for looking at a run. The exact result is the final state recorded
 in the manifest and reproduced by ``marse replay``. The ecosystem adapter
@@ -25,9 +25,9 @@ from pathlib import Path
 
 import numpy as np
 
-from marse.core.framestore import FORMAT, FORMAT_VERSION, FrameStore, FrameStoreError
 from marse.core.provenance import config_checksum
 from marse.ecosystem.model import EcosystemConfig, EcosystemError, EcosystemFrame
+from marse.io.frames import FORMAT, FORMAT_VERSION, FrameStore, FrameStoreError
 
 __all__ = [
     "FORMAT",

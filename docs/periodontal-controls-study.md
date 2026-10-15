@@ -1,5 +1,11 @@
 # Periodontal community controls
 
+**Unverified.** These controls use the same ecosystem v1 engine as
+[periodontal-pathogen-study.md](periodontal-pathogen-study.md). The
+`marse ecosystem` command warns on every run. Do not read a difference
+between a control and the three-species case as a biological result until
+the study runs on the version 2 engine.
+
 `examples/periodontal_controls_analysis.py` is the next analysis step after
 the exploratory three-species run. It is designed to answer whether a result
 comes from community composition, the competition rule, or a limiting resource.
