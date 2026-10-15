@@ -26,6 +26,7 @@ SUBPACKAGES = [
     "io",
     "bench",
     "ingest",
+    "structure",
 ]
 
 

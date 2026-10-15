@@ -61,6 +61,7 @@ src/marse/
   validation/      analytical references and the benchmark registry
   bench/           benchmark case files, the in-process adapter, metrics, reports
   ingest/          table importers and their checks; they do not run a simulation
+  structure/       ESMFold and AlphaFold score adapters; they do not set a parameter
   _compat.py       deprecated import paths
 ```
 

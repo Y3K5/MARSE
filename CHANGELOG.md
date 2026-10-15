@@ -62,6 +62,11 @@ results for the same manifest is always called out.
   builds it. It is not deployed. The YAML check loads that one file with
   `--unsafe` so the mermaid fence tag is accepted; every other YAML file
   still uses the safe loader.
+- **Structure score adapters.** ESMFold and AlphaFold adapters take a
+  caller the process supplies. They do not download a model. pLDDT and, when
+  present, PAE are checked and summarised with AlphaFold's published bins.
+  The record does not set a rate, a yield, or a formula.
+  [docs/structure.md](docs/structure.md). No simulation result changes.
 - **Table importers.** `marse ingest` reads a CSV or TSV abundance,
   transcriptomics, metabolomics, or environment table, checks it, and writes
   a `marse.ingest/1` feed. Temperature and pH, and one metabolite already in
