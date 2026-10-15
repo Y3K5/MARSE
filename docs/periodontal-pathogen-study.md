@@ -18,6 +18,12 @@ The version-2 column does not inherit that engine's mass-balance, oxygen,
 mutation or carrying-capacity behaviour. It also does not retire the
 version-1 defects inside `marse ecosystem`; that code is unchanged.
 
+`marse bench` scores the column's carbon, nitrogen and electron balance,
+and records the version-1 file only as an unverified engine. The two files
+are not compared as biomass. The cases, the limit of that score, and the
+plan for retiring version 1 without deleting it are in
+[periodontal.md](benchmarks/periodontal.md).
+
 ## What the version-2 column connects
 
 - **One shared substrate.** Alanine limits all three populations. There is no

@@ -62,6 +62,15 @@ results for the same manifest is always called out.
   builds it. It is not deployed. The YAML check loads that one file with
   `--unsafe` so the mermaid fence tag is accepted; every other YAML file
   still uses the safe loader.
+- **Periodontal benchmark cases.** `marse bench` scores
+  `examples/networks/periodontal_pathogen_v2.json` on carbon, nitrogen and
+  electrons, at the residual `tests/test_periodontal_v2.py` already checks.
+  `periodontal_pathogen_biofilm.json` is recorded only as the unverified
+  version-1 engine: its biomass is not scored against the column, and the
+  case cannot pass. The file and `marse ecosystem` stay.
+  [docs/benchmarks/periodontal.md](docs/benchmarks/periodontal.md) states
+  the limit and what retiring version 1 would require. No example checksum
+  changes.
 - **Benchmark harness.** `marse bench list`, `run`, and `report` load YAML
   cases, run them through an in-process MARSE adapter, and write `bench.json`
   and `bench.html` beside the existing run directory. The adapter does not
