@@ -59,7 +59,9 @@ results for the same manifest is always called out.
   map. `marse ecosystem` and `periodontal_pathogen_biofilm.json` remain, and
   still warn.
 - **Docs build with MkDocs Material.** `docs/mkdocs.yml` is the site. CI
-  builds it. It is not deployed.
+  builds it. It is not deployed. The YAML check loads that one file with
+  `--unsafe` so the mermaid fence tag is accepted; every other YAML file
+  still uses the safe loader.
 
 - **Experimental Pocket Explorer refinement.** The authored FDI 35–37 segment
   uses lighter display meshes and cached cut surfaces. Pocket cutaways now use
