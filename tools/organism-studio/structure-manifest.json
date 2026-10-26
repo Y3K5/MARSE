@@ -1,0 +1,36 @@
+{
+  "retrieved": "2026-10-26",
+  "structures": [
+    {
+      "id": "3QZ0",
+      "sha256": "e18ac0ac975cb0b10eff0c7b8175b1b3faa62e5fb3fdf632d3ed0ebe9fbb5089",
+      "chains": {
+        "A": 78,
+        "B": 79
+      },
+      "resolution": "1.77"
+    },
+    {
+      "id": "6SLJ",
+      "sha256": "dfa8c30658e667a722ddea1aa794b780531690a03666174353fc27f5462e23cf",
+      "chains": {
+        "B": 900,
+        "A": 898,
+        "C": 482,
+        "D": 482
+      },
+      "resolution": "3.04"
+    },
+    {
+      "id": "7QZ3",
+      "sha256": "4ff0e20fe423eb85e47a539f1210dd95ee91e51ada4a21bafc7946738a607e3d",
+      "chains": {
+        "A": 519,
+        "B": 519
+      },
+      "resolution": "1.97"
+    }
+  ],
+  "community_sha256": "61504eb3b9586f8d66c290a834b6a5f9d9c19644ebb812015bab9b9581f7cf4f",
+  "original_community_sha256": "1c3485325a4738c1aab77bc26e5921d88a6b1d73d23783bf5f395ef8e2ceee4f"
+}

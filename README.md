@@ -150,3 +150,7 @@ Before your first commit, complete the one-time setup in
 Citation metadata is in [CITATION.cff](CITATION.cff) (GitHub's "Cite this
 repository" button reads it). MARSE is licensed under the
 [Apache License 2.0](LICENSE).
+
+## Experimental organism studio
+
+A local cell-to-protein visualization candidate is in [tools/organism-studio](tools/organism-studio/00_START_HERE.md). It is separate from the numerical engine and does not establish native molecular placement or biological validation. See its publication review before release.
