@@ -177,6 +177,8 @@ class SpeciesConfig:
     seed_regions: tuple[SeedRegion, ...] = ()
     spreading_per_h: float = 0.0
     production_per_nutrient: tuple[float, ...] = ()
+    production_per_additive: tuple[tuple[str, float], ...] = ()
+    consumption_per_additive: tuple[tuple[str, float], ...] = ()
     capabilities: tuple[Capability, ...] = ()
     additive_effects: tuple[AdditiveEffect, ...] = ()
     chemotaxis_field: str | None = None
@@ -228,6 +230,17 @@ class SpeciesConfig:
             raise EcosystemError(f"species '{self.name}': phenotype names must be unique")
         if len({effect.additive for effect in self.additive_effects}) != len(self.additive_effects):
             raise EcosystemError(f"species '{self.name}': additive effects must be unique")
+        for label, rates in (
+            ("production_per_additive", self.production_per_additive),
+            ("consumption_per_additive", self.consumption_per_additive),
+        ):
+            names = [name for name, _ in rates]
+            if len(set(names)) != len(names) or any(not name.strip() for name in names):
+                raise EcosystemError(
+                    f"species '{self.name}': {label} names must be unique and non-empty"
+                )
+            if any(rate < 0 for _, rate in rates):
+                raise EcosystemError(f"species '{self.name}': {label} rates must be non-negative")
 
     @property
     def production_coefficients(self) -> tuple[float, ...]:
@@ -320,6 +333,17 @@ class EcosystemConfig:
                     f"immune neutralizer references unknown molecule '{neutralizer.molecule}'"
                 )
         for species in self.species:
+            additive_rate_names = {
+                name
+                for rates in (species.production_per_additive, species.consumption_per_additive)
+                for name, _ in rates
+            }
+            unknown_rates = additive_rate_names - additive_names
+            if unknown_rates:
+                raise EcosystemError(
+                    f"species '{species.name}' additive rates reference unknown field(s) "
+                    f"{sorted(unknown_rates)}"
+                )
             if species.chemotaxis_field is not None and species.chemotaxis_field not in (
                 field_names | additive_names
             ):
@@ -373,6 +397,8 @@ class EcosystemConfig:
         data = asdict(self)
         for raw, species in zip(data["species"], self.species, strict=True):
             raw["production_per_nutrient"] = list(species.production_coefficients)
+            raw["production_per_additive"] = dict(species.production_per_additive)
+            raw["consumption_per_additive"] = dict(species.consumption_per_additive)
         return data
 
 
@@ -571,6 +597,12 @@ def _additive_effects(raw: Any, where: str) -> tuple[AdditiveEffect, ...]:
         raise EcosystemError(f"{where}: invalid additive effect") from error
 
 
+def _additive_rates(raw: Any, where: str) -> tuple[tuple[str, float], ...]:
+    if not isinstance(raw, dict):
+        raise EcosystemError(f"{where}: expected an object mapping additive names to rates")
+    return tuple((str(name), _number(rate, f"{where}.{name}")) for name, rate in raw.items())
+
+
 def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
     """Build a validated ecosystem configuration from JSON-compatible data."""
     if not isinstance(raw, dict):
@@ -640,6 +672,14 @@ def ecosystem_from_dict(raw: dict[str, Any]) -> EcosystemConfig:
                     )
                     if item.get("production_per_nutrient") is not None
                     else ()
+                ),
+                production_per_additive=_additive_rates(
+                    item.get("production_per_additive", {}),
+                    f"species[{i}].production_per_additive",
+                ),
+                consumption_per_additive=_additive_rates(
+                    item.get("consumption_per_additive", {}),
+                    f"species[{i}].consumption_per_additive",
                 ),
                 mutation_probability=_number(
                     item.get("mutation_probability", 0.0), f"species[{i}].mutation_probability"
@@ -1386,6 +1426,13 @@ def run(
             )
             for nutrient_index, production in enumerate(species.production_coefficients):
                 nutrients[nutrient_index] += dt * production * growth_rate
+            for additive_name, production in species.production_per_additive:
+                additives[additive_indices[additive_name]] += dt * production * growth_rate
+            for additive_name, consumption in species.consumption_per_additive:
+                additives[additive_indices[additive_name]] -= (
+                    dt * consumption * biomass[species_index]
+                )
+            additives = np.maximum(additives, 0.0)
             biomass[species_index] *= np.exp(
                 dt
                 * species.maximum_growth_per_h

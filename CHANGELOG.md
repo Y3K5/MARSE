@@ -7,6 +7,12 @@ results for the same manifest is always called out.
 
 ## [Unreleased]
 
+### Fixed
+
+- Serialize named additive production and consumption rates as mappings so ecosystem manifests reopen with both empty defaults and nonempty rates. Numerical rates are unchanged.
+
+- Align organism studio Python helpers and fixture assertions with CI lint rules; normalize JSON final newlines. Runtime assets remain local-only.
+
 ### Changed
 
 - **Engines are selected from the experiment file.** `marse run` and

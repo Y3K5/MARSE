@@ -256,3 +256,22 @@ def test_cli_replay_reports_a_recorded_result_that_no_longer_matches(tmp_path: P
     manifest.write_text(json.dumps(raw), encoding="utf-8")
     assert main(["replay", str(manifest)]) == 1
     assert "DIFFERS" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("with_rates", [False, True])
+def test_named_additive_rates_survive_json_roundtrip(with_rates):
+    config = everything_on()
+    name = config.additives[0].name
+    production = ((name, 0.25),) if with_rates else ()
+    consumption = ((name, 0.125),) if with_rates else ()
+    species = replace(
+        config.species[0], production_per_additive=production, consumption_per_additive=consumption
+    )
+    config = replace(config, species=(species, *config.species[1:]))
+    raw = json.loads(json.dumps(config.to_dict()))
+    assert raw["species"][0]["production_per_additive"] == dict(production)
+    assert raw["species"][0]["consumption_per_additive"] == dict(consumption)
+    restored = ecosystem_from_dict(raw)
+    assert restored.species[0].production_per_additive == production
+    assert restored.species[0].consumption_per_additive == consumption
+    assert restored.to_dict() == config.to_dict()
