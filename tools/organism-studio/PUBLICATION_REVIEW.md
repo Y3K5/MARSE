@@ -9,3 +9,7 @@ A fresh clone needs the exact local assets before running. There is no automatic
 Eight catalogue and six continuous checks passed with local assets before splitting. Final split verification: 76 pinned local assets, eight catalogue tests, six continuous groups and the setup import/refusal test pass. The repository privacy gate passes for the exact code-only file list. gitleaks is not installed and its separate secret scan remains unperformed; these are software checks, not biological qualification. Native placement, dynamics and calibration remain unqualified. The numerical engine is unchanged.
 
 This branch starts from the existing local mac-visualizer HEAD; current remote-main compatibility is not established. No commit or push is authorized by this preparation. Review the exact candidate inventory before committing; the user performs every push.
+
+## PR 69 validation update
+
+The published head passed GitHub secrets and personal-data checks. GitHub and a local merge-tree check report no conflict with the fetched main revision. CI lint findings in the Python helpers and two final newlines were corrected locally; the new commit still requires a push and fresh CI before merge.

@@ -1,12 +1,14 @@
 """Verify or import exact local studio assets. No network access or installation."""
+
 import argparse
 import hashlib
 import json
-from pathlib import Path
 import shutil
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+
 
 def verify(root, files):
     errors = []
@@ -17,13 +19,22 @@ def verify(root, files):
         path = root / rel
         if path.is_symlink() or not path.is_file():
             errors.append(name + ": missing or symlink")
-        elif path.stat().st_size != expected["bytes"] or hashlib.sha256(path.read_bytes()).hexdigest() != expected["sha256"]:
+        elif (
+            path.stat().st_size != expected["bytes"]
+            or hashlib.sha256(path.read_bytes()).hexdigest() != expected["sha256"]
+        ):
             errors.append(name + ": checksum/size mismatch")
     return errors
 
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--from", dest="source", type=Path, help="Existing studio folder containing vendor, structures and integration")
+    parser.add_argument(
+        "--from",
+        dest="source",
+        type=Path,
+        help="Existing studio folder containing vendor, structures and integration",
+    )
     args = parser.parse_args()
     files = json.loads((ROOT / "ASSET_MANIFEST.json").read_text())["files"]
     source = args.source.resolve() if args.source else ROOT
@@ -48,6 +59,7 @@ def main():
     if errors:
         raise SystemExit("Destination verification failed: " + "; ".join(errors))
     print(str(len(files)) + " local assets verified. No network requests made.")
+
 
 if __name__ == "__main__":
     main()

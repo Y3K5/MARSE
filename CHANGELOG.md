@@ -7,6 +7,10 @@ results for the same manifest is always called out.
 
 ## [Unreleased]
 
+### Fixed
+
+- Align organism studio Python helpers and fixture assertions with CI lint rules; normalize JSON final newlines. Runtime assets remain local-only.
+
 ### Added
 
 - **The spatial model is reachable from the kernel.** Until now `marse run`
