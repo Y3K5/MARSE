@@ -1,0 +1,13 @@
+/node_modules
+dist/
+assets/pocket-organic/
+src/pocket-organic-input.json
+__pycache__/
+
+# Pinned public source assets and generated reference buffers stay local.
+assets/face-reference/
+src/pocket-face-input.json
+src/pocket-atlas-input.json
+
+# Rebuildable local qualitative cell-object exports.
+assets/crevice-objects/

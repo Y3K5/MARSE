@@ -1,0 +1,106 @@
+{
+  "schema": "synthetic-integrity-protocol/1",
+  "registered_before_execution": false,
+  "scope": "Anonymous synthetic numerical reference; independent of the MARSE Python engine",
+  "units": {
+    "length": "dimensionless",
+    "time": "dimensionless",
+    "resource": "dimensionless",
+    "biomass": "dimensionless"
+  },
+  "tolerances": {
+    "ledger_absolute": 1e-10,
+    "resource_overdraw_absolute": 1e-14,
+    "permutation_absolute": 1e-14,
+    "minimum": 0
+  },
+  "diffusion_convergence": {
+    "domain": [
+      1,
+      1
+    ],
+    "duration": 0.2,
+    "diffusion": 0.01,
+    "grids": [
+      [
+        8,
+        16
+      ],
+      [
+        16,
+        32
+      ],
+      [
+        32,
+        64
+      ]
+    ],
+    "dt": 0.000125,
+    "endpoint": "relative L2 against exact Neumann cosine solution",
+    "acceptance": "decreasing error at each refinement; finest error < 0.003"
+  },
+  "reaction_transport_grid": {
+    "domain": [
+      1,
+      1
+    ],
+    "duration": 0.4,
+    "grids": [
+      [
+        8,
+        16
+      ],
+      [
+        16,
+        32
+      ],
+      [
+        32,
+        64
+      ]
+    ],
+    "reference_grid": [
+      64,
+      128
+    ],
+    "dt": 0.000125,
+    "endpoint": "relative total biomass error against numerical reference",
+    "acceptance": "decreasing error; finest < 0.005; reference is not biological truth"
+  },
+  "time_convergence": {
+    "domain": [
+      1,
+      1
+    ],
+    "grid": [
+      12,
+      24
+    ],
+    "duration": 0.4,
+    "steps": [
+      0.02,
+      0.01,
+      0.005
+    ],
+    "reference_dt": 0.0003125,
+    "endpoint": "relative total biomass error",
+    "acceptance": "decreasing error; finest < 0.005"
+  },
+  "calibration": {
+    "status": "not_run",
+    "datasets": [],
+    "plan": "Obtain host/site/compartment measurements with units and sampling metadata; fit only identifiable terms; group related observations to prevent leakage"
+  },
+  "evaluation": {
+    "status": "not_run",
+    "datasets": [],
+    "plan": "Freeze model, parameters, endpoints, tolerances and exclusions before independent held-out observations; existing selected panels and benchmark labels are not unseen validation"
+  },
+  "exclusions": [
+    "host-specific physiology",
+    "cell contacts",
+    "molecular coordinates",
+    "immune dynamics",
+    "disease progression"
+  ]
+}

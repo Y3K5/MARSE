@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from marse.ensemble import RunCatalog, ScenarioBatch, run_batch
+from marse.analysis.ensemble import RunCatalog, ScenarioBatch, run_batch
 
 
 def base() -> dict:

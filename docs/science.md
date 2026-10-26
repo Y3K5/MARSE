@@ -1,6 +1,6 @@
 # Scientific culture evidence
 
-`marse.science` stores the conditions and methods attached to culture
+`marse.evidence.science` stores the conditions and methods attached to culture
 observations. It is deliberately not a table of universal optima: a result is
 only transferable when its organism or strain, medium, physical format,
 atmosphere, inoculum, incubation, endpoint, and source context are compatible.
@@ -41,7 +41,7 @@ kernel; they remain evidence until a spatial compiler is implemented.
 
 ## Growth-curve calibration
 
-`marse.calibration` accepts strictly increasing time points and one or more
+`marse.analysis.calibration` accepts strictly increasing time points and one or more
 positive replicate trajectories. It supports exponential, logistic, Gompertz,
 and Baranyi screening fits and returns parameters, pointwise residuals, RMSE,
 replicate count, and identifiability warnings. Log transforms are explicit and

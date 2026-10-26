@@ -13,3 +13,7 @@ This branch starts from the existing local mac-visualizer HEAD; current remote-m
 ## PR 69 validation update
 
 The published head passed GitHub secrets and personal-data checks. GitHub and a local merge-tree check report no conflict with the fetched main revision. CI lint findings in the Python helpers and two final newlines were corrected locally; the new commit still requires a push and fresh CI before merge.
+
+## Main synchronization
+
+Integrated main revision 41d41f0 and retained both changelog histories. The Windows timeout occurred in long periodontal sweeps; the inherited main configuration runs those in the nightly workflow. Local validation does not substitute for a fresh Windows CI result.

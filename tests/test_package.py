@@ -11,14 +11,22 @@ from marse import cli
 
 SUBPACKAGES = [
     "core",
-    "schemas",
+    "model",
+    "processes",
+    "environments",
+    "space",
     "spatial",
-    "microbes",
-    "biofilm",
-    "adaptation",
-    "interventions",
     "validation",
     "ecosystem",
+    "analysis",
+    "evidence",
+    "experimental",
+    "engines",
+    "cli",
+    "io",
+    "bench",
+    "ingest",
+    "structure",
 ]
 
 
@@ -32,6 +40,27 @@ def test_architecture_subpackages_are_importable_and_documented(name):
     module = importlib.import_module(f"marse.{name}")
     assert module.__doc__
     assert module.__doc__.strip()
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["schemas", "microbes", "chemistry", "biofilm", "oral"],
+)
+def test_moved_science_packages_warn(name: str):
+    """The pre-consolidation package names still import, and say where they went."""
+    sys.modules.pop(f"marse.{name}", None)
+    with pytest.warns(DeprecationWarning, match=f"marse.{name} has moved to "):
+        module = importlib.import_module(f"marse.{name}")
+    assert module.__doc__
+
+
+@pytest.mark.parametrize("name", ["adaptation", "interventions"])
+def test_removed_placeholder_packages_warn(name: str):
+    """The empty packages stay importable, and say they are not implemented."""
+    sys.modules.pop(f"marse.{name}", None)
+    with pytest.warns(DeprecationWarning, match=f"marse.{name} is not implemented"):
+        module = importlib.import_module(f"marse.{name}")
+    assert module.__doc__
 
 
 def test_cli_reports_version(capsys):

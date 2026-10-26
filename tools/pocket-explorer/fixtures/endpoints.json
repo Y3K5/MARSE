@@ -1,0 +1,26 @@
+{
+  "source": {
+    "file": "pocket-data.json",
+    "sha256": "29bf833c5b5b5c9b2cd0d2ffc00232652c158be730e69d85f4d417812bbfa476",
+    "precision": "Original stored decimal frame arrays; not a float64 solver final-state digest."
+  },
+  "input_sha256": "1c3485325a4738c1aab77bc26e5921d88a6b1d73d23783bf5f395ef8e2ceee4f",
+  "cases": [
+    {
+      "id": "healthy",
+      "frame_index": 30,
+      "model_time": 76.8,
+      "nx": 32,
+      "ny": 72,
+      "biomass_sha256": "e89db11a6aa640a89d00729bcd3b37afc919af06c1242b1cb186a9f5f1a94a58"
+    },
+    {
+      "id": "periodontitis",
+      "frame_index": 30,
+      "model_time": 76.8,
+      "nx": 32,
+      "ny": 72,
+      "biomass_sha256": "86c08ff49059abf6e81fa33204db0f5ed2c82edbb06c4469226e4ab7040b91de"
+    }
+  ]
+}

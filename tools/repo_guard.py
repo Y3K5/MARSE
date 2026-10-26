@@ -104,13 +104,22 @@ REQUIRED_FILES = (
 
 REQUIRED_PACKAGE_DIRS = (
     "core",
-    "schemas",
+    "model",
+    "processes",
+    "environments",
+    "space",
     "spatial",
-    "microbes",
-    "biofilm",
-    "adaptation",
-    "interventions",
     "validation",
+    "ecosystem",
+    "analysis",
+    "evidence",
+    "experimental",
+    "engines",
+    "cli",
+    "io",
+    "bench",
+    "ingest",
+    "structure",
 )
 """The architecture from docs/architecture.md. Removing one is a design change."""
 

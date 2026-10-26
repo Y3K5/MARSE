@@ -7,7 +7,7 @@ closed form is compared with a direct numerical solution of the same problem.
 import numpy as np
 import pytest
 
-from marse.microbes.growth import monod
+from marse.processes.growth import monod
 from marse.validation.analytical import (
     batch_final_biomass,
     chemostat_break_even,

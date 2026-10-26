@@ -2,10 +2,10 @@
   "scope": "code-only; local runtime assets excluded",
   "files": {
     ".gitignore": "c25f8ca5361c98e8ef3316fed54499b2831de7a99c126356a29d4b2d03f6cc41",
-    "00_CHANGELOG.md": "64e87586d80a0cf7ae1e889f67129819043424385335ff277ab4b9478a6f8899",
+    "00_CHANGELOG.md": "49fdc9cb3b5393a6eace3617191fd1ae49071051779b5fe14a428b6aef355af3",
     "00_START_HERE.md": "aeb1de635a07fe9676385772b38837ea13e2c4c6efcbb846b678bbda8303b0df",
     "ASSET_MANIFEST.json": "0c2b343abdd30ddcbc0c0abfa79fec12073717b8d0343c1dd2b35964dccc2d72",
-    "PUBLICATION_REVIEW.md": "aab9dc99cb008017b747cdb258e056a8369423a490afe7f681e0d80e02d242ca",
+    "PUBLICATION_REVIEW.md": "c2d057b5b7b44ce3bd072aa717b7b438c365ad572f6a4b6a9ffdc841ff566026",
     "THIRD_PARTY.md": "258766e7deab9ae48a8d00400f01b24fe6e5da60cc66013ab7071b73bd6398a9",
     "app.js": "0eb7fca6acad4d51ea49b1128ee8530d5b8aceee8a40f5a4747a4b4fc5a5515c",
     "atlas-data.js": "511a489b54ec7b8146a7bdebe857b279c5fd1f3691767e2fff2b4be85c238f61",

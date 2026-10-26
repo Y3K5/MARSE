@@ -2,6 +2,12 @@
 
 The embedded JavaScript is intentionally kept in one standalone document so
 the result can be opened without a web server or frontend dependency.
+
+A viewer is for looking at a run, so it embeds at most ``max_frames`` evenly
+spaced frames (always the first and the last), with fields rounded to four
+significant digits of each field's largest value. Totals shown beside the map
+come from the unrounded values. The exact result lives in the manifest; every
+recorded frame lives in the frame store.
 """
 
 # The generated JavaScript is formatted for the browser, not as Python.
@@ -9,15 +15,95 @@ the result can be opened without a web server or frontend dependency.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
-from marse.ecosystem.model import EcosystemResult
+import numpy as np
+
+from marse.ecosystem.model import EcosystemFrame, EcosystemResult
+
+DEFAULT_MAX_FRAMES = 100
+SIGNIFICANT_DIGITS = 4
 
 
-def write_viewer(result: EcosystemResult, path: str | Path) -> Path:
-    """Write a dependency-free browser viewer with embedded simulation data."""
+def _rounded(values: np.ndarray) -> np.ndarray:
+    """Round to a few significant digits of the array's largest magnitude."""
+    array = np.asarray(values, dtype=float)
+    scale = float(np.max(np.abs(array))) if array.size else 0.0
+    if scale == 0.0 or not np.isfinite(scale):
+        return array
+    decimals = SIGNIFICANT_DIGITS - 1 - int(np.floor(np.log10(scale)))
+    return np.round(array, decimals)
+
+
+def _per_field(stack: np.ndarray) -> np.ndarray:
+    return np.stack([_rounded(field) for field in stack]) if len(stack) else stack
+
+
+def _chosen(count: int, max_frames: int) -> list[int]:
+    """At most ``max_frames`` evenly spaced indices, always the first and the last."""
+    if count <= max_frames:
+        return list(range(count))
+    return sorted({round(i) for i in np.linspace(0, count - 1, max_frames)})
+
+
+def _payload(result: EcosystemResult, frames: Sequence[EcosystemFrame], max_frames: int) -> dict:
+    config = result.config
+    species = tuple(s.name for s in config.species)
+    nutrients = tuple(n.name for n in config.nutrients)
+    conditions = tuple(c.name for c in config.conditions)
+    additives = tuple(a.name for a in config.additives)
+    embedded = []
+    for index in _chosen(len(frames), max_frames):
+        frame = frames[index]
+        compact = replace(
+            frame,
+            biomass=_per_field(frame.biomass),
+            nutrients=_per_field(frame.nutrients),
+            conditions=_per_field(frame.conditions),
+            additives=_per_field(frame.additives),
+            niche_rates=tuple(_rounded(rates) for rates in frame.niche_rates),
+        )
+        entry = compact.to_dict(species, nutrients, config.carrying_capacity, conditions, additives)
+        exact = frame.to_dict(species, nutrients, config.carrying_capacity, conditions, additives)
+        entry["statistics"] = exact["statistics"]
+        embedded.append(entry)
+    return {
+        "experiment_id": config.experiment_id,
+        "width": config.width,
+        "height": config.height,
+        "cell_size_um": config.cell_size_um,
+        "species": list(species),
+        "nutrients": list(nutrients),
+        "conditions": list(conditions),
+        "additives": list(additives),
+        "providers": result.provider_versions or {},
+        "recorded_frames": len(frames),
+        "frames": embedded,
+    }
+
+
+def write_viewer(
+    result: EcosystemResult,
+    path: str | Path,
+    *,
+    frames: Sequence[EcosystemFrame] | None = None,
+    max_frames: int = DEFAULT_MAX_FRAMES,
+) -> Path:
+    """Write a dependency-free browser viewer with embedded simulation data.
+
+    ``frames`` defaults to the frames the result kept in memory; pass a
+    :class:`~marse.ecosystem.framestore.StoredFrames` to draw from a frame
+    store instead. Nothing besides the HTML file is written.
+    """
+    if max_frames < 2:
+        raise ValueError("a viewer needs at least two frames: the first and the last")
     viewer_path = Path(path)
-    data = result.write_frames(viewer_path.with_name("frames.json"))
+    source = result.frames if frames is None else frames
+    data = _payload(result, source, max_frames)
+    shown = len(data["frames"])
     html = f"""<!doctype html>
 <meta charset="utf-8"><title>MARSE ecosystem viewer</title>
 <style>
@@ -32,14 +118,14 @@ button{{cursor:pointer}} button:hover{{border-color:#7dd3fc}} label{{color:var(-
 @media(max-width:800px){{body{{padding:12px}}.layout{{grid-template-columns:1fr}}canvas{{width:100%}}}}
 </style>
 <main><h1>MARSE ecosystem: {result.config.experiment_id}</h1>
-<div class="subtitle">Interactive spatial simulation explorer · <span id="status">paused</span></div>
-<div class="panel" id="controls"><button id="play">Play</button><button id="back">Back</button><button id="forward">Next</button><label>Speed <select id="speed"><option value="240">0.25x</option><option value="100" selected>1x</option><option value="35">3x</option><option value="10">10x</option></select></label><label>View <select id="render-mode"><option value="combined" selected>Fields + particles</option><option value="smooth">Smooth fields</option><option value="cells">Cell grid</option><option value="agents">Agents only</option></select></label><label>Zoom <input id="zoom" type="range" min="1" max="8" step="0.5" value="3"></label><label>Opacity <input id="opacity" type="range" min="0.25" max="1" step="0.05" value="1"></label><input id="time" type="range" min="0" max="{len(result.frames) - 1}" value="0" style="flex:1;min-width:180px">
+<div class="subtitle">Interactive spatial simulation explorer · {shown} of {data["recorded_frames"]} recorded frames · <span id="status">paused</span></div>
+<div class="panel" id="controls"><button id="play">Play</button><button id="back">Back</button><button id="forward">Next</button><label>Speed <select id="speed"><option value="240">0.25x</option><option value="100" selected>1x</option><option value="35">3x</option><option value="10">10x</option></select></label><label>View <select id="render-mode"><option value="combined" selected>Fields + particles</option><option value="smooth">Smooth fields</option><option value="cells">Cell grid</option><option value="agents">Agents only</option></select></label><label>Zoom <input id="zoom" type="range" min="1" max="8" step="0.5" value="3"></label><label>Opacity <input id="opacity" type="range" min="0.25" max="1" step="0.05" value="1"></label><input id="time" type="range" min="0" max="{shown - 1}" value="0" style="flex:1;min-width:180px">
 <span id="label"></span><label>Layer <select id="layer"></select></label><span id="legend"></span></div>
 <div class="layout"><section class="panel"><div id="stats"></div><div id="canvas-wrap"><canvas id="view" width="{result.config.width}" height="{result.config.height}"></canvas></div></section>
 <aside class="panel"><strong>Cell inspector</strong><div id="inspect">Click a cell to inspect its local state.</div><hr><strong>Layers</strong><p class="mut">Species, nutrients, conditions, additives, quorum phenotypes, effective growth rates, and limiting factors.</p><p class="mut">Keyboard: Space play/pause · ←/→ step · Home/End jump.</p></aside></div>
 <p class="mut">Particles are deterministic population representatives sampled from biomass density; explicit immune agents are shown when supplied by a frame. Yellow outlines mark mutations; green outlines mark positive rates.</p></main>
 <script>
-const data = {data.read_text(encoding="utf-8")};
+const data = {json.dumps(data, separators=(",", ":"))};
 const canvas=document.getElementById('view'), ctx=canvas.getContext('2d'), stats=document.getElementById('stats'), inspect=document.getElementById('inspect'), status=document.getElementById('status');
 const slider=document.getElementById('time'), label=document.getElementById('label'), selector=document.getElementById('layer'), legend=document.getElementById('legend'), speed=document.getElementById('speed'), renderMode=document.getElementById('render-mode'), zoom=document.getElementById('zoom'), opacity=document.getElementById('opacity');
 let playing=false, timer;

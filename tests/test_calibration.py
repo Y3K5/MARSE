@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from marse.calibration import CalibrationError, GrowthCurve, fit_growth_curve
+from marse.analysis.calibration import CalibrationError, GrowthCurve, fit_growth_curve
 
 
 def test_exponential_fit_recovers_rate_from_replicates():

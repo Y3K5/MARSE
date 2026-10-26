@@ -1,0 +1,93 @@
+{
+  "schema_version": 2,
+  "description": "Three periodontal anaerobes (T. denticola, T. forsythia, P. gingivalis) share one peptide stand-in, alanine, in a column through a film. This is the version-2 port of the periodontal study. It is not a pocket, not a measurement, and not a reproduction of the version-1 cell map. Yields and rates are placeholders (confidence C). Alanine stands in for a peptide pool. Biomass formulas are the generic CH1.8O0.5N0.2, not organism-specific composition. The three populations occupy the same basal 40 um and spread as one continuum, so they share the column's room. None of them uses oxygen: they are obligate anaerobes, and oxygen is not a component. Mutation, a competition matrix, moisture, and cardinal temperature are not in this file; those mechanisms belonged to the unverified version-1 engine. Two-dimensional biomass spreading is not implemented, so the geometry is a column rather than the old 60 by 40 grid.",
+  "components": [
+    {"name": "alanine", "phase": "dissolved", "formula": "C3H7NO2"},
+    {"name": "ammonium", "phase": "dissolved", "formula": "NH4", "charge": 1},
+    {"name": "carbon_dioxide", "phase": "dissolved", "formula": "CO2"},
+    {"name": "acetate", "phase": "dissolved", "formula": "C2H3O2", "charge": -1},
+    {"name": "t_denticola", "phase": "particulate", "formula": "CH1.8O0.5N0.2", "oxygen_role": "obligate_anaerobe", "density_mol_per_m3": 1000},
+    {"name": "t_forsythia", "phase": "particulate", "formula": "CH1.8O0.5N0.2", "oxygen_role": "obligate_anaerobe", "density_mol_per_m3": 1000},
+    {"name": "p_gingivalis", "phase": "particulate", "formula": "CH1.8O0.5N0.2", "oxygen_role": "obligate_anaerobe", "density_mol_per_m3": 1000}
+  ],
+  "processes": [
+    {
+      "name": "t_denticola_on_alanine",
+      "kind": "growth",
+      "biomass": "t_denticola",
+      "substrate": "alanine",
+      "yield_mol_per_mol": 0.5,
+      "balanced_by": ["acetate", "carbon_dioxide", "ammonium"],
+      "rate": {
+        "maximum_per_h": 0.25,
+        "factors": [
+          {"component": "alanine", "form": "monod", "half_saturation_mol_per_m3": 0.2},
+          {"component": "ammonium", "form": "monod", "half_saturation_mol_per_m3": 0.05}
+        ]
+      }
+    },
+    {
+      "name": "t_forsythia_on_alanine",
+      "kind": "growth",
+      "biomass": "t_forsythia",
+      "substrate": "alanine",
+      "yield_mol_per_mol": 0.45,
+      "balanced_by": ["acetate", "carbon_dioxide", "ammonium"],
+      "rate": {
+        "maximum_per_h": 0.22,
+        "factors": [
+          {"component": "alanine", "form": "monod", "half_saturation_mol_per_m3": 0.25},
+          {"component": "ammonium", "form": "monod", "half_saturation_mol_per_m3": 0.05}
+        ]
+      }
+    },
+    {
+      "name": "p_gingivalis_on_alanine",
+      "kind": "growth",
+      "biomass": "p_gingivalis",
+      "substrate": "alanine",
+      "yield_mol_per_mol": 0.4,
+      "balanced_by": ["acetate", "carbon_dioxide", "ammonium"],
+      "rate": {
+        "maximum_per_h": 0.2,
+        "factors": [
+          {"component": "alanine", "form": "monod", "half_saturation_mol_per_m3": 0.3},
+          {"component": "ammonium", "form": "monod", "half_saturation_mol_per_m3": 0.05}
+        ]
+      }
+    }
+  ],
+  "experiment_id": "periodontal-pathogen-v2",
+  "initial_mol_per_m3": {
+    "alanine": 5.0,
+    "ammonium": 2.0,
+    "carbon_dioxide": 1.0,
+    "acetate": 0.0
+  },
+  "duration_h": 2.0,
+  "timestep_h": 0.25,
+  "record_interval_h": 0.5,
+  "seed": 20261015,
+  "domain": {
+    "voxels": [32],
+    "voxel_um": 5.0,
+    "bulk_mol_per_m3": {
+      "alanine": 5.0,
+      "ammonium": 2.0,
+      "carbon_dioxide": 1.0,
+      "acetate": 0.0
+    },
+    "diffusivity_m2_per_s": {
+      "alanine": 9.1e-10,
+      "ammonium": 1.47e-09,
+      "carbon_dioxide": 1.1e-09,
+      "acetate": 1.09e-09
+    },
+    "colonies": [
+      {"component": "t_denticola", "center_um": [], "radius_um": 40.0, "concentration_mol_per_m3": 200.0},
+      {"component": "t_forsythia", "center_um": [], "radius_um": 40.0, "concentration_mol_per_m3": 200.0},
+      {"component": "p_gingivalis", "center_um": [], "radius_um": 40.0, "concentration_mol_per_m3": 200.0}
+    ],
+    "spreading": {"mechanism": "continuum"}
+  }
+}

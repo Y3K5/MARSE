@@ -1,17 +1,43 @@
 # Periodontal pathogen biofilm study
 
-The `periodontal_pathogen_biofilm.json` experiment is a reproducible,
-exploratory starting point for comparing *Treponema denticola* (T. denticola),
-*Tannerella forsythia* (T. forsythia), and *Porphyromonas gingivalis*
-(P. gingivalis) in one spatial biofilm-like environment.
+**Not a calibrated pocket.** The study to run is the version-2 column
+`examples/networks/periodontal_pathogen_v2.json`. Three obligate anaerobes
+share alanine, a stand-in for a peptide pool, in one basal layer of a film.
+Carbon, nitrogen and electrons balance. Oxygen is not a growth substrate.
+The yields, rates and the generic biomass formula are placeholders. The
+column is not the old 60 by 40 cell map, and two-dimensional biomass
+spreading is not implemented, so the populations do not crawl sideways.
+Nothing here is a pocket, a virulence mechanism, a patient outcome, or a
+strain-specific physiology.
 
-It does **not** claim to reproduce a periodontal pocket, virulence mechanism,
-patient outcome, or strain-specific physiology. The numeric values are
-illustrative placeholders that make the interaction structure executable.
-They should be replaced with organism- and medium-specific measurements before
-quantitative interpretation.
+The version-1 file `periodontal_pathogen_biofilm.json` is still runnable with
+`marse ecosystem`. That engine is unverified. Its defects are listed in
+[validation.md](validation.md#the-two-dimensional-ecosystem-engine-is-not-yet-verified),
+and the command prints a warning. Those numbers are not a result to cite.
+The version-2 column does not inherit that engine's mass-balance, oxygen,
+mutation or carrying-capacity behaviour. It also does not retire the
+version-1 defects inside `marse ecosystem`; that code is unchanged.
 
-## What the model connects
+`marse bench` scores the column's carbon, nitrogen and electron balance,
+and records the version-1 file only as an unverified engine. The two files
+are not compared as biomass. The cases, the limit of that score, and the
+plan for retiring version 1 without deleting it are in
+[periodontal.md](benchmarks/periodontal.md).
+
+## What the version-2 column connects
+
+- **One shared substrate.** Alanine limits all three populations. There is no
+  competition matrix and no per-species carrying capacity.
+- **Shared room in the column.** Continuum spreading moves biomass that no
+  longer fits, and the three populations count toward the same voxel.
+- **Anaerobic growth.** Each organism is an obligate anaerobe. No process
+  consumes or requires oxygen.
+- **Not carried over from version 1:** mutation of grid cells, cardinal
+  temperature, a moisture scalar, adhesion edges, and lateral crawling.
+
+## What the version-1 file connected
+
+This is the structure of `periodontal_pathogen_biofilm.json` only.
 
 - **Shared-resource competition:** all three species use oxygen, heme,
   peptides, and carbon, with an explicit competition matrix.
@@ -34,18 +60,27 @@ and which species persists in shared regions. A useful next extension is to
 replace the production proxies with evidence-linked metabolites and to add
 experimentally measured growth and competition coefficients.
 
-## Run and visualize
+## Run
 
 ```bash
-python -m marse.cli ecosystem \
-  examples/experiments/periodontal_pathogen_biofilm.json \
-  --output runs/periodontal-pathogen-biofilm
-open runs/periodontal-pathogen-biofilm/viewer.html
+marse check examples/networks/periodontal_pathogen_v2.json
+marse run examples/networks/periodontal_pathogen_v2.json -o runs/periodontal-v2
+marse replay runs/periodontal-v2/manifest.json
 ```
 
-Use **Fields + particles** to see continuous biomass fields with deterministic
-population representatives. The particles are visualization aids; the
-underlying simulation remains a spatial biomass-field model.
+The run writes the usual spatial files plus `summary.json` and `report.html`.
+Open `runs/periodontal-v2/vtk/run.pvd` in ParaView for the column.
+
+The version-1 viewer is still available, and still unverified:
+
+```bash
+marse ecosystem examples/experiments/periodontal_pathogen_biofilm.json \
+  -o runs/periodontal-pathogen-biofilm
+```
+
+Use **Fields + particles** there to see continuous biomass fields with
+deterministic population representatives. The particles are visualization
+aids. That simulation remains the version-1 spatial biomass-field model.
 
 ## Controls and environmental variants
 

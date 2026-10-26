@@ -1,0 +1,70 @@
+{
+  "schema_version": 2,
+  "experiment_id": "lab-flow-chamber-s-oralis",
+  "description": "A clean laboratory scene: a parallel-plate flow chamber in which Streptococcus oralis, suspended in buffer at 3e8 cells per ml, flows over glass at a wall shear rate of 15 per s, 20 mm from the inlet, at 37 C. Half of the glass is bare and half carries a salivary conditioning film, side by side in one chamber. The buffer holds no nutrients, so nothing grows: the run is the classic flow-chamber measurement of how many cells stick and how fast, n(t), for four hours. Delivery to the glass is the Leveque flux, computed from the cell's diameter, the liquid and the shear (docs/theory.md, section 6.4). The attachment efficiencies, detachment and locking rates, cell diameter, carbon per cell and blocked area are illustrative (confidence C, docs/parameters.md): they give an initial deposition rate inside the range reported for oral streptococci in flow chambers, 0 to 2.9e3 per cm2 per s (Sjollema, Busscher and Weerkamp 1988), and are meant to be replaced by measured values.",
+  "components": [
+    {
+      "name": "s_oralis_reversible",
+      "phase": "particulate",
+      "formula": "CH1.8O0.5N0.2"
+    },
+    {
+      "name": "s_oralis",
+      "phase": "particulate",
+      "formula": "CH1.8O0.5N0.2"
+    }
+  ],
+  "processes": [],
+  "duration_h": 4.0,
+  "timestep_h": 0.25,
+  "record_interval_h": 0.25,
+  "relative_tolerance": 0.0001,
+  "absolute_tolerance_mol_per_m3": 0.001,
+  "seed": 1,
+  "domain": {
+    "voxels": [8, 4],
+    "voxel_um": 5.0,
+    "diffusivity_m2_per_s": {},
+    "substratum": {
+      "conditioning_film": "none on the bare half; a 2 h salivary conditioning film on the coated half",
+      "patches": [
+        {"material": "glass", "region_um": [0.0, 20.0]},
+        {"material": "saliva_coated_glass", "region_um": [20.0, 40.0]}
+      ]
+    },
+    "liquid": {
+      "temperature_c": 37.0,
+      "viscosity_mpa_s": 0.692
+    },
+    "flow": {
+      "wall_shear_rate_per_s": 15.0,
+      "distance_from_inlet_mm": 20.0
+    },
+    "suspension": [
+      {
+        "reversible": "s_oralis_reversible",
+        "attached": "s_oralis",
+        "cells_per_ml": 3e8,
+        "cell_diameter_um": 0.9,
+        "carbon_fmol_per_cell": 7.0,
+        "blocked_area_um2": 10.0
+      }
+    ],
+    "adhesion": [
+      {
+        "attached": "s_oralis",
+        "material": "glass",
+        "efficiency": 0.5,
+        "detachment_per_h": 30.0,
+        "locking_per_h": 90.0
+      },
+      {
+        "attached": "s_oralis",
+        "material": "saliva_coated_glass",
+        "efficiency": 0.3,
+        "detachment_per_h": 10.0,
+        "locking_per_h": 90.0
+      }
+    ]
+  }
+}

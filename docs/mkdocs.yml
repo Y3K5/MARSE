@@ -1,0 +1,70 @@
+site_name: MARSE
+site_description: Microbial Adaptability Resource Simulation Engine.
+docs_dir: .
+site_dir: ../site
+
+# Links into the repository (examples, GOVERNANCE.md, and the rest) are real
+# files. They are not pages of this site, so a missing docs target is ignored.
+validation:
+  links:
+    not_found: ignore
+    absolute_links: ignore
+    unrecognized_links: ignore
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: index.md
+  - Reference:
+      - Architecture: architecture.md
+      - Table import: ingest.md
+      - Structure scores: structure.md
+      - Specification: specification.md
+      - Parameters: parameters.md
+      - Networks: networks.md
+      - Environments: environments.md
+      - Theory: theory.md
+      - Science: science.md
+      - Repository setup: repository-setup.md
+  - Validation:
+      - Validation: validation.md
+      - Benchmarks: benchmarks.md
+      - Periodontal benchmark: benchmarks/periodontal.md
+      - Uncertainty: uncertainty.md
+      - Modeling landscape: modeling-landscape.md
+  - Studies:
+      - Periodontal pathogens: periodontal-pathogen-study.md
+      - Periodontal controls: periodontal-controls-study.md
+  - Plans:
+      - Benchmark harness: benchmarks/phase2-plan.md
+      - Roadmap: roadmap.md
+      - Stage 2d: stage-2d-plan.md
+      - Chemotaxis: chemotaxis.md
+      - Phenotype switching: phenotype-switching.md
+      - Adhesion and detachment: adhesion-detachment.md
+      - Genotype to capability: genotype-capability.md
+      - Action and resource economy: action-resource-economy.md
+      - Immune and molecular pressure: immune-molecular.md
+      - Integrated resistance scenario: integrated-resistance-scenario.md
+      - Context exchange: context-exchange.md
+      - Context integrity handoff: context-integrity-handoff.md
+      - Mac visualizer: mac-visualizer.md
+
+plugins:
+  - search

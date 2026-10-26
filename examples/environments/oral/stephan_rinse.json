@@ -1,0 +1,246 @@
+{
+  "schema_version": 2,
+  "experiment_id": "stephan-rinse",
+  "description": "The Stephan curve (Stephan 1944): the pH of plaque after a rinse of 10 mL of 10% sucrose (584 mM of hexose), held for a minute with the film mixed into it, then spat out. A column of 150 um of plaque under 100 um of salivary film (70 to 100 um, Collins and Dawes 1987) that moves at 6 mm per min (0.8 to 7.6 mm per min by site, Dawes et al. 1989) after crossing 6 mm of plaque, and is renewed from the saliva in the mouth. The mouth follows Dawes (1983): it holds 0.77 mL after a swallow and 1.07 mL before one (Lagerlof and Dawes 1984), and secretes 0.3 mL per min at rest and up to 2 mL per min more while it tastes sugar. Saliva's buffers are those Bardow et al. (2000) measured without loss of CO2: at rest pH 6.8, with 5.3 mM carbonate and 4.5 mM phosphate; stimulated, pH 7.2, with 10.5 and 3.8 mM. Its sodium and potassium are typical values, and its chloride is set so that it is neutral at its pH. One acidogenic population ferments sugar, counted in hexose units, to lactic acid, more slowly as the pH falls. Carboxyl groups of the cell walls and matrix buffer the plaque (Shellis and Dibdin 1988), and hold as much potassium as they have lost protons: as they take up the acid's protons they release it, fast. Every charged component diffuses at one rate, 7e-10 m2 per s, about the rate of potassium lactate at half its speed in water, so that diffusion separates no charge. Calibrated (confidence C) to the criteria set before the stage was built: the acid production (0.5 per h per C-mol of an 800 C-mM population), the buffer (160 mM, pKa 4.8), the plaque's thickness and the film's speed. docs/parameters.md grades every value.",
+  "pkw": 13.6,
+  "components": [
+    {
+      "name": "sugar",
+      "phase": "dissolved",
+      "formula": "C6H12O6"
+    },
+    {
+      "name": "lactate",
+      "phase": "dissolved",
+      "formula": "C3H6O3",
+      "acid_base": {
+        "pka": [
+          3.86
+        ]
+      }
+    },
+    {
+      "name": "carbonate",
+      "phase": "dissolved",
+      "formula": "H2CO3",
+      "acid_base": {
+        "pka": [
+          6.1,
+          10.0
+        ]
+      }
+    },
+    {
+      "name": "phosphate",
+      "phase": "dissolved",
+      "formula": "H3PO4",
+      "acid_base": {
+        "pka": [
+          2.1,
+          7.2,
+          12.3
+        ]
+      }
+    },
+    {
+      "name": "ammonium",
+      "phase": "dissolved",
+      "formula": "NH4",
+      "charge": 1,
+      "acid_base": {
+        "pka": [
+          9.25
+        ]
+      }
+    },
+    {
+      "name": "sodium",
+      "phase": "dissolved",
+      "formula": "Na",
+      "charge": 1
+    },
+    {
+      "name": "potassium",
+      "phase": "dissolved",
+      "formula": "K",
+      "charge": 1
+    },
+    {
+      "name": "chloride",
+      "phase": "dissolved",
+      "formula": "Cl",
+      "charge": -1
+    },
+    {
+      "name": "carboxyl_groups",
+      "phase": "particulate",
+      "formula": "CH2O2",
+      "acid_base": {
+        "pka": [
+          4.8
+        ]
+      }
+    },
+    {
+      "name": "bound_potassium",
+      "phase": "particulate",
+      "formula": "K",
+      "charge": 1
+    },
+    {
+      "name": "bacteria",
+      "phase": "particulate",
+      "formula": "CH1.8O0.5N0.2"
+    }
+  ],
+  "processes": [
+    {
+      "name": "fermentation",
+      "kind": "reaction",
+      "stoichiometry_mol_per_mol": {
+        "sugar": -1,
+        "lactate": 2
+      },
+      "rate": {
+        "maximum_per_h": 0.5,
+        "proportional_to": "bacteria",
+        "factors": [
+          {
+            "component": "sugar",
+            "form": "monod",
+            "half_saturation_mol_per_m3": 1
+          },
+          {
+            "form": "ph",
+            "ph_min": 4,
+            "ph_optimum": 7,
+            "ph_max": 9
+          }
+        ]
+      }
+    },
+    {
+      "name": "counter_ions_binding",
+      "kind": "reaction",
+      "stoichiometry_mol_per_mol": {
+        "potassium": -1,
+        "bound_potassium": 1
+      },
+      "rate": {
+        "maximum_per_h": 3600,
+        "proportional_to": "carboxyl_groups",
+        "factors": [
+          {
+            "component": "carboxyl_groups",
+            "form": "dissociated"
+          }
+        ],
+        "assumed_in_excess": [
+          "potassium"
+        ]
+      }
+    },
+    {
+      "name": "counter_ions_release",
+      "kind": "reaction",
+      "stoichiometry_mol_per_mol": {
+        "bound_potassium": -1,
+        "potassium": 1
+      },
+      "rate": {
+        "maximum_per_h": 3600,
+        "proportional_to": "bound_potassium"
+      }
+    }
+  ],
+  "initial_mol_per_m3": {
+    "carbonate": 5.3,
+    "phosphate": 4.5,
+    "ammonium": 2.0,
+    "sodium": 5.0,
+    "potassium": 22.0,
+    "chloride": 18.79
+  },
+  "duration_h": 1.5,
+  "timestep_h": 0.01,
+  "relative_tolerance": 0.001,
+  "absolute_tolerance_mol_per_m3": 1e-06,
+  "seed": 1,
+  "domain": {
+    "voxels": [
+      100
+    ],
+    "voxel_um": 2.5,
+    "diffusivity_m2_per_s": {
+      "sugar": 2.3e-10,
+      "lactate": 7e-10,
+      "carbonate": 7e-10,
+      "phosphate": 7e-10,
+      "ammonium": 7e-10,
+      "sodium": 7e-10,
+      "potassium": 7e-10,
+      "chloride": 7e-10
+    },
+    "colonies": [
+      {
+        "component": "bacteria",
+        "center_um": [],
+        "radius_um": 150,
+        "concentration_mol_per_m3": 800.0
+      },
+      {
+        "component": "carboxyl_groups",
+        "center_um": [],
+        "radius_um": 150,
+        "concentration_mol_per_m3": 160.0
+      },
+      {
+        "component": "bound_potassium",
+        "center_um": [],
+        "radius_um": 150,
+        "concentration_mol_per_m3": 158.4158
+      }
+    ],
+    "film": {
+      "thickness_um": 100,
+      "velocity_mm_per_min": 6,
+      "plaque_length_mm": 6
+    },
+    "mouth": {
+      "saliva_mol_per_m3": {
+        "carbonate": 5.3,
+        "phosphate": 4.5,
+        "ammonium": 2.0,
+        "sodium": 5.0,
+        "potassium": 22.0,
+        "chloride": 18.79
+      },
+      "stimulated_saliva_mol_per_m3": {
+        "carbonate": 10.5,
+        "phosphate": 3.8,
+        "ammonium": 2.0,
+        "sodium": 25.0,
+        "potassium": 20.0,
+        "chloride": 31.5381
+      },
+      "resting_volume_ml": 0.77,
+      "swallow_volume_ml": 1.07,
+      "unstimulated_flow_ml_per_min": 0.3,
+      "stimulated_flow_ml_per_min": 2.0,
+      "stimulus": "sugar",
+      "stimulus_half_mol_per_m3": 50,
+      "plaque_area_cm2": 2
+    },
+    "diet": [
+      {
+        "kind": "rinse",
+        "start_h": 0.0,
+        "duration_min": 1,
+        "volume_ml": 10,
+        "composition_mol_per_m3": {
+          "sugar": 584
+        }
+      }
+    ]
+  }
+}

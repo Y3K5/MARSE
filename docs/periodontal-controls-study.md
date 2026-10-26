@@ -1,5 +1,16 @@
 # Periodontal community controls
 
+**These controls still run on ecosystem v1**, which is unverified. They are a
+record of the version-1 placeholder sweep, not a result of the version-2
+column in [periodontal-pathogen-study.md](periodontal-pathogen-study.md).
+The version-2 file has no temperature cardinal, no moisture scalar and no
+mutation flag, so this sweep does not transfer onto it.
+
+**Unverified.** These controls use the ecosystem v1 engine. The
+`marse ecosystem` command warns on every run. Do not read a difference
+between a control and the three-species case as a biological result. The
+version-2 column is a different model; it does not replace these rows.
+
 `examples/periodontal_controls_analysis.py` is the next analysis step after
 the exploratory three-species run. It is designed to answer whether a result
 comes from community composition, the competition rule, or a limiting resource.

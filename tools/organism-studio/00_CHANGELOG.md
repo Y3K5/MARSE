@@ -11,3 +11,7 @@ Excluded all runtime asset directories and community fields from Git. Added chec
 ## CI hygiene correction
 
 Formatted and sorted the three Python support files using the pinned Ruff tool, replaced the test lambda and unittest-style assertions to match repository lint rules, and fixed two JSON final newlines. No runtime asset bytes, scientific data or checks were weakened.
+
+## Main synchronization and Windows timeout diagnosis
+
+Preserved both changelog entries while integrating main. The timed-out Windows job was executing long periodontal sweeps; main already marks these slow and runs them through nightly.yml, while default PR tests exclude slow. No test threshold, job timeout or scientific input was changed for this resolution. Fresh Windows CI is still required after push.

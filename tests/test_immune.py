@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from marse.actions import ResourceBudget
-from marse.immune import (
+from marse.processes.host.actions import ResourceBudget
+from marse.processes.host.immune import (
     ImmuneAgent,
     ImmuneCellType,
     ImmuneError,

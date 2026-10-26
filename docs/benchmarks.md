@@ -21,3 +21,7 @@ Observed data, fitted parameters, and model outputs should remain separate.
 Every experimental case must identify its source, endpoint units, replicate
 structure, preprocessing, and tolerance rationale before it is promoted to
 the registry.
+
+The harness that runs a case and writes a scored report is described in
+[phase2-plan.md](benchmarks/phase2-plan.md). It calls this registry when a
+case supplies arrays. It does not replace it.
