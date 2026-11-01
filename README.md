@@ -255,6 +255,16 @@ Citation metadata is in [CITATION.cff](CITATION.cff) (GitHub's "Cite this
 repository" button reads it). MARSE is licensed under the
 [Apache License 2.0](LICENSE).
 
+## Protein-relation evidence viewer
+
+The optional [protein-relations viewer](tools/organism-studio/spatial-lattice/00_START_HERE.md)
+imports an existing local retained build to explore source folds, evidence-linked
+relationships and review queues in three schematic layouts. Its independent
+close-up camera preserves the network. Runtime evidence and third-party assets
+remain excluded from Git; source/identity/coordinate gates stay explicit. This
+is presentation software, separate from the numerical engine and scientific
+qualification.
+
 ## Experimental organism studio
 
 A local cell-to-protein visualization candidate is in [tools/organism-studio](tools/organism-studio/00_START_HERE.md). It is separate from the numerical engine and does not establish native molecular placement or biological validation. See its publication review before release.

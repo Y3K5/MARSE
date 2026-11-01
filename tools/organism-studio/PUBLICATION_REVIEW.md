@@ -17,3 +17,13 @@ The published head passed GitHub secrets and personal-data checks. GitHub and a 
 ## Main synchronization
 
 Integrated main revision 41d41f0 and retained both changelog histories. The Windows timeout occurred in long periodontal sweeps; the inherited main configuration runs those in the nightly workflow. Local validation does not substitute for a fresh Windows CI result.
+
+## Local reusable protein-relations capability update
+
+The new spatial-lattice directory selects authored renderer code, synthetic
+fixture generators/tests and documentation. No study-specific data, source
+models, local paths, active-study links, third-party bundles or execution
+receipts are selected. Runtime imports are ignored. The owner authorized a local code-only commit
+after review of the selected bytes, generated distributions and outgoing history.
+This authorization does not include a push or publication; the owner runs every
+push. Local checks do not establish remote CI acceptance or scientific validity.

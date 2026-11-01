@@ -13,3 +13,5 @@
 @media(max-width:700px){#library{width:100%}#flow-status{display:none}#stage{height:clamp(300px,calc(100dvh - 480px),500px)}}
 
 #library-expand{display:none}@media(max-width:700px){#library-selection{grid-template-columns:minmax(0,1fr) 90px}#library #organism{grid-column:1;grid-row:1}#library-expand{display:block;grid-column:2;grid-row:1;padding:5px;font-size:11px;min-height:36px}#library.selection-open #library-search{display:block}#library.selection-open #taxa{display:flex}}
+
+.capability-link{color:#dbe7e7;border:1px solid #50656b;border-radius:6px;padding:7px 11px;text-decoration:none;font-size:13px}

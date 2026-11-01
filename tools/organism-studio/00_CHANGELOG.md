@@ -1,3 +1,7 @@
+# Reusable protein-relations capability
+
+Added the optional source-coordinate network viewer and JSON-only retained-build importer, with synthetic transport/mapping controls. Numerical engines and private working views remain separate. See spatial-lattice/00_START_HERE.md. Prepared for an explicitly authorized local code-only commit; the owner runs every push. Private data and runtime assets remain excluded.
+
 # Changelog
 
 ## Initial experimental public candidate

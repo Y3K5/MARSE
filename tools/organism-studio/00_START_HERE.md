@@ -1,3 +1,7 @@
+## Reusable protein-relations viewer
+
+[Protein relations in a spatial lattice](spatial-lattice/00_START_HERE.md) adds source-coordinate folds, literal relationship evidence, independent protein/region inspection, review highlights and three layouts. Species, counts, queue membership and exact Workbench links come from imported metadata. The local importer verifies a retained build before copying only JSON into ignored runtime storage; no scientific method or supplied script executes. Private studies, models and result payloads are excluded from the code-only capability.
+
 # Experimental MARSE organism studio
 
 Select an organism → inspect a connected surface patch → inspect source-linked protein coordinates in one Three.js scene. Drag to orbit and choose Whole cell to return. Source hashes, chains and construct caveats remain visible. Missing coordinates remain unavailable.

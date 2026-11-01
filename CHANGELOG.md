@@ -1,3 +1,10 @@
+## Local unreleased — reusable protein-relations viewer
+
+Added an optional metadata-driven source-fold network, independent interaction
+inspection, review highlights and strict local JSON import from retained build
+manifests. Includes synthetic positive/refusal tests. No private input payload,
+new dependency, numerical-engine change or scientific execution is included.
+
 # Changelog
 
 All notable changes to MARSE are recorded here. The format follows

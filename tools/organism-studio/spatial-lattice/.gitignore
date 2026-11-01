@@ -1,0 +1,4 @@
+# Private imported evidence payloads are never code-review material.
+/runtime/
+/.relations-import-*/
+__pycache__/
