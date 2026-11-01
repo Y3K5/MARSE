@@ -11,11 +11,16 @@ function classify(data,r,other){
  if(r.level==='candidate / unresolved identity')return 'candidate';
  return isSupportedProteinPair(data,r)?'supported_pair':'source_context';
 }
+// Consume producer-validated full-reference correspondences, never labels or homologs.
+export function sourceReferences(data,id){
+ const p=data.proteins.find(v=>v.id===id);if(!p?.subtractive_record)return [];
+ return (data.subtractive?.reference_links||[]).filter(l=>l.a===id&&l.kind==='exact_reference_identity'&&typeof l.sequence_sha256==='string'&&!!l.sequence_sha256&&l.sequence_sha256===p.subtractive_record.sequence_sha256&&data.proteins.some(v=>v.id===l.b&&!v.subtractive_record&&v.species===p.species));
+}
 export function reviewAudit(data){
  if(caches.has(data))return caches.get(data);
  const keys=new Set(data.subtractive?.shortlist_keys||[]),by=new Map([...data.proteins,...data.contexts].map(p=>[p.id,p]));
  const entries=data.proteins.filter(p=>keys.has(p.subtractive_record?.key)).map(p=>{
-  const refs=(data.subtractive.reference_links||[]).filter(l=>l.a===p.id&&l.kind==='exact_reference_identity'&&l.sequence_sha256===p.subtractive_record.sequence_sha256&&by.get(l.b)?.species===p.species);
+  const refs=sourceReferences(data,p.id);
   const mapped=[];for(const link of refs)for(const r of data.relationships){const otherId=r.a===link.b?r.b:r.b===link.b?r.a:null,other=by.get(otherId);if(other&&other.species!==p.species)mapped.push({recordId:r.id,sourceEndpoint:link.b,otherEndpoint:other.id,referenceLink:link.id,category:classify(data,r,other)});}
   // Same labels offer source navigation only. No homolog/strain correspondence is asserted.
   const labelTokens=tokens(p.name),sourceIds=new Set(data.subtractive.source_context_ids),holds=[];

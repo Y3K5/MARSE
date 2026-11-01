@@ -16,6 +16,12 @@ results for the same manifest is always called out.
 
 ### Added
 
+- Selected-protein neighborhoods with separate exact-reference source context,
+  literal supported partners, qualified site inspection and an independent whole
+  source overview. Includes responsive controls, strict optional saved state and
+  frame-safe return to the retained field. Runtime research and coordinates stay
+  local and excluded from distributions; no scientific analysis is launched.
+
 - Optional spatial viewer exploration with larger retained folds, clearance-aware
   layouts and an independent whole-source overview. Literal source-pair focus,
   supported-residue labels and evidence inspection preserve identity and mapping

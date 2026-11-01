@@ -64,3 +64,19 @@
 @media(min-width:851px){main.subtractive-mode.browser-collapsed:not(.wide-view){grid-template-columns:minmax(0,1fr)}.subtractive-mode.browser-collapsed>.library{display:none}}
 
 @media(max-width:850px){.nav-current{display:block}.nav-step{display:flex;align-items:center;justify-content:space-between;text-align:left;margin-top:6px}.nav-step>span{margin:0}.nav-step>div{display:flex;gap:5px}}
+
+/* Local evidence slice; whole source overview stays independent. */
+#protein-neighborhood{padding:10px 14px;background:#132932;border-bottom:1px solid #47616a;max-height:220px;overflow:auto;font-size:13px;line-height:1.5}#protein-neighborhood[hidden]{display:none}.neighborhood-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.neighborhood-head strong{font-size:18px}.neighborhood-head p{margin:3px 0;color:#bfd8d5}#neighborhood-qualification{font-size:12px;color:#c2d0d5;margin:6px 0}.neighborhood-record{border:1px solid #456368;padding:9px;border-radius:6px;min-width:250px;max-width:100%;background:#15212b}.neighborhood-record small{font-size:12px}.neighborhood-record button,#neighborhood-context button{font-size:12px;min-height:36px;margin:4px 4px 0 0;white-space:normal;text-align:left}.neighborhood-record>div{display:flex;flex-wrap:wrap;gap:3px}.neighborhood-site{border-color:#b1a369;color:#ffedb7}#neighborhood-connections{display:flex;gap:8px;flex-wrap:wrap}#neighborhood-more{margin-top:7px}#neighborhood-more summary{cursor:pointer;min-height:30px}.neighborhood-mode #connection-focus{display:none}.neighborhood-mode #nav-neighborhood{border-color:#8ac9b7;background:#264c43}.neighborhood-mode #labels .label{font-size:13px;max-width:230px}.neighborhood-mode .network-presence{display:none}@media(max-width:850px){#protein-neighborhood{max-height:205px;padding:9px 12px}.neighborhood-head{flex-wrap:wrap}.neighborhood-head strong{font-size:17px}.neighborhood-record{min-width:0;width:100%}.neighborhood-record button,#neighborhood-context button,#neighborhood-exit{min-height:42px}.neighborhood-mode .view-panes{min-height:340px}}
+
+.neighborhood-mode #network-controls{display:none}
+
+/* Connections live in the existing readable browser, leaving room for the 3D scene. */
+.has-neighborhood .library .intro,.has-neighborhood .library #presets,.has-neighborhood .library .library-divider,.has-neighborhood #subtractive-controls,.has-neighborhood .library-note{display:none}.has-neighborhood .library>h1{font-size:23px}.has-neighborhood #protein-neighborhood{padding:0 0 14px;border:0;background:transparent;max-height:none;overflow:visible}.has-neighborhood .neighborhood-head{display:block}.has-neighborhood .neighborhood-head strong{font-size:16px}.has-neighborhood #neighborhood-exit{font-size:12px;margin:7px 0;min-height:38px}.has-neighborhood .neighborhood-record{min-width:0;width:100%;overflow-wrap:anywhere}.has-neighborhood #neighborhood-connections{display:grid;grid-template-columns:minmax(0,1fr)}.has-neighborhood #neighborhood-qualification{overflow-wrap:anywhere}.has-neighborhood #neighborhood-context{overflow-wrap:anywhere}
+
+.neighborhood-mode .lens-open #viewport:before{content:'PROTEIN NEIGHBORHOOD'}
+
+.has-neighborhood .library>h1,.has-neighborhood .library>.eyebrow,.has-neighborhood .library>label[for=search],.has-neighborhood .library>#search{display:none}
+
+#lens-controls>summary{font-size:12px;cursor:pointer;color:#bfd3d1;padding:6px 0;min-height:32px}#lens-controls[open]>summary{margin-bottom:6px}
+
+@media(min-width:1200px){.has-neighborhood #protein-navigator{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:16px}.has-neighborhood .nav-current{grid-column:1;grid-row:1}.has-neighborhood #nav-switcher{grid-column:2;grid-row:1;align-self:center;margin-top:0}.has-neighborhood .nav-actions{grid-column:1/-1;grid-row:2}.has-neighborhood .nav-selectors{grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr)}}

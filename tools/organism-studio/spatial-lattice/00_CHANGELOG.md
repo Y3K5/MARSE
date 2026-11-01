@@ -1,5 +1,13 @@
 # Changes
 
+## Neighborhood commit review
+
+Return-to-field now reuses a captured camera only when the neighborhood was opened from the molecular display field. Entering from a raw source-coordinate frame returns to a fitted field instead of replaying an incompatible coordinate-frame camera. A regression check preserves the existing field-camera return and refuses raw/designed frames.
+
+## Selected protein neighborhood
+
+Added a separate selected-protein neighborhood with larger literal supported partners, qualified source-site overlays and click-through evidence, alongside the independent whole-source overview. Existing validated full-reference correspondences lead to separately labelled source folds; unmatched retained proteins remain unresolved. Return-to-field, direct source exploration and optional backward-compatible saved neighborhood state preserve original input custody. No new evidence, coordinates, analysis or dependency.
+
 ## Reusable viewer commit review
 
 The independent source overview now draws unassigned context markers in a neutral color without presenting another microbial species. The retained source relationships and three organism labels are unchanged. Added a regression control for an unresolved endpoint; all view/navigation, pair and site evidence gates remain.

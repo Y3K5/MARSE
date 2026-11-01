@@ -80,7 +80,7 @@ The fixture generator creates synthetic software data, never a biological exampl
 ```sh
 python3 tools/organism-studio/spatial-lattice/fixture_relations.py <new-test-build-folder>
 python3 tools/organism-studio/spatial-lattice/setup_relations.py --from <new-test-build-folder> --output <new-test-runtime-folder>
-MARSE_RELATIONS_FIXTURE=<new-test-runtime-folder> node --test tools/organism-studio/spatial-lattice/relations.test.mjs tools/organism-studio/spatial-lattice/exploration.test.mjs tools/organism-studio/spatial-lattice/pair.test.mjs tools/organism-studio/spatial-lattice/site-residue.test.mjs tools/organism-studio/spatial-lattice/navigation.test.mjs
+MARSE_RELATIONS_FIXTURE=<new-test-runtime-folder> node --test tools/organism-studio/spatial-lattice/relations.test.mjs tools/organism-studio/spatial-lattice/exploration.test.mjs tools/organism-studio/spatial-lattice/pair.test.mjs tools/organism-studio/spatial-lattice/site-residue.test.mjs tools/organism-studio/spatial-lattice/navigation.test.mjs tools/organism-studio/spatial-lattice/neighborhood.test.mjs
 PYTHONPATH=tools/organism-studio/spatial-lattice python -m pytest tools/organism-studio/spatial-lattice/test_setup_relations.py
 ```
 
@@ -88,8 +88,22 @@ The Python suite covers checksums, paths/symlinks, source/model/trace drift, JSO
 
 ## Ownership and limits
 
-`app.js` owns navigation and drawer state; `navigation-model.js` supplies visible-list identities, source-pair choices, bounded step navigation and saved-selection scope checks; `model.js` and `network-model.js` own input/display contracts and schematic layouts; `review-model.js` and `subtractive-model.js` own review navigation/filtering. `residue-model.js`, `fold-geometry.js`, `interaction-model.js`, `interaction-geometry.js` and `interaction-lens.js` reuse retained coordinate/region presentation. `runtime-loader.js` checks/caches the imported producer payloads in the browser. `setup_relations.py` owns local transport checks, not publication or scientific reanalysis.
+`app.js` owns navigation and drawer state; `neighborhood-model.js` builds the selected protein’s evidence slice and display layout using existing classification/reference/site gates; `navigation-model.js` supplies visible-list identities, source-pair choices, bounded step navigation and saved-selection scope checks; `model.js` and `network-model.js` own input/display contracts and schematic layouts; `review-model.js` and `subtractive-model.js` own review navigation/filtering. `residue-model.js`, `fold-geometry.js`, `interaction-model.js`, `interaction-geometry.js` and `interaction-lens.js` reuse retained coordinate/region presentation. `runtime-loader.js` checks/caches the imported producer payloads in the browser. `setup_relations.py` owns local transport checks, not publication or scientific reanalysis.
 
 The layout does not establish native placement, abundance, docking geometry, binding strength, folding dynamics, target suitability or clinical effect. A source label is not an identity match; no displayed connection means unresolved coverage, not biological absence. Existing numerical engines and the separate private research viewer are unchanged. Saved files pin the input snapshot; cross-renderer camera replay is not independently qualified.
 
 The whole-source overview retains unassigned source/context markers in a neutral color; these do not create an additional organism label or a molecular identity.
+
+## Protein neighborhood
+
+Select a protein, then choose Protein neighborhood (Neighbors on phones). The main field contains the selected protein, any existing exact-reference source correspondences and their literal supported named-protein partners. The whole source atlas stays in its independent pinned overview. Reference-linked retained and source folds are separate; their source strain/material qualifications remain. No label-only, homolog, cell/class, candidate or phenotype evidence becomes a supported partner. An unmatched protein keeps its fold or coordinate hold with an unresolved explanation, plus explicit navigation to separate source neighborhoods.
+
+Gold overlays consume the current validated site reader. Choose a qualified region or its bead to open the independent site lens, residue identity and original evidence/revision. Tested constructs, reactive bonds and optional secondary/conditional/predicted layers retain their own labels; a partner without a qualified region says site unresolved. Overlapping constructs are separate annotations, not independent contact residues. No displayed edge specifies a docked pose. Other recorded contexts remain in a separate expandable evidence section.
+
+Previous/Next and the protein picker move through the current neighborhood without changing its center. Center neighborhood here or Explore on a partner makes that protein the new center. Return to protein field restores the field camera when available. Saved neighborhoods pin the existing source snapshot, center and optional selected member; unknown centers, selections outside the neighborhood and conflicting pair/frame state are refused. Old saves remain valid.
+
+Connections and qualified regions use the existing side browser; choose Connections & sites (Connections on phones) when it is hidden. This leaves the fold viewport clear. Selecting a region closes the drawer and opens the independent site lens. The neighborhood browser and evidence drawers keep the pinned overview visible.
+
+In neighborhood site inspection, relationship/endpoint/region controls start collapsed under Change relationship, endpoint or region, leaving the chosen fold and evidence more visible. Expand that row to change the qualified selection.
+
+Return-to-field replays a captured camera only from the molecular display field. Entering a neighborhood from source-coordinate space returns to a fitted field, preserving the distinction between Angstrom coordinates and display units.
