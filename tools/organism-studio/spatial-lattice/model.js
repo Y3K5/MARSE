@@ -1,3 +1,6 @@
+import {displayLimits} from './exploration-model.js';
+import {validatePairFocus} from './pair-model.js';
+import {validateNavigationProtein} from './navigation-model.js';
 export const palette={},basePositions={unknown:[-35,35,30]};
 export function configureSpecies(data){const colors=['#e6a08c','#e0c07d','#88cbbd','#afc3ef','#d5a3d9'];for(const [i,s] of data.species.entries()){palette[s.id]=/^#[0-9a-f]{6}$/i.test(s.color||'')?s.color:colors[i%colors.length];const angle=i/Math.max(1,data.species.length)*Math.PI*2;basePositions[s.id]=[Math.cos(angle)*40,(i%3-1)*12,Math.sin(angle)*40];}palette.unknown='#b5bdc4';}
 export function positionFor(id,spacing=1){return basePositions[id]?.map(x=>x*spacing)||null;}
@@ -37,9 +40,12 @@ export function validateView(s,data){
  if(s.context.returnTo!==undefined&&s.context.returnTo!=='network')throw Error('Invalid source-frame return.');
  if(s.networkDisplay&&(!['all','across','direct'].includes(s.networkDisplay.scope)||['candidates','bodies','unlinked'].some(k=>typeof s.networkDisplay[k]!=='boolean')))throw Error('Invalid network options.');
  if(s.networkDisplay?.subtractive){const v=s.networkDisplay.subtractive;if(!data.map.subtractive||!['forms','shortlist','catalogue'].includes(v.cohort)||!['all',...data.map.subtractive.species.map(s=>s.id)].includes(v.organism)||!['all',...data.map.subtractive.groups.map(g=>g.id)].includes(v.group)||typeof v.query!=='string'||v.query.length>2000||!Number.isInteger(v.page)||v.page<0||v.page>1000||typeof v.sourceContext!=='boolean'||typeof v.referenceLinks!=='boolean'||v.reviewHighlights!==undefined&&typeof v.reviewHighlights!=='boolean')throw Error('Invalid saved subtractive filters.');}
+ if(s.networkDisplay?.pairFocus){validatePairFocus(data.map,s.networkDisplay.pairFocus);if(s.context.kind!=='network'||s.preset!=='microbes')throw Error('Large-pair display requires the network frame.');const v=s.networkDisplay.subtractive;if(data.map.subtractive&&(!v||v.cohort!=='forms'||v.organism!=='all'||!v.sourceContext))throw Error('Large-pair display requires the complete source context.');}
+ if(s.networkDisplay?.navigationProtein!==undefined){if(s.networkDisplay.pairFocus||!['network','protein'].includes(s.context.kind)||s.context.kind==='protein'&&s.context.id!==s.networkDisplay.navigationProtein)throw Error('Saved selection conflicts with the visible frame.');validateNavigationProtein(data.map,s.networkDisplay.subtractive||{},s.networkDisplay.navigationProtein);}
+ if(s.networkDisplay?.overviewCamera){const c=s.networkDisplay.overviewCamera;if(!finite(c.position)||!finite(c.target)||Math.hypot(...c.position.map((v,i)=>v-c.target[i]))<.2)throw Error('Invalid overview camera.');}
  if(s.networkDisplay?.layout!==undefined&&!['cluster','layers','orbit'].includes(s.networkDisplay.layout))throw Error('Unknown microbial neighborhood layout.');
- if(s.networkDisplay?.foldSize!==undefined&&(!Number.isFinite(s.networkDisplay.foldSize)||s.networkDisplay.foldSize<1||s.networkDisplay.foldSize>2.4))throw Error('Invalid fold display size.');
+ if(s.networkDisplay?.foldSize!==undefined&&(!Number.isFinite(s.networkDisplay.foldSize)||s.networkDisplay.foldSize<displayLimits.foldMin||s.networkDisplay.foldSize>displayLimits.foldMax))throw Error('Invalid fold display size.');
  if(s.proteinDisplay&&(!['path','amino','chain'].includes(s.proteinDisplay.colors)||typeof s.proteinDisplay.forms!=='boolean'||typeof s.proteinDisplay.beads!=='boolean'))throw Error('Invalid protein display options.');
  if(!finite(s.camera?.position)||!finite(s.camera?.target)||Math.hypot(...s.camera.position.map((v,i)=>v-s.camera.target[i]))<.2)throw Error('Invalid camera.');
- if(!Number.isFinite(s.spacing)||s.spacing<.7||s.spacing>1.8||!Number.isFinite(s.explode)||s.explode<0||s.explode>1||!['high','balanced'].includes(s.quality)||typeof s.grid!=='boolean'||typeof s.labels!=='boolean'||typeof s.cutaway!=='boolean')throw Error('Invalid view options.');return s;
+ if(!Number.isFinite(s.spacing)||s.spacing<displayLimits.spacingMin||s.spacing>displayLimits.spacingMax||!Number.isFinite(s.explode)||s.explode<0||s.explode>1||!['high','balanced'].includes(s.quality)||typeof s.grid!=='boolean'||typeof s.labels!=='boolean'||typeof s.cutaway!=='boolean')throw Error('Invalid view options.');return s;
 }

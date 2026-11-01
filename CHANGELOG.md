@@ -14,6 +14,15 @@ results for the same manifest is always called out.
 
 ## [Unreleased]
 
+### Added
+
+- Optional spatial viewer exploration with larger retained folds, clearance-aware
+  layouts and an independent whole-source overview. Literal source-pair focus,
+  supported-residue labels and evidence inspection preserve identity and mapping
+  holds. Current-protein navigation, readable drawers and backward-compatible
+  saved selection keep the existing local evidence trace. No input payload, new
+  dependency, numerical-engine change or new scientific execution is included.
+
 ### Fixed
 
 - Serialize named additive production and consumption rates as mappings so ecosystem manifests reopen with both empty defaults and nonempty rates. Numerical rates are unchanged.

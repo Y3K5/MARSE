@@ -1,11 +1,15 @@
 // Navigation over the validated retained packet. Never creates an interaction edge.
 const caches=new WeakMap();
 const namedPairLevels=new Set(['direct assay','direct biochemical']);
+// Evidence classification only; this does not assign a retained reference, strain or contact site.
+export function isSupportedProteinPair(data,record){
+ return namedPairLevels.has(record.level)&&[record.a,record.b].every(id=>data.proteins.some(p=>p.id===id));
+}
 const tokens=s=>String(s||'').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 function classify(data,r,other){
  if(data.contexts.some(p=>p.id===other.id))return 'unresolved_partner';
  if(r.level==='candidate / unresolved identity')return 'candidate';
- return namedPairLevels.has(r.level)?'supported_pair':'source_context';
+ return isSupportedProteinPair(data,r)?'supported_pair':'source_context';
 }
 export function reviewAudit(data){
  if(caches.has(data))return caches.get(data);

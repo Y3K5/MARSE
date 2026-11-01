@@ -23,6 +23,48 @@ Runtime evidence goes only in ignored `runtime/`. Neither the build payloads, pr
 
 A fresh clone needs the parent studio's exact, separately held runtime libraries and a local retained build; there is no approved public asset/data bundle. With no valid import the viewer fails closed and shows an import message.
 
+## See and switch the current protein
+
+Now viewing keeps the current protein or source-pair name, reference, coordinate status and position in the visible list above the canvas. Choose Protein group and Protein, or use Previous/Next. Next starts at the first visible record when the group overview is open; navigation stops at the ends. Group overview returns to the field. Protein browser (Browse on phones) opens search, the full list and advanced filters. Coordinate-held records stay labelled and cannot open a substituted fold.
+
+Inspect residues opens the existing single-protein lens. Switching to another retained fold updates that lens; switching to a coordinate hold closes the previous fold. Published source pairs have their own selector and Previous/Next controls, preserving literal endpoints and source material limits. A source endpoint is never labelled as a retained-group member through a reference connector.
+
+Details and evidence (Evidence on phones) opens a readable drawer below the pinned navigation/network section. Browser and evidence drawers keep the current name and three-microbe overview visible; close them with their button or Escape. Narrow windows collapse the group/protein selectors under Switch protein or group while keeping current identity and step controls visible. Search retains the existing scope: review searches stay within the queue; forms searches can include coordinate-held catalogue records in the selected reference.
+
+Saved views retain an explicitly visible selected protein with the existing camera/source pins; changed filters, unknown identities and conflicting frames are refused. Old saves without a current-protein field remain valid. Viewing/navigation never adopts a scientific target, changes evidence or launches analysis.
+
+## Spacious exploration
+
+The review queue opens as a separate protein field with larger retained folds and clearance between display envelopes. Volume, layers and orbits keep true XYZ variation; Protein spacing changes the gap while Fold size changes the displayed form. These are display transforms, never measured molecular distances. A gap marker never receives a substitute fold. Main names appear on hover or selection to leave the folds visible. Click a fold to focus it; Fit protein field restores the whole current field. Full names and exact references stay in the list/inspector.
+
+The independent source-network overview stays above the field and close-up and remains pinned while the workspace scrolls, showing every organism and the literal source atlas with the candidate layer off. Drag/zoom that overview separately or use Fit overview; its glyphs summarize the graph. Explore source relations adds the original source endpoints to the main field for the existing evidence/region inspector. Choosing a retained-form shortcut returns to the larger protein field. No proximity or organism shortcut asserts a protein correspondence or interaction.
+
+Organism shortcuts use imported metadata and the already retained forms. Folds, coordinate holds, source strains, ranks and original reference qualifications keep their own status. All references combines the existing form entries; it does not select new targets or create a reviewed cohort. High detail and residue beads are available for small fields; larger groups start balanced. `?view=review`, `?view=forms:<reference-id>` and `?view=all` can reopen known views; the existing `?review=queue` link still opens the queue.
+
+Fold sizes span1–4.5 and spacing0.7–3. Saved views retain both the main and optional overview camera; old saves without an overview camera remain valid. A manual overview camera is preserved across layout resizing; Fit overview restores the full atlas. Historical immutable producer views keep their original renderer and layout; camera replay across different renderer versions is not independently qualified.
+
+## All microbes together
+
+Choose **All microbes + evidence** or open `?view=together&layout=layers`. Combined fields pack by actual display extents, and a thicker schematic backbone stroke keeps folds readable at wide zoom without altering the centerline coordinates. Every existing retained form/reference hold appears with the literal published-source endpoints in one spacious field. The full review queue keeps its highlights, including its missing-coordinate markers even when a forms-only filter would normally omit them. Bright source-pair links and endpoint rings identify named-protein direct assay/biochemical evidence across organisms; the evidence buttons focus each original pair and open its source inspector. Other cross-microbe records stay faint with their own context class. Candidate records stay off. The pinned independent overview keeps the full source atlas visible even during close-ups.
+
+Source folds are separate entries from the retained results. Dashed blue reference connectors remain identity/navigation only. A source strain, construct or interaction is never transferred by species, label, shared fold or display proximity; source strains/material appear in the inspector. Existing tested constructs/reactive bonds keep their own gates. A source pair does not become a solved contact site, native docking pose or a confirmed link to a review protein. No evidence, input coordinates or historical build is rewritten by this shortcut.
+
+## Large pairs and supported locations
+
+The supported source-pair buttons open both literal folds as a large side-by-side display, with the whole three-microbe source network pinned above and a separate site lens beside them. Pair size changes their display magnification; it never docks or aligns them. Every retained residue remains source-bound. Source strains/material still apply, and unavailable folds remain markers. All microbial folds returns to the complete combined field.
+
+The lens starts at the first qualified region on one endpoint. Choose Endpoint and Supported region, then Zoom supported location or zoom with the wheel/buttons. Gold highlights the supported source residues against faded retained context. An assayed construct is not a minimal contact site; a reactive bond is not a solved protein-pair interface. Unsupported partner sites stay unresolved with site zoom disabled. Optional layers remain separately controlled and off by default. The site, pair and whole-network cameras move independently. Narrow windows stack the large pair and site panels; Supported-site close-up jumps to the lens while the network overview stays pinned.
+
+Add `&pair=<literal-record-id>` to a combined-view link to open a known supported pair directly. Unknown, candidate, context-only or non-protein pairs are refused. Save view retains the pair choice/magnification and existing main/overview cameras. Reopen restores those and opens the pair lens at its first qualified region; the independent site camera/selection is not part of the camera save contract. Old views remain valid. No original study, packet or producer build changes.
+
+## Select highlighted amino acids
+
+The site lens labels small qualified sites directly. Select a gold bead or its label to see the amino-acid name, distinct paper/construct number, canonical-reference number and structure-author chain/number/insertion code. Selection reveals the compact numbering/source summary. The selected residue card shows the evidence category, original source locator/method/material, source limitations and exact retained Workbench revision. Evidence and numbering jumps to that card without changing the pair or overview camera. Focus this residue zooms the independent site camera.
+
+Large constructs use a few collision-managed labels and retain every highlighted residue in the searchable, paged Highlighted amino acids list. Search a name or a paper/canonical/author number, then select a row. The selected label remains available. Lines connect labels to the actual qualified C-alpha positions; labels and list entries never add coordinates. Context residues outside the current annotation receive source identity only and no site-evidence assignment. Changing endpoint/region clears the previous selection.
+
+A residue inside a tested construct has construct-membership evidence, not an individually measured binding role. Reactive bonds, secondary cleavages, conditional reference projections and predictions retain their own labels and claim limits. Unsupported counterparts have no site labels or residue evidence. Source links open only when explicitly selected; labels do not fetch external sources or upload data.
+
 ## Explore
 
 Choose clusters, layers or orbits. Search and filter retained results; queue searches remain within the queue. Gold halos show review membership, amber a label-only source navigation hold and teal a mapped source-supported pair. Source strain/material and scientific limits remain separate from that reference match. A similar label never creates a correspondence or interaction edge. Candidate records and optional reference/prediction/secondary-cut layers are off by default.
@@ -38,7 +80,7 @@ The fixture generator creates synthetic software data, never a biological exampl
 ```sh
 python3 tools/organism-studio/spatial-lattice/fixture_relations.py <new-test-build-folder>
 python3 tools/organism-studio/spatial-lattice/setup_relations.py --from <new-test-build-folder> --output <new-test-runtime-folder>
-MARSE_RELATIONS_FIXTURE=<new-test-runtime-folder> node --test tools/organism-studio/spatial-lattice/relations.test.mjs
+MARSE_RELATIONS_FIXTURE=<new-test-runtime-folder> node --test tools/organism-studio/spatial-lattice/relations.test.mjs tools/organism-studio/spatial-lattice/exploration.test.mjs tools/organism-studio/spatial-lattice/pair.test.mjs tools/organism-studio/spatial-lattice/site-residue.test.mjs tools/organism-studio/spatial-lattice/navigation.test.mjs
 PYTHONPATH=tools/organism-studio/spatial-lattice python -m pytest tools/organism-studio/spatial-lattice/test_setup_relations.py
 ```
 
@@ -46,6 +88,8 @@ The Python suite covers checksums, paths/symlinks, source/model/trace drift, JSO
 
 ## Ownership and limits
 
-`app.js` owns navigation; `model.js` and `network-model.js` own input/display contracts and schematic layouts; `review-model.js` and `subtractive-model.js` own review navigation/filtering. `residue-model.js`, `fold-geometry.js`, `interaction-model.js`, `interaction-geometry.js` and `interaction-lens.js` reuse retained coordinate/region presentation. `runtime-loader.js` checks/caches the imported producer payloads in the browser. `setup_relations.py` owns local transport checks, not publication or scientific reanalysis.
+`app.js` owns navigation and drawer state; `navigation-model.js` supplies visible-list identities, source-pair choices, bounded step navigation and saved-selection scope checks; `model.js` and `network-model.js` own input/display contracts and schematic layouts; `review-model.js` and `subtractive-model.js` own review navigation/filtering. `residue-model.js`, `fold-geometry.js`, `interaction-model.js`, `interaction-geometry.js` and `interaction-lens.js` reuse retained coordinate/region presentation. `runtime-loader.js` checks/caches the imported producer payloads in the browser. `setup_relations.py` owns local transport checks, not publication or scientific reanalysis.
 
 The layout does not establish native placement, abundance, docking geometry, binding strength, folding dynamics, target suitability or clinical effect. A source label is not an identity match; no displayed connection means unresolved coverage, not biological absence. Existing numerical engines and the separate private research viewer are unchanged. Saved files pin the input snapshot; cross-renderer camera replay is not independently qualified.
+
+The whole-source overview retains unassigned source/context markers in a neutral color; these do not create an additional organism label or a molecular identity.
