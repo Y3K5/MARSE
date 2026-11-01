@@ -1,3 +1,10 @@
+## Local unreleased — reusable protein-relations viewer
+
+Added an optional metadata-driven source-fold network, independent interaction
+inspection, review highlights and strict local JSON import from retained build
+manifests. Includes synthetic positive/refusal tests. No private input payload,
+new dependency, numerical-engine change or scientific execution is included.
+
 # Changelog
 
 All notable changes to MARSE are recorded here. The format follows
@@ -6,6 +13,12 @@ All notable changes to MARSE are recorded here. The format follows
 results for the same manifest is always called out.
 
 ## [Unreleased]
+
+### Fixed
+
+- Serialize named additive production and consumption rates as mappings so ecosystem manifests reopen with both empty defaults and nonempty rates. Numerical rates are unchanged.
+
+- Align organism studio Python helpers and fixture assertions with CI lint rules; normalize JSON final newlines. Runtime assets remain local-only.
 
 ### Changed
 

@@ -1,0 +1,5 @@
+# Local runtime assets; source bytes and notices remain intact.
+/vendor/
+/structures/
+/integration/
+/community.json

@@ -1,0 +1,9 @@
+export const aminoAcids={ALA:['A','Alanine','#b7c6ce'],ARG:['R','Arginine','#4d8ee8'],ASN:['N','Asparagine','#73d5df'],ASP:['D','Aspartate','#ef6b65'],CYS:['C','Cysteine','#e4cf65'],GLN:['Q','Glutamine','#74c6c7'],GLU:['E','Glutamate','#dc816d'],GLY:['G','Glycine','#eef0e7'],HIS:['H','Histidine','#aaa1e5'],ILE:['I','Isoleucine','#70bf83'],LEU:['L','Leucine','#9ac777'],LYS:['K','Lysine','#6bade6'],MET:['M','Methionine','#c9b856'],PHE:['F','Phenylalanine','#a493ce'],PRO:['P','Proline','#d5a488'],SER:['S','Serine','#edb572'],THR:['T','Threonine','#dfc48a'],TRP:['W','Tryptophan','#bc91c4'],TYR:['Y','Tyrosine','#af83a8'],VAL:['V','Valine','#74b5a1']};
+export function residueInfo(name){const [letter,fullName,color]=aminoAcids[name]||['X','Recorded nonstandard residue','#a2aab1'];return {name,letter,fullName,color};}
+export function residueRows(shape,entry){
+ if(!entry||entry.source_view_sha256!==shape.source_view_sha256||entry.chains.length!==shape.chains.length)throw Error('Residue source identity mismatch.');
+ const rows=[];shape.chains.forEach((chain,ci)=>{const names=entry.chains[ci];if(names.chain!==chain.chain||names.residues.length!==chain.ca.length)throw Error('Residue chain/length mismatch.');chain.ca.forEach((point,i)=>{const [number,name,insertion]=names.residues[i];if(number!==point[0]||!Array.isArray(point)||point.slice(1).some(v=>!Number.isFinite(v)))throw Error('Residue coordinate join mismatch.');rows.push({index:rows.length,chain:chain.chain,chainIndex:ci,ordinal:i,chainLength:chain.ca.length,number,insertion,point,...residueInfo(name)});});});return rows;
+}
+export function validateResidues(map,ledger){
+ if(ledger.schema!=='marse-source-residues-v1'||Object.keys(ledger.entries).length!==Object.keys(map.shape_traces).length)throw Error('Unsupported residue ledger.');let total=0;for(const [id,shape]of Object.entries(map.shape_traces))total+=residueRows(shape,ledger.entries[id]).length;return total;
+}

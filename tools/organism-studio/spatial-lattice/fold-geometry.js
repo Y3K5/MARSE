@@ -1,0 +1,13 @@
+import * as T from 'three';
+import {traceFrame} from './model.js';
+import {residueRows} from './residue-model.js';
+const chainColors=['#b2d5ea','#dfb2c7','#c1d7aa','#e2be83','#b7b0e2','#89d2c3'];
+function colorFor(r,mode){return mode==='amino'?new T.Color(r.color):mode==='chain'?new T.Color(chainColors[r.chainIndex%chainColors.length]):new T.Color().setHSL(.67*(1-r.ordinal/Math.max(1,r.chainLength-1)),.88,.48,T.SRGBColorSpace);}
+export function makeFold(shape,entry,{displayRadius=3,actual=false,colorMode='path',beads=true,quality='high',overview=false}={}){
+ const root=new T.Group(),frame=traceFrame(shape),rows=residueRows(shape,entry),scale=actual?1:displayRadius/frame.radius,byPoint=new Map(rows.map(r=>[r.point,r])),radius=actual?.48:overview?Math.max(.065,Math.min(.16,.48*scale)):.095;
+ for(const segment of frame.segments){const members=segment.rows.map(p=>byPoint.get(p)),points=members.map(r=>new T.Vector3(...[1,2,3].map((j)=>(r.point[j]-frame.center[j-1])*scale))),curve=new T.CatmullRomCurve3(points,false,'centripetal'),geometry=new T.TubeGeometry(curve,Math.min(6000,Math.max(8,points.length*(quality==='high'?(overview?4:3):1))),radius,quality==='high'?(overview?12:10):6,false),uv=geometry.getAttribute('uv'),colors=new Float32Array(uv.count*3);
+  for(let i=0;i<uv.count;i++){const u=uv.getX(i)*(members.length-1),a=Math.floor(u),b=Math.min(members.length-1,a+1),color=colorFor(members[a],colorMode).lerp(colorFor(members[b],colorMode),u-a);color.toArray(colors,i*3);}geometry.setAttribute('color',new T.BufferAttribute(colors,3));const mesh=new T.Mesh(geometry,new T.MeshStandardMaterial({vertexColors:true,roughness:.32,metalness:.08,emissive:overview?'#192d36':'#000000',emissiveIntensity:overview?.28:0}));mesh.userData.sourceBackbone=true;root.add(mesh);
+ }
+ if((actual||overview)&&beads){const mesh=new T.InstancedMesh(new T.SphereGeometry(actual?.77:Math.max(.075,Math.min(.22,.77*scale)),actual?14:quality==='high'?10:6,actual?10:quality==='high'?8:4),new T.MeshStandardMaterial({roughness:.36,metalness:.07}),rows.length),o=new T.Object3D();for(const r of rows){o.position.set(...[1,2,3].map(j=>(r.point[j]-frame.center[j-1])*scale));o.updateMatrix();mesh.setMatrixAt(r.index,o.matrix);mesh.setColorAt(r.index,colorFor(r,colorMode));}mesh.userData.residueInstances=true;mesh.userData.overviewResidues=overview;root.add(mesh);}
+ Object.assign(root.userData,{coordinateCount:rows.length,sourceCenter:frame.center,uniformDisplayScale:scale,residues:rows,sourceShapeId:shape.id,colorMode,overviewDetail:overview});return root;
+}

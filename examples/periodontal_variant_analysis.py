@@ -67,6 +67,22 @@ def _variant(
             nutrient["initial"] *= moisture_factor
             if nutrient.get("boundary_value") is not None:
                 nutrient["boundary_value"] *= moisture_factor
+    if resource_perturbation.endswith("_ablation"):
+        target = resource_perturbation.removesuffix("_ablation")
+        for additive in config.get("additives", []):
+            if additive["name"] == target:
+                additive["initial"] = 0.0
+        for species in config["species"]:
+            species["production_per_additive"] = {
+                name: rate
+                for name, rate in species.get("production_per_additive", {}).items()
+                if name != target
+            }
+            species["consumption_per_additive"] = {
+                name: rate
+                for name, rate in species.get("consumption_per_additive", {}).items()
+                if name != target
+            }
         if nutrient["name"] == resource_perturbation:
             nutrient["initial"] *= 0.5
             if nutrient.get("boundary_value") is not None:

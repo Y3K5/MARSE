@@ -65,6 +65,16 @@ include = [
   "/CITATION.cff",
 ]
 
+# Runtime inputs are never part of a source distribution, even when installed locally.
+exclude = [
+  "/tools/organism-studio/vendor/**",
+  "/tools/organism-studio/structures/**",
+  "/tools/organism-studio/integration/**",
+  "/tools/organism-studio/community.json",
+  "/tools/organism-studio/spatial-lattice/runtime/**",
+  "/tools/organism-studio/spatial-lattice/.relations-import-*/**",
+]
+
 [tool.pytest.ini_options]
 minversion = "9.0"
 # Long sweeps are deselected here and run nightly (.github/workflows/nightly.yml).

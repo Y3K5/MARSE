@@ -29,6 +29,10 @@
     {"name": "temperature_c", "initial": 37.0, "diffusivity": 0.0},
     {"name": "moisture", "initial": 1.0, "diffusivity": 0.0}
   ],
+  "additives": [
+    {"name": "succinate", "initial": 0.0, "diffusivity": 2.0, "decay_per_h": 0.08},
+    {"name": "acetate", "initial": 0.0, "diffusivity": 2.5, "decay_per_h": 0.1}
+  ],
   "species": [
     {
       "name": "T. denticola",
@@ -37,6 +41,8 @@
       "half_saturation": [0.08, 0.18, 0.5, 0.35],
       "yield_per_nutrient": [1.0, 1.0, 1.0, 1.0],
       "production_per_nutrient": [0.0, 0.0, 0.04, 0.02],
+      "production_per_additive": {"succinate": 0.015},
+      "consumption_per_additive": {"acetate": 0.01},
       "mutation_probability": 0.002,
       "mutation_growth_multiplier": 1.08,
       "spreading_per_h": 1.3,
@@ -64,6 +70,8 @@
       "half_saturation": [0.06, 0.15, 0.45, 0.4],
       "yield_per_nutrient": [1.0, 1.0, 1.0, 1.0],
       "production_per_nutrient": [0.0, 0.03, 0.0, 0.03],
+      "production_per_additive": {"acetate": 0.012},
+      "consumption_per_additive": {"succinate": 0.008},
       "mutation_probability": 0.002,
       "mutation_growth_multiplier": 1.08,
       "spreading_per_h": 1.1,
@@ -90,6 +98,8 @@
       "maximum_growth_per_h": 0.45,
       "half_saturation": [0.12, 0.12, 0.4, 0.3],
       "yield_per_nutrient": [1.0, 1.0, 1.0, 1.0],
+      "production_per_additive": {"acetate": 0.01},
+      "consumption_per_additive": {"succinate": 0.012},
       "mutation_probability": 0.002,
       "mutation_growth_multiplier": 1.08,
       "spreading_per_h": 1.2,

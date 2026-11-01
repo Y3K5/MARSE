@@ -1,0 +1,30 @@
+{
+  "scope": "code-only; local runtime assets excluded",
+  "files": {
+    ".gitignore": "c25f8ca5361c98e8ef3316fed54499b2831de7a99c126356a29d4b2d03f6cc41",
+    "00_CHANGELOG.md": "49fdc9cb3b5393a6eace3617191fd1ae49071051779b5fe14a428b6aef355af3",
+    "00_START_HERE.md": "aeb1de635a07fe9676385772b38837ea13e2c4c6efcbb846b678bbda8303b0df",
+    "ASSET_MANIFEST.json": "0c2b343abdd30ddcbc0c0abfa79fec12073717b8d0343c1dd2b35964dccc2d72",
+    "PUBLICATION_REVIEW.md": "c2d057b5b7b44ce3bd072aa717b7b438c365ad572f6a4b6a9ffdc841ff566026",
+    "THIRD_PARTY.md": "258766e7deab9ae48a8d00400f01b24fe6e5da60cc66013ab7071b73bd6398a9",
+    "app.js": "0eb7fca6acad4d51ea49b1128ee8530d5b8aceee8a40f5a4747a4b4fc5a5515c",
+    "atlas-data.js": "511a489b54ec7b8146a7bdebe857b279c5fd1f3691767e2fff2b4be85c238f61",
+    "catalog.js": "c35d0fe0f852ffaa0676dbc7a49cf0ed4c20e8b068dd72f187ddec48553c6608",
+    "catalog.test.mjs": "ff5196bf52fa9bb041f72d13c42e516449a7f0934795f7949165c39bbe8a5ce0",
+    "check-continuous.mjs": "b23071ac94d05f3a3befae7344508b43d7ddfec9dcd8365eba4ae3c9569f0f4e",
+    "flow-dive.js": "b6cfd1e376d243a69e4c0b3505584aefb43e470aef303d1bf25259f0c10eba58",
+    "lattice.js": "a4ac6f18013394b2fc85fb68764d7f32ecb2e1f08db6faf423b1c67cc8082957",
+    "molecular.js": "2fe908f53f8cfb2d0bd07234d342dc573a88ab2a83b15b5c716a72ef34f11477",
+    "organism-geometry.js": "8c2623356cc197ebf5e858012f7879ddc501401a2eeffb5cd19c2dd145b97a89",
+    "serve.py": "bd28bd41eca26d08058d6f9929ff5202b4adfe4aa8c40f6f299feeb758c6c4c7",
+    "setup_assets.py": "59814ed91e971b1b53e5eae49e62adf99ad9a6a95a10c6a06082fe06dbf83cb0",
+    "source-protein.js": "41f66bea4b950dff54756314ed7343af654a4885f635468eb712613199c48de0",
+    "sources.json": "9c6f61c817cb5e1ba2be759c80d49f5cedf7fae78bd75724f5b435e21c468d61",
+    "structure-manifest.json": "d252f635bc085c4f629a2fc0f58a11ac69e5f8eea3a4a412deeec8896c9f9119",
+    "style.css": "61edb91858102de64e6f8c796ce977566e9c67a33d489a41499f445f75e1b072",
+    "test_setup_assets.py": "cf9bcf7615e955791cdf0aa7459af6660e632c0eba3d1257f25d4be662b05624",
+    "unified.css": "7e13265a0491edc38b9c2d45ba68b9abc57113c34e025724c69def766b1ede4e",
+    "unified.html": "28e40577108d6ea4c3771a070f9cee80b8213c19363e83ab0dffeb503f1690b7",
+    "unified.js": "a12370cd263a10525e385ca19a7ea089af51c66b1fece1958a5909bd51bf34a3"
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "created": "2026-10-26",
+  "purpose": "Source record for three regenerated educational bacterial surface posters",
+  "method": "Built-in OpenAI image generation. New illustrations from public scientific descriptions; no protein coordinates, sequence-derived models, or source figures supplied to generator.",
+  "limitations": [
+    "Not to scale. Protein silhouettes, density, spacing, orientation and colors are illustrative.",
+    "Composite species overviews, not one reconstructed strain.",
+    "Surface-localized does not establish residue-level accessibility; uncertainty is retained.",
+    "Not exhaustive OMP inventories; images do not constitute MemOrient output or MARSE simulation."
+  ],
+  "bacteria": [
+    {
+      "name": "Treponema denticola",
+      "sources": [
+        {
+          "id": "TD1",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2519799/",
+          "depiction": "Long spirochete with periplasmic flagella beneath outer sheath; double membrane with intervening peptidoglycan.",
+          "evidence": "Cryo-electron tomography; filament count not fixed in illustration."
+        },
+        {
+          "id": "TD2",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3232657/",
+          "depiction": "Msp has surface-exposed regions; dentilisin includes PrtP, PrcA1, PrcA2, PrcB. PrtP, PrcA1 and PrcB surface accessible in studied cells; PrcA2 less accessible on intact wild type.",
+          "evidence": "Localization assays; no exact spatial arrangement inferred."
+        },
+        {
+          "id": "TD3",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5643300/",
+          "depiction": "Msp represented in outer-membrane and periplasmic pools, not exclusively external.",
+          "evidence": "Distinct conformers and complexes."
+        },
+        {
+          "id": "TD4",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3339992/",
+          "depiction": "FhbB as a small factor-H-binding surface lipoprotein.",
+          "evidence": "Protein structure and function; generated silhouette does not reproduce atomic coordinates."
+        },
+        {
+          "id": "TD5",
+          "url": "https://journals.asm.org/doi/10.1128/iai.68.4.1884-1892.2000",
+          "depiction": "OppA as a reported surface-associated host-protein-binding homolog; not a transmembrane pore.",
+          "evidence": "Immunogold surface localization and binding assays; exact anchoring geometry unspecified."
+        },
+        {
+          "id": "TD6",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/9624160/",
+          "depiction": "Unusual outer-sheath lipids; no conventional LPS brush.",
+          "evidence": "Biochemical lipid study; exact lipid mixture not reconstructed."
+        }
+      ]
+    },
+    {
+      "name": "Porphyromonas gingivalis",
+      "sources": [
+        {
+          "id": "PG1",
+          "url": "https://www.nature.com/articles/s41564-020-0705-1",
+          "depiction": "FimA major fimbriae as polymers, not single globular spikes.",
+          "evidence": "Experimental polymerized pilin structure; generated beads are symbols."
+        },
+        {
+          "id": "PG2",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/15972485/",
+          "depiction": "Mfa1 minor fimbriae as shorter attachment fibers.",
+          "evidence": "Electron microscopy and coadhesion experiments; no precise scale inferred."
+        },
+        {
+          "id": "PG3",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8512630/",
+          "depiction": "FimB and Mfa2 basal components; FimCDE and Mfa3/4/5 accessory components.",
+          "evidence": "Review synthesis; component placement simplified, not an exact assembled model."
+        },
+        {
+          "id": "PG4",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/21098107/",
+          "depiction": "Surface gingipains RgpA/RgpB/Kgp with protein-cleaving functions.",
+          "evidence": "Cell-surface interaction experiments; exact tether structures not depicted."
+        },
+        {
+          "id": "PG5",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7610489/",
+          "depiction": "RagA membrane-spanning barrel with external RagB lipoprotein lid; peptide acquisition.",
+          "evidence": "Experimental RagAB structural/function study; architecture-supported schematic rather than coordinate rendering."
+        },
+        {
+          "id": "PG6",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2577367/",
+          "depiction": "HmuR as outer-membrane heme receptor and HmuY as external heme-binding lipoprotein.",
+          "evidence": "Heme-utilization study; spatial coupling shown conceptually."
+        },
+        {
+          "id": "PG7",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC545718/",
+          "depiction": "Pgm6/Pgm7 as OmpA-like outer-membrane complex with periplasmic portions.",
+          "evidence": "Biochemical heterotrimer and mutant study; precise domain arrangement is schematic."
+        },
+        {
+          "id": "PG8",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10929438/",
+          "depiction": "Outer and inner membranes, peptidoglycan, variable fimbriae/capsule surface states.",
+          "evidence": "Cryo-ET-containing primary study; capsule shown only in optional inset."
+        }
+      ]
+    },
+    {
+      "name": "Tannerella forsythia",
+      "sources": [
+        {
+          "id": "TF1",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3354324/",
+          "depiction": "Repeating TfsA/TfsB glycoprotein S-layer outside outer membrane.",
+          "evidence": "TEM/AFM ultrastructure; individual colored units do not reproduce resolved molecular packing."
+        },
+        {
+          "id": "TF2",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/15612944/",
+          "depiction": "BspA as surface-associated adhesin involved in bacterial interactions.",
+          "evidence": "Coaggregation/biofilm study; protrusion relative to S-layer is unknown."
+        },
+        {
+          "id": "TF3",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3019913/",
+          "depiction": "NanH as surface-associated and secreted sialidase.",
+          "evidence": "Localization/function study; exact membrane anchor not asserted."
+        },
+        {
+          "id": "TF4",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2863479/",
+          "depiction": "NanO/NanU as proposed outer-membrane sialic-acid acquisition system; NanO barrel topology and coupling shown as model.",
+          "evidence": "Genetic/function-supported system; not an experimentally solved intact complex."
+        },
+        {
+          "id": "TF5",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/24351045/",
+          "depiction": "NanU as sialic-acid-binding protein associated with NanOU system.",
+          "evidence": "Structural/biochemical characterization; do not transfer an exact homolog structure without sequence matching."
+        },
+        {
+          "id": "TF6",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4604654/",
+          "depiction": "OMVs carrying selected surface components; additional uncharacterized OM-associated proteins acknowledged without invented protein identities.",
+          "evidence": "Vesicle/proteomics study; protein abundance in fractions does not prove intact-cell accessibility."
+        }
+      ]
+    }
+  ]
+}
