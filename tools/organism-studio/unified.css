@@ -15,3 +15,5 @@
 #library-expand{display:none}@media(max-width:700px){#library-selection{grid-template-columns:minmax(0,1fr) 90px}#library #organism{grid-column:1;grid-row:1}#library-expand{display:block;grid-column:2;grid-row:1;padding:5px;font-size:11px;min-height:36px}#library.selection-open #library-search{display:block}#library.selection-open #taxa{display:flex}}
 
 .capability-link{color:#dbe7e7;border:1px solid #50656b;border-radius:6px;padding:7px 11px;text-decoration:none;font-size:13px}
+/* Optional private extensions (extensions.js) */
+.workspace-nav{display:flex;gap:14px;margin:0}.workspace-nav a{font-size:11px;color:var(--ink,#d5e6df)}.structural-handoff{padding-top:12px;border-top:1px solid var(--line);margin-top:12px}.structural-handoff a{font-size:11px}.structural-handoff p{font-size:10px;color:var(--muted)}@media(max-width:700px){.workspace-nav{gap:10px}.workspace-nav a{font-size:10px}.structural-handoff{display:block;margin-top:6px;padding-top:6px}.structural-handoff p{display:none}}
