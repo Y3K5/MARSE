@@ -16,6 +16,13 @@ results for the same manifest is always called out.
 
 ### Added
 
+- Optional local atom/bond inspection beside the protein neighborhood and whole
+  source network. Exact retained atom/backbone joins, typed component/polymer/source
+  connections, molecular context and source-qualified residue handoff keep missing
+  atoms and unsupported sites explicit. Includes strict local import, refusal and
+  geometry/disposal checks. Private coordinates/configuration stay excluded; core
+  dependencies and scientific engines are unchanged.
+
 - Selected-protein neighborhoods with separate exact-reference source context,
   literal supported partners, qualified site inspection and an independent whole
   source overview. Includes responsive controls, strict optional saved state and

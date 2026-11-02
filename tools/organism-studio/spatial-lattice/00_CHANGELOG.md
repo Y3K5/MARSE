@@ -1,5 +1,13 @@
 # Changes
 
+## Atomic viewer commit review
+
+Preserve the neighborhood camera when changing only the atom model; dispose replaced atom/link instance buffers; refuse blank/nonfinite atomic fields, misleading experimental entry prefixes and existing/dangling-symlink output destinations. Fresh import water context reflects the actual retained atoms. Invented fresh-import and repeated-selection geometry/disposal controls cover these fixes. Existing private atomic imports and original scientific inputs remain unchanged.
+
+## Optional atom and molecular context
+
+Added a separate, source-pinned atom/bond inspector using retained full-coordinate files. Chemical-component topology, sequence/geometry polymer links and source-declared covalent/disulfide/coordination/hydrogen records remain typed; no nearby atom becomes a bond automatically. Residue/chain/component/source context and interaction evidence remain distinct. Missing exact atomic imports stay held. No atom reconstruction, new native assembly, force field or scientific analysis.
+
 ## Neighborhood commit review
 
 Return-to-field now reuses a captured camera only when the neighborhood was opened from the molecular display field. Entering from a raw source-coordinate frame returns to a fitted field instead of replaying an incompatible coordinate-frame camera. A regression check preserves the existing field-camera return and refuses raw/designed frames.
@@ -39,3 +47,5 @@ The importer now retains the exact bytes that passed checksum validation instead
 ## Reusable protein-relations viewer
 
 Added a code-only, metadata-driven spatial protein network with three layouts, independent source-fold/region inspection, review highlights, literal source relationships, typed reference links and visible mapping holds. Imports only checksum-bound JSON from a retained local build. Supplied code, runtime evidence and third-party assets are excluded. Synthetic software controls exercise valid and refused inputs. No scientific analysis, prediction, docking, database, dependency or numerical-engine change.
+
+Atom checks pass: 4 reader/refusal groups, 7 parser/topology tests, 1 geometry/disposal group, existing 33 viewer groups and 13 import controls. Browser checks cover supported-residue handoff, bonded-neighbor navigation, deposited metal coordination, predicted-model labels, exact-model holds with stale-state clearing, independent camera zoom and phone placement below the pinned overview. Private atomic imports and source evidence remain separate from the reusable viewer code.
