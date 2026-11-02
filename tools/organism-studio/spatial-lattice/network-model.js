@@ -1,6 +1,7 @@
 import {resultLayout} from './subtractive-model.js';
+import {displayLimits} from './exploration-model.js';
 export const networkCenters={};
-export const neighborhoodViews={cluster:{name:'Clustered neighborhood',description:'Retained folds in spatial groups',centers:networkCenters,direction:[.18,.45,1.6],radius:110,focus:[0,0,0]},layers:{name:'Layered neighborhood',description:'Staggered source groups',centers:{},direction:[.25,.65,1.6],radius:110,focus:[0,0,0]},orbit:{name:'Orbital neighborhood',description:'Source groups on circular shelves',centers:{},direction:[.22,.68,1.6],radius:110,focus:[0,0,0]}};
+export const neighborhoodViews={cluster:{name:'Clustered neighborhood',description:'Retained folds in spatial groups',centers:networkCenters,direction:[.18,.45,1.6],radius:110,focus:[0,0,0]},layers:{name:'Layered neighborhood',description:'Staggered source groups',centers:{},direction:[.2,1.8,1.2],radius:110,focus:[0,0,0]},orbit:{name:'Orbital neighborhood',description:'Source groups on circular shelves',centers:{},direction:[.22,.68,1.6],radius:110,focus:[0,0,0]}};
 export function configureNetworkSpecies(data){const ids=[...data.species.map(s=>s.id)];if([...data.proteins,...data.contexts].some(p=>p.species==='unknown')&&!ids.includes('unknown'))ids.push('unknown');ids.forEach((id,i)=>{const a=i/Math.max(1,ids.length)*Math.PI*2;networkCenters[id]=[Math.cos(a)*45,(i%3-1)*14,Math.sin(a)*45];neighborhoodViews.layers.centers[id]=[(i%2?1:-1)*30,(i-(ids.length-1)/2)*34,Math.cos(a)*20];neighborhoodViews.orbit.centers[id]=[Math.cos(a)*52,(i%3-1)*13,Math.sin(a)*52];});}
 export function neighborhoodView(id='cluster'){const view=neighborhoodViews[id];if(!Object.hasOwn(neighborhoodViews,id)||!view)throw Error('Unknown microbial neighborhood layout.');return view;}
 export const networkStyles={
@@ -20,8 +21,8 @@ export function networkRecords(data,{scope='all',candidates=false}={}){
  return data.relationships.filter(r=>{const a=by.get(r.a),b=by.get(r.b),style=recordStyle(r);if(!a||!b)throw Error('Missing literal source endpoint.');if(!candidates&&style.key==='candidate')return false;if(scope==='across'&&a.species===b.species)return false;if(scope==='direct'&&!['direct assay','direct biochemical'].includes(r.level))return false;return true;});
 }
 export function networkLayout(data,spacing=1,mode='cluster',foldSize=1){
- const centers=neighborhoodView(mode).centers;if(!Number.isFinite(foldSize)||foldSize<1||foldSize>2.4)throw Error('Invalid fold display size.');const clearance=1+.45*(foldSize-1);
- if(!Number.isFinite(spacing)||spacing<.7||spacing>1.8)throw Error('Invalid network spacing.');const result={};
+ const centers=neighborhoodView(mode).centers;if(!Number.isFinite(foldSize)||foldSize<displayLimits.foldMin||foldSize>displayLimits.foldMax)throw Error('Invalid fold display size.');
+ if(!Number.isFinite(spacing)||spacing<displayLimits.spacingMin||spacing>displayLimits.spacingMax)throw Error('Invalid network spacing.');const result={};
  return resultLayout(data,spacing,mode,foldSize,centers);
 }
 

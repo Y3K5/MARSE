@@ -14,6 +14,28 @@ results for the same manifest is always called out.
 
 ## [Unreleased]
 
+### Added
+
+- Optional local atom/bond inspection beside the protein neighborhood and whole
+  source network. Exact retained atom/backbone joins, typed component/polymer/source
+  connections, molecular context and source-qualified residue handoff keep missing
+  atoms and unsupported sites explicit. Includes strict local import, refusal and
+  geometry/disposal checks. Private coordinates/configuration stay excluded; core
+  dependencies and scientific engines are unchanged.
+
+- Selected-protein neighborhoods with separate exact-reference source context,
+  literal supported partners, qualified site inspection and an independent whole
+  source overview. Includes responsive controls, strict optional saved state and
+  frame-safe return to the retained field. Runtime research and coordinates stay
+  local and excluded from distributions; no scientific analysis is launched.
+
+- Optional spatial viewer exploration with larger retained folds, clearance-aware
+  layouts and an independent whole-source overview. Literal source-pair focus,
+  supported-residue labels and evidence inspection preserve identity and mapping
+  holds. Current-protein navigation, readable drawers and backward-compatible
+  saved selection keep the existing local evidence trace. No input payload, new
+  dependency, numerical-engine change or new scientific execution is included.
+
 ### Fixed
 
 - Serialize named additive production and consumption rates as mappings so ecosystem manifests reopen with both empty defaults and nonempty rates. Numerical rates are unchanged.
