@@ -33,3 +33,21 @@ test('incomplete PDB numeric fields and nonfinite metadata are held instead of b
   const bad=first.slice(0,offset)+value.padStart(width)+first.slice(offset+width);assert.throws(()=>parseAtomicPdb(bad));
  }
 });
+
+test('private atomic successor activation is pinned and fails closed; legacy import stays readable',async()=>{
+ const f=fixture(),indexHash=hash(f.files['index.json']),pointer={schema:'marse-atomic-active-v1',directory:'atomic-coverage-v1',index_sha256:indexHash,source_snapshot_sha256:'snapshot',residue_ledger_sha256:'residues'};
+ function store(p=pointer){return new AtomicStore(data,ledger,'snapshot',async url=>{
+  if(url==='runtime/ATOMIC_ACTIVE.json')return new Response(JSON.stringify(p));
+  const name=url.replace('runtime/atomic-coverage-v1/','');return new Response(f.files[name]??'',{status:f.files[name]?200:404});
+ },'residues');}
+ assert.equal((await store().load('invented')).atoms.length,4);
+ for(const mutate of [p=>p.directory='../private',p=>p.directory='https://example.org',p=>p.directory='atomic/x',p=>p.index_sha256='0'.repeat(64),p=>p.source_snapshot_sha256='stale',p=>p.residue_ledger_sha256='stale',p=>p.schema='untrusted']){
+  const p=structuredClone(pointer);mutate(p);await assert.rejects(store(p).load('invented'));
+ }
+ await f.store.load('invented');assert.equal(f.store.root,'atomic');
+});
+
+test('explicit coordinate holds do not substitute a matching-looking model',async()=>{
+ const f=fixture(index=>{index.holds=[{protein_id:'missing',reason:'No retained matching full-coordinate structure'}];});
+ await assert.rejects(f.store.load('missing'),/No retained matching full-coordinate structure.*No related protein is substituted/);
+});

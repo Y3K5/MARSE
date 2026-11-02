@@ -1,12 +1,21 @@
 """Invented structures qualify transport/topology, never biological interactions."""
 
+import copy
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
 import pytest
-from setup_atomic import build, build_topology, checked, digest, parse_pdb, qualify_atoms
+from setup_atomic import (
+    build,
+    build_topology,
+    checked,
+    digest,
+    parse_pdb,
+    qualify_atoms,
+    qualify_pdb_prediction,
+)
 
 
 def column_doc(category, rows):
@@ -31,6 +40,172 @@ def atom(i, name, x, seq=1, residue=8):
 
 
 class AtomicChecks(unittest.TestCase):
+    def prediction_fixture(self):
+        def fixed(fields):
+            chars = [" "] * 80
+            for start, width, value in fields:
+                chars[start : start + width] = str(value).rjust(width)
+            return "".join(chars)
+
+        dbref = fixed(
+            [
+                (0, 6, "DBREF "),
+                (7, 4, "XXXX"),
+                (12, 1, "A"),
+                (14, 4, 1),
+                (20, 4, 2),
+                (26, 6, "UNP"),
+                (33, 8, "TEST1"),
+                (42, 12, "TEST1_TEST"),
+                (55, 5, 1),
+                (62, 5, 2),
+            ]
+        )
+        lines = [
+            "TITLE     ALPHAFOLD MONOMER V2.0 PREDICTION FOR INVENTED (TEST1)",
+            dbref,
+            fixed([(0, 6, "SEQRES"), (7, 3, 1), (11, 1, "A"), (13, 4, 2)])[:19] + "ALA GLY",
+        ]
+        for n, name in enumerate(["ALA", "GLY"], 1):
+            for i, (atom_name, element) in enumerate(
+                [("N", "N"), ("CA", "C"), ("C", "C"), ("O", "O")]
+            ):
+                lines.append(
+                    fixed(
+                        [
+                            (0, 6, "ATOM  "),
+                            (6, 5, (n - 1) * 4 + i + 1),
+                            (12, 4, atom_name),
+                            (17, 3, name),
+                            (21, 1, "A"),
+                            (22, 4, n),
+                            (30, 8, f"{n * 4 + i * 0.5:.3f}"),
+                            (38, 8, "0.000"),
+                            (46, 8, "0.000"),
+                            (54, 6, "1.00"),
+                            (60, 6, "80.00"),
+                            (76, 2, element),
+                        ]
+                    )
+                )
+        raw = ("\n".join(lines) + "\n").encode()
+        atoms, _ = parse_pdb(raw)
+        shape = dict(
+            id="AF-TEST1-F1",
+            kind="prediction",
+            admission="prediction_sequence_matched",
+            chains=[dict(chain="A", ca=[[1, 4.5, 0, 0], [2, 8.5, 0, 0]])],
+        )
+        ledger = dict(chains=[dict(chain="A", residues=[[1, "ALA", ""], [2, "GLY", ""]])])
+        protein = dict(
+            accession="QUERY1",
+            reference=dict(sequence="AG", length=2, sequence_sha256=digest(b"AG")),
+            subtractive_record=dict(strain="invented", sequence_sha256=digest(b"AG")),
+        )
+        context = dict(id="AF-TEST1-F1", kind="prediction")
+        return raw, atoms, shape, ledger, protein, context
+
+    def test_prediction_requires_exact_sequence_model_and_original_numbering(self):
+        raw, atoms, shape, ledger, protein, context = self.prediction_fixture()
+        result = qualify_pdb_prediction(raw, atoms, shape, ledger, protein, context)
+        assert result["sequence_sha256"] == digest(b"AG")
+        assert atoms[0]["label_seq"] is None
+        assert atoms[0]["charge"] is None
+        assert atoms[0]["polymer_position"] == 1
+        for change in [
+            lambda p: p[4]["reference"].update(sequence="AA"),
+            lambda p: p[4]["subtractive_record"].update(sequence_sha256="0" * 64),
+            lambda p: p[5].update(kind="experimental"),
+            lambda p: p[5].update(id="AF-HOMOLOG-F1"),
+            lambda p: p[2].update(admission="related_prediction"),
+            lambda p: p[1][0].update(insertion="A"),
+            lambda p: p[1][1].update(xyz=[40, 0, 0]),
+            lambda p: p[1].pop(),
+        ]:
+            values = copy.deepcopy(self.prediction_fixture())
+            change(values)
+            with pytest.raises(ValueError, match=r"[Pp]rediction|Atom/backbone"):
+                qualify_pdb_prediction(*values)
+        long = raw.replace(b"TEST1", b"A0A1TEST00")
+        extended = copy.deepcopy(self.prediction_fixture())
+        extended[2]["id"] = "AF-A0A1TEST00-F1"
+        extended[5]["id"] = "AF-A0A1TEST00-F1"
+        assert qualify_pdb_prediction(long, *extended[1:])["source_accession"] == "A0A1TEST00"
+        for before, after in [
+            (b"(TEST1)", b"(OTHER)"),
+            (b"ALA GLY", b"ALA ALA"),
+            (b"TEST1   ", b"WRONG   "),
+        ]:
+            changed = raw.replace(before, after)
+            assert changed != raw
+            with pytest.raises(ValueError, match=r"[Pp]rediction|Atom/backbone"):
+                qualify_pdb_prediction(changed, *self.prediction_fixture()[1:])
+
+    def test_prediction_import_preserves_inputs_and_records_missing_structures(self):
+        raw, _, shape, entry, protein, context = self.prediction_fixture()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            runtime = root / "runtime"
+            (runtime / "data").mkdir(parents=True)
+            shape["source_view_sha256"] = digest(raw)
+            protein["id"] = "invented"
+            data = json.dumps(dict(proteins=[protein], shape_traces=dict(invented=shape))).encode()
+            ledger = json.dumps(dict(entries=dict(invented=entry))).encode()
+            for name, content in [("data/map.json", data), ("residues.json", ledger)]:
+                (runtime / name).write_bytes(content)
+            (runtime / "SOURCE_MANIFEST.json").write_text(json.dumps(dict(sha256=digest(data))))
+            (runtime / "RESIDUE_MANIFEST.json").write_text(
+                json.dumps(dict(sha256=digest(ledger), source_snapshot_sha256=digest(data)))
+            )
+            source = root / "prediction.pdb"
+            source.write_bytes(raw)
+            template = root / "template.cif"
+            template.write_text("data_invented\n_entry.id INVENTED\n")
+            record = dict(
+                protein_id="invented",
+                source_format="pdb_prediction",
+                view_path=str(source),
+                view_sha256=digest(raw),
+                raw_path=str(source),
+                raw_sha256=digest(raw),
+                context=context,
+            )
+            config = dict(
+                schema="marse-atomic-import-config-v1",
+                runtime=str(runtime),
+                output=str(root / "output"),
+                template_path=str(template),
+                template_sha256=digest(template.read_bytes()),
+                models=[record],
+                requested_proteins=["invented", "missing"],
+            )
+            result = build(config)
+            assert set(result["entries"]) == {"invented"}
+            assert result["holds"][0]["protein_id"] == "missing"
+            payload = json.loads(
+                (root / "output" / result["entries"]["invented"]["file"]).read_bytes()
+            )
+            assert len(payload["atoms"]) == 8
+            assert payload["source_format"] == "pdb_prediction"
+            assert payload["qualification"]["sequence_sha256"] == digest(b"AG")
+            assert source.read_bytes() == raw
+            assert (runtime / "data/map.json").read_bytes() == data
+            assert (runtime / "residues.json").read_bytes() == ledger
+            with pytest.raises(ValueError, match="already exists"):
+                build(config)
+            for mode in ["different_bytes", "unknown_format"]:
+                config["output"] = str(root / mode)
+                if mode == "different_bytes":
+                    altered = root / "different.pdb"
+                    altered.write_bytes(raw + b"\n")
+                    record.update(raw_path=str(altered), raw_sha256=digest(altered.read_bytes()))
+                else:
+                    record.update(source_format="guessed")
+                held = build(config)
+                assert held["entries"] == {}
+                assert held["holds"][0]["protein_id"] == "invented"
+            assert source.read_bytes() == raw
+
     def test_no_proximity_bond_and_no_missing_atom_creation(self):
         atoms = [atom(0, "CA", 0), atom(1, "C", 1.4)]
         bonds, limits = build_topology(atoms, {}, {}, "raw", "fallback")

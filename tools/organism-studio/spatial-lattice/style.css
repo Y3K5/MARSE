@@ -87,3 +87,6 @@
 #atomic-selectors>summary{cursor:pointer;min-height:36px;padding:7px 0;font-size:13px;color:#c0d9d5}#atomic-back{font-size:12px;min-height:34px}#atomic-pick-summary{position:absolute;left:8px;top:0;right:8px;pointer-events:none;background:#10242ade;border:1px solid #648389;padding:6px;font-size:12px;border-radius:4px;color:#fae9b9}#atomic-pane>.atomic-note{font-size:11px;color:#abc1c9;line-height:1.3;margin:5px 0}#atomic-pane>#atomic-source{margin:5px 0}#atomic-status{margin:5px 0}#atomic-stage{height:260px}
 
 @media(min-width:851px){#interaction-dock.atomic-mode>.lens-head{position:sticky;top:0;z-index:4;background:#101f29;padding:4px 0}}
+
+/* Keep an atomic detail card from stretching the protein field on narrow screens. */
+@media(max-width:850px){.workspace .view-panes.lens-open:has(#interaction-dock.atomic-mode){display:flex;flex-direction:column;overflow:visible;min-height:0}.workspace .view-panes.lens-open:has(#interaction-dock.atomic-mode) #viewport{height:320px;min-height:320px;flex:none}.workspace #interaction-dock.atomic-mode{max-height:none;overflow:visible;flex:none}}

@@ -16,6 +16,12 @@ results for the same manifest is always called out.
 
 ### Added
 
+- Retained prediction-PDB atom imports with exact full-reference sequence, model,
+  numbering and displayed-backbone gates. Pinned private successor activation
+  preserves historical imports; accession-labeled atom navigation, cleared missing
+  model controls and responsive focus keep the whole-source overview available.
+  Synthetic import/refusal checks are included; research payloads remain excluded.
+
 - Optional local atom/bond inspection beside the protein neighborhood and whole
   source network. Exact retained atom/backbone joins, typed component/polymer/source
   connections, molecular context and source-qualified residue handoff keep missing

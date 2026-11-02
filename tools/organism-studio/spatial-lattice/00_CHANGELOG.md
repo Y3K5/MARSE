@@ -1,5 +1,13 @@
 # Changes
 
+## 2026-11-02 — Reusable commit review
+
+Replaced the reported real accession in the synthetic long-identifier control with an invented identifier. Added a full prediction-PDB importer control for fresh output, exact bytes, unsupported formats and explicit missing structures. Private research/imports are preserved and excluded from the source/package review.
+
+## 2026-11-02 — Exact retained prediction atoms
+
+Added a strict full-reference prediction PDB adapter alongside the existing mmCIF atom importer. Complete sequence, accession/header, numbering and saved coordinate joins are required. Optional pinned private activation selects a fresh import while preserving old imports. The atom model selector now covers the current visible protein field and its coordinate holds; source/reference qualifications remain inspectable. Missing models clear stale atom selectors and disable unavailable controls. Narrow atomic panels stack without stretching the protein field; focus keeps atoms below the pinned overview. The whole-network overview and independent cameras remain available. No downloaded/generated structures, scientific analyses or evidence changes. Verification is recorded with the local research owner; software checks do not establish biological validity.
+
 ## Atomic viewer commit review
 
 Preserve the neighborhood camera when changing only the atom model; dispose replaced atom/link instance buffers; refuse blank/nonfinite atomic fields, misleading experimental entry prefixes and existing/dangling-symlink output destinations. Fresh import water context reflects the actual retained atoms. Invented fresh-import and repeated-selection geometry/disposal controls cover these fixes. Existing private atomic imports and original scientific inputs remain unchanged.

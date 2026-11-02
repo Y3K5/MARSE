@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import math
+import re
 import tempfile
 from pathlib import Path
 
@@ -139,6 +140,11 @@ def qualify_atoms(atoms: list[dict], doc: dict, shape: dict, ledger: dict) -> No
             if atom["group"] == "ATOM"
             else "non-polymer component",
         )
+    qualify_backbone(atoms, shape, ledger)
+
+
+def qualify_backbone(atoms: list[dict], shape: dict, ledger: dict) -> None:
+    """Require the exact saved C-alpha/name/chain/insertion coordinate join."""
     observed = {
         (a["chain"], a["residue"], a["insertion"]): a
         for a in atoms
@@ -155,6 +161,130 @@ def qualify_atoms(atoms: list[dict], doc: dict, shape: dict, ledger: dict) -> No
             count += 1
     if count != len(observed):
         raise ValueError("Atom/backbone coverage differs")
+
+
+def qualify_pdb_prediction(
+    raw: bytes, atoms: list[dict], shape: dict, ledger: dict, protein: dict, context: dict
+) -> dict:
+    """Admit a retained complete single-chain prediction, never a homolog or complex."""
+    aa = dict(
+        zip(
+            [
+                "ALA",
+                "ARG",
+                "ASN",
+                "ASP",
+                "CYS",
+                "GLN",
+                "GLU",
+                "GLY",
+                "HIS",
+                "ILE",
+                "LEU",
+                "LYS",
+                "MET",
+                "PHE",
+                "PRO",
+                "SER",
+                "THR",
+                "TRP",
+                "TYR",
+                "VAL",
+            ],
+            "ARNDCQEGHILKMFPSTWYV",
+            strict=True,
+        )
+    )
+    model = re.fullmatch(r"AF-([A-Z0-9]+)-F([1-9][0-9]*)", shape.get("id", ""))
+    if (
+        not model
+        or shape.get("kind") != "prediction"
+        or shape.get("admission") != "prediction_sequence_matched"
+        or context.get("kind") != "prediction"
+        or context.get("id") != shape["id"]
+    ):
+        raise ValueError("Retained PDB prediction model identity is not qualified")
+    lines = raw.decode().splitlines()
+    title = " ".join(line[10:].strip() for line in lines if line.startswith("TITLE "))
+    if "ALPHAFOLD" not in title or "PREDICTION" not in title or f"({model[1]})" not in title:
+        raise ValueError("Prediction header accession differs from retained model")
+    anchors = [a for a in atoms if a["group"] == "ATOM" and a["name"] == "CA"]
+    sequence = "".join(aa.get(a["resname"], "?") for a in anchors)
+    reference = protein.get("reference", {})
+    selected = protein.get("subtractive_record", reference)
+    seq_hash = digest(sequence.encode())
+    if (
+        "?" in sequence
+        or sequence != reference.get("sequence")
+        or len(sequence) != reference.get("length")
+        or seq_hash != reference.get("sequence_sha256")
+        or seq_hash != selected.get("sequence_sha256")
+    ):
+        raise ValueError("Prediction full sequence differs from exact retained reference")
+    chains = {a["chain"] for a in atoms}
+    if (
+        len(chains) != 1
+        or any(a["group"] != "ATOM" or a["insertion"] for a in atoms)
+        or [a["residue"] for a in anchors] != list(range(1, len(sequence) + 1))
+    ):
+        raise ValueError(
+            "PDB prediction needs complete unambiguous single-chain reference numbering"
+        )
+    chain = anchors[0]["chain"]
+    dbref = [line for line in lines if line.startswith("DBREF ")]
+    # Retained AlphaFold PDBs extend the DBREF accession field for ten-character IDs.
+    # The adapter already refuses insertions; require the complete literal token identity.
+    tokens = dbref[0].split() if len(dbref) == 1 else []
+    if (
+        len(tokens) != 10
+        or tokens[2] != chain
+        or tokens[5] != "UNP"
+        or tokens[6] != model[1]
+        or [int(tokens[i]) for i in (3, 4, 8, 9)] != [1, len(sequence), 1, len(sequence)]
+    ):
+        raise ValueError("Prediction DBREF identity or numbering differs")
+    seqres = [line for line in lines if line.startswith("SEQRES")]
+    declared = [name for line in seqres for name in line[19:70].split()]
+    if any(
+        line[11:12] != chain or int(line[13:17]) != len(sequence) for line in seqres
+    ) or declared != [a["resname"] for a in anchors]:
+        raise ValueError("Prediction SEQRES differs from resolved reference sequence")
+    residues = {a["residue"]: a["resname"] for a in anchors}
+    if any(
+        not {"N", "CA", "C", "O"}.issubset({a["name"] for a in atoms if a["residue"] == n})
+        for n in residues
+    ):
+        raise ValueError("Prediction lacks retained full backbone atoms; no atoms reconstructed")
+    for a in atoms:
+        if residues.get(a["residue"]) != a["resname"]:
+            raise ValueError("Prediction atom residue differs from reference")
+        a.update(
+            label_seq=None,
+            label_chain=None,
+            entity=None,
+            charge=None,
+            polymer_position=a["residue"],
+            polymer_chain=a["chain"],
+            role="backbone" if a["name"] in ("N", "CA", "C", "O", "OXT") else "side chain",
+        )
+    qualify_backbone(atoms, shape, ledger)
+    return {
+        "sequence_sha256": seq_hash,
+        "source_accession": model[1],
+        "target_accession": protein.get("accession"),
+        "target_strain": selected.get("strain"),
+        "source_organism_record": " ".join(
+            line[10:].strip() for line in lines if line.startswith("SOURCE")
+        ),
+        "polymer_numbering": (
+            "Full reference sequence, SEQRES, DBREF and author numbering agree; "
+            "no mmCIF label identifiers supplied"
+        ),
+        "limit": (
+            "Exact retained sequence/model correspondence; source strain phenotype "
+            "and interaction sites are not transferred"
+        ),
+    }
 
 
 def build_topology(
@@ -228,8 +358,9 @@ def build_topology(
     sequence = {}
     for members in groups.values():
         atom = next(iter(members.values()))
-        if atom["group"] == "ATOM" and atom["label_seq"] is not None:
-            sequence[(atom["label_chain"], atom["label_seq"])] = members
+        position = atom.get("polymer_position", atom["label_seq"])
+        if atom["group"] == "ATOM" and position is not None:
+            sequence[(atom.get("polymer_chain", atom["label_chain"]), position)] = members
     for (chain, position), members in sequence.items():
         a, b = members.get("C"), sequence.get((chain, position + 1), {}).get("N")
         if a and b and 1.0 <= math.dist(a["xyz"], b["xyz"]) <= 1.8:
@@ -239,7 +370,7 @@ def build_topology(
                 "sing",
                 "polymer_link",
                 (
-                    "Declared consecutive polymer positions plus source-coordinate geometry; "
+                    "Qualified consecutive polymer positions plus source-coordinate geometry; "
                     "conventional peptide topology"
                 ),
                 raw_hash,
@@ -329,26 +460,58 @@ def build(config: dict) -> dict:
                 raise ValueError("Atomic model does not match the current exact fold")
             view = checked(record["view_path"], record["view_sha256"])
             raw = checked(record["raw_path"], record["raw_sha256"])
-            doc = MMCIF2Dict(io.StringIO(raw.decode()))
-            entry_id = doc.get("_entry.id", [""])[0]
-            structure_id = record["context"]["id"]
-            predicted_fragment = (
-                record["context"].get("kind") == "prediction"
-                and structure_id.startswith("AF-")
-                and entry_id.startswith(structure_id + "-F")
-                and entry_id[len(structure_id) + 2 :].isdigit()
-                and int(entry_id[len(structure_id) + 2 :]) > 0
-            )
-            if entry_id != structure_id and not predicted_fragment:
-                raise ValueError("Atomic source entry differs from the retained model")
             atoms, omitted = parse_pdb(view)
-            qualify_atoms(atoms, doc, shape, ledger["entries"][ident])
+            source_format = record.get("source_format", "mmcif")
+            qualification = None
+            if source_format == "pdb_prediction":
+                if raw != view:
+                    raise ValueError(
+                        "Retained prediction source must be the exact displayed PDB bytes"
+                    )
+                protein = next(p for p in data["proteins"] if p["id"] == ident)
+                qualification = qualify_pdb_prediction(
+                    raw, atoms, shape, ledger["entries"][ident], protein, record["context"]
+                )
+                doc = {}
+            elif source_format == "mmcif":
+                doc = MMCIF2Dict(io.StringIO(raw.decode()))
+                entry_id = doc.get("_entry.id", [""])[0]
+                structure_id = record["context"]["id"]
+                predicted_fragment = (
+                    record["context"].get("kind") == "prediction"
+                    and structure_id.startswith("AF-")
+                    and entry_id.startswith(structure_id + "-F")
+                    and entry_id[len(structure_id) + 2 :].isdigit()
+                    and int(entry_id[len(structure_id) + 2 :]) > 0
+                )
+                if entry_id != structure_id and not predicted_fragment:
+                    raise ValueError("Atomic source entry differs from the retained model")
+                qualify_atoms(atoms, doc, shape, ledger["entries"][ident])
+            else:
+                raise ValueError("Unsupported retained atomic source format")
             bonds, limits = build_topology(atoms, doc, fallback, digest(raw), digest(fallback_raw))
+            if source_format == "pdb_prediction":
+                limits["source_connections"] = (
+                    "PDB prediction has no mmCIF connection categories; "
+                    "no disulfides or partners inferred"
+                )
+                for line in raw.decode().splitlines():
+                    if line.startswith(("CONECT", "SSBOND", "LINK  ")):
+                        limits["holds"].append(
+                            {
+                                "reason": (
+                                    "PDB connection record not admitted by prediction adapter"
+                                ),
+                                "connection": line[:6].strip(),
+                            }
+                        )
             payload = {
                 "schema": "marse-atomic-context-v1",
                 "protein_id": ident,
                 "source_view_sha256": digest(view),
                 "raw_source_sha256": digest(raw),
+                "source_format": source_format,
+                "qualification": qualification,
                 "context": record["context"],
                 "atoms": atoms,
                 "bonds": bonds,
@@ -372,6 +535,17 @@ def build(config: dict) -> dict:
             }
         except (ValueError, KeyError, TypeError) as error:
             holds.append({"protein_id": ident, "reason": str(error)})
+    for ident in config.get("requested_proteins", []):
+        if ident not in entries and not any(h["protein_id"] == ident for h in holds):
+            holds.append(
+                {
+                    "protein_id": ident,
+                    "reason": (
+                        "No retained matching full-coordinate structure; "
+                        "no atoms or bonds generated"
+                    ),
+                }
+            )
     index = {
         "schema": "marse-atomic-index-v1",
         "source_snapshot_sha256": digest(map_raw),
