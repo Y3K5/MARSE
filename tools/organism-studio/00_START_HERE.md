@@ -10,7 +10,7 @@ Select an organism → inspect a connected surface patch → inspect source-link
 
 Runtime assets are deliberately Git-ignored. First run `python3 tools/organism-studio/setup_assets.py --from <existing-studio-folder>` using an existing local studio containing the exact asset versions. The command verifies every input before copying and makes no network requests. Run it without `--from` to check the installed assets. A fresh clone alone is not a turnkey distribution; no public asset bundle has been approved.
 
-From the repository root: `python3 tools/organism-studio/serve.py`. Open http://127.0.0.1:8988/unified.html . Stop with Control-C. No installation or remote API is required. This loopback server serves only the studio directory.
+From the repository root: `python3 tools/organism-studio/serve.py`. Open http://127.0.0.1:8988/unified.html . Use `--port N` if 8988 is taken. **Optional private extensions:** `--private DIR` (or `MARSE_PRIVATE_DIR`) mounts a folder you keep outside this repository at `/private/`, read-only. If that folder has an `extensions.json`, `extensions.js` adds its links and a structural hand-off. Without it nothing private is reachable or referenced, and a folder inside the repository is refused. Stop with Control-C. No installation or remote API is required. This loopback server serves only the studio directory.
 
 ## Check
 

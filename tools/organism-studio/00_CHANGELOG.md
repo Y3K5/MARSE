@@ -4,6 +4,10 @@ Added the optional source-coordinate network viewer and JSON-only retained-build
 
 # Changelog
 
+## Optional private extensions (2026-11-01)
+
+`serve.py` gains `--private DIR` / `MARSE_PRIVATE_DIR`: a read-only mount at `/private/` for a folder kept outside the repository (refused when inside it; traversal and escaping symlinks stay inside the mount) and `--port`. New `extensions.js` reads `private/extensions.json` when present, adding private workspace links and the structural-pieces hand-off. It also restores `?organism=&component=` deep links. Styles are in `unified.css`. `test_serve.py` adds 5 tests. Without a mount, the studio is unchanged. `CANDIDATE_MANIFEST.json` predates this change, so re-review before publishing.
+
 ## Initial experimental public candidate
 
 Prepared the connected studio in an isolated branch with portable launch/navigation, local coordinates, third-party notices and software checks. Private history and generated illustrations excluded. No engine changes. Publication remains gated by PUBLICATION_REVIEW.md.
